@@ -1,5 +1,6 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
+import { Platform } from 'react-native';
 import { GarmentCaptureScreen } from '../GarmentCaptureScreen';
 import { GarmentPicker } from '../garmentPicker';
 
@@ -15,6 +16,22 @@ function createPicker(): jest.Mocked<GarmentPicker> {
 }
 
 describe('GarmentCaptureScreen', () => {
+  it('keeps the form and save action usable while the keyboard is open', async () => {
+    const screen = await render(
+      <GarmentCaptureScreen picker={createPicker()} onUpload={jest.fn()} onClose={jest.fn()} />,
+    );
+
+    expect(screen.getByTestId('garment-keyboard-avoider')).toBeTruthy();
+    expect(screen.getByTestId('garment-form-scroll')).toHaveProp(
+      'keyboardShouldPersistTaps',
+      'handled',
+    );
+    expect(screen.getByTestId('garment-form-scroll')).toHaveProp(
+      'keyboardDismissMode',
+      Platform.OS === 'ios' ? 'interactive' : 'on-drag',
+    );
+  });
+
   it('captures details and uploads a valid garment', async () => {
     const picker = createPicker();
     const onUpload = jest.fn().mockResolvedValue(undefined);

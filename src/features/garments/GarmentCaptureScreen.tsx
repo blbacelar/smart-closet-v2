@@ -3,6 +3,8 @@ import { Camera, Check, ImagePlus, Sparkles, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -126,7 +128,19 @@ export function GarmentCaptureScreen({
         <View style={styles.spacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardArea}
+        testID="garment-keyboard-avoider"
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.scroll}
+          testID="garment-form-scroll"
+        >
         {asset ? (
           <View style={styles.photoReady}>
             <Image
@@ -196,6 +210,7 @@ export function GarmentCaptureScreen({
           onChangeText={setName}
           placeholder="e.g. Vintage denim jacket"
           placeholderTextColor="#9B9F9B"
+          returnKeyType="done"
           style={styles.input}
         />
 
@@ -238,34 +253,38 @@ export function GarmentCaptureScreen({
           onChangeText={setSize}
           placeholder="M"
           placeholderTextColor="#9B9F9B"
+          returnKeyType="done"
           style={styles.input}
         />
-      </ScrollView>
+        </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          accessibilityLabel="Add to my closet"
-          accessibilityRole="button"
-          onPress={save}
-          disabled={isBusy}
-          style={[styles.save, isBusy && styles.saveDisabled]}
-        >
-          {isUploading ? <ActivityIndicator color={colors.white} /> : <Sparkles size={18} color={colors.white} />}
-          <Text style={styles.saveText}>{isUploading ? 'Saving your piece…' : 'Add to my closet'}</Text>
-        </Pressable>
-      </View>
+        <View style={styles.footer}>
+          <Pressable
+            accessibilityLabel="Add to my closet"
+            accessibilityRole="button"
+            onPress={save}
+            disabled={isBusy}
+            style={[styles.save, isBusy && styles.saveDisabled]}
+          >
+            {isUploading ? <ActivityIndicator color={colors.white} /> : <Sparkles size={18} color={colors.white} />}
+            <Text style={styles.saveText}>{isUploading ? 'Saving your piece…' : 'Add to my closet'}</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas },
+  keyboardArea: { flex: 1 },
+  scroll: { flex: 1 },
   header: { paddingHorizontal: 20, paddingVertical: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   close: { width: 42, height: 42, borderRadius: 16, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line },
   spacer: { width: 42 },
   eyebrow: { fontFamily: fonts.body, color: colors.coral, fontSize: 9.5, fontWeight: '800', letterSpacing: 1.1, textAlign: 'center' },
   title: { fontFamily: fonts.display, color: colors.ink, fontSize: 25, textAlign: 'center', marginTop: 2 },
-  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 130 },
+  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
   photoZone: { height: 276, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.sageDeep, backgroundColor: colors.sage, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   cameraIcon: { width: 58, height: 58, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow },
   photoTitle: { fontFamily: fonts.display, color: colors.ink, fontSize: 20, marginTop: 18 },
@@ -292,7 +311,7 @@ const styles = StyleSheet.create({
   optionActive: { backgroundColor: colors.forest, borderColor: colors.forest },
   optionText: { fontFamily: fonts.body, color: colors.muted, fontSize: 11.5, fontWeight: '600' },
   optionTextActive: { color: colors.white },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, backgroundColor: 'rgba(247,244,238,0.98)' },
+  footer: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20, backgroundColor: 'rgba(247,244,238,0.98)' },
   save: { height: 56, borderRadius: 18, backgroundColor: colors.forest, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, ...shadow },
   saveDisabled: { opacity: 0.7 },
   saveText: { fontFamily: fonts.body, color: colors.white, fontSize: 14, fontWeight: '800' },
