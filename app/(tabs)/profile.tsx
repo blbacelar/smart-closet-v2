@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Bell, Camera, ChevronRight, Globe2, Lock, LogOut, Shield } from 'lucide-react-native';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bodyPhoto } from '../../src/data';
 import { useFitlyStore } from '../../src/store';
+import { useAuth } from '../../src/providers/AuthProvider';
 import { colors, fonts } from '../../src/theme';
 
 const settings = [
@@ -17,11 +18,24 @@ const settings = [
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const isPro = useFitlyStore((state) => state.isPro);
+  const { identity, signOut } = useAuth();
+
+  const handleSettingPress = async (label: string) => {
+    if (label !== 'Sign out') {
+      return;
+    }
+
+    try {
+      await signOut();
+    } catch (error) {
+      Alert.alert('Could not sign out', error instanceof Error ? error.message : 'Try again.');
+    }
+  };
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingTop: insets.top + 18 }]} showsVerticalScrollIndicator={false}>
       <Text style={styles.eyebrow}>{isPro ? 'Pro plan' : 'Free plan'}</Text>
-      <Text style={styles.title}>Bruno</Text>
+      <Text style={styles.title}>{identity?.displayName ?? 'Fitly member'}</Text>
 
       <View style={styles.photoHeader}>
         <Text style={styles.sectionLabel}>Your body photos</Text>
@@ -49,7 +63,12 @@ export default function ProfileScreen() {
 
       <View style={styles.settings}>
         {settings.map(({ Icon, label }, index) => (
-          <Pressable key={label} style={[styles.setting, index === settings.length - 1 && styles.settingLast]}>
+          <Pressable
+            accessibilityRole="button"
+            key={label}
+            onPress={() => handleSettingPress(label)}
+            style={[styles.setting, index === settings.length - 1 && styles.settingLast]}
+          >
             <Icon size={17} color={colors.ink} />
             <Text style={styles.settingText}>{label}</Text>
             <ChevronRight size={16} color={colors.muted} />
