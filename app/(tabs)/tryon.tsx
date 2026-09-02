@@ -10,6 +10,7 @@ import { useFitlyStore } from '../../src/store';
 import { colors, fonts } from '../../src/theme';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
+import { useGarments } from '../../src/features/garments/useGarments';
 
 type Stage = 'idle' | 'generating' | 'result';
 const captions = ['Fitting the shoulders…', 'Matching the light…', 'Draping the fabric…', 'Almost there…'];
@@ -18,9 +19,12 @@ export default function TryOnScreen() {
   const insets = useSafeAreaInsets();
   const { identity } = useAuth();
   const bodyPhotoQuery = useBodyPhotos(identity?.id);
-  const { garments, selectedGarmentId, selectGarment, tryOnsUsed, useTryOn, isPro } = useFitlyStore();
+  const garmentQuery = useGarments(identity?.id);
+  const garments = garmentQuery.data ?? [];
+  const { tryOnsUsed, useTryOn, isPro } = useFitlyStore();
   const [stage, setStage] = useState<Stage>('idle');
   const [bodyIndex, setBodyIndex] = useState(0);
+  const [selectedGarmentId, setSelectedGarmentId] = useState<string | null>(null);
   const [captionIndex, setCaptionIndex] = useState(0);
   const selected = useMemo(() => garments.find((item) => item.id === selectedGarmentId) ?? garments[0], [garments, selectedGarmentId]);
   const bodyPhotos = useMemo(
@@ -29,6 +33,7 @@ export default function TryOnScreen() {
   );
   const selectedBodyPhoto = bodyPhotos[bodyIndex] ?? bodyPhotos[0];
   const remaining = isPro ? Math.max(0, 60 - tryOnsUsed) : Math.max(0, 3 - tryOnsUsed);
+  const action = !selectedBodyPhoto ? 'body-photo' : !selected ? 'garment' : 'try-on';
 
   useEffect(() => {
     if (stage !== 'generating') return;
@@ -49,7 +54,7 @@ export default function TryOnScreen() {
         <StatusBar style="dark" />
         <View style={styles.mergeStage}>
           <View style={[styles.mergeCard, styles.mergeLeft]}><Image source={{ uri: selectedBodyPhoto?.signedUrl }} style={styles.mergeImage} contentFit="cover" contentPosition="top" /></View>
-          <View style={[styles.mergeCard, styles.mergeRight]}><Image source={{ uri: selected.image }} style={styles.mergeImage} contentFit="cover" /></View>
+          <View style={[styles.mergeCard, styles.mergeRight]}><Image source={{ uri: selected?.imageUrl }} style={styles.mergeImage} contentFit="cover" /></View>
           <View style={styles.scanLine} />
         </View>
         <Text key={captionIndex} style={styles.caption}>{captions[captionIndex]}</Text>
@@ -113,20 +118,32 @@ export default function TryOnScreen() {
         <Text style={styles.label}>The garment</Text>
         <View style={styles.garmentGrid}>
           {garments.slice(0, 6).map((item) => (
-            <Pressable key={item.id} onPress={() => selectGarment(item.id)} style={[styles.garmentTile, selected.id === item.id && styles.selectedTile]}>
-              <Image source={{ uri: item.image }} style={styles.garmentImage} contentFit="cover" />
-              <Text style={styles.garmentLabel}>{item.category.replace('Outerwear', 'coat').replace('Bottoms', 'pants').toLowerCase()}</Text>
+            <Pressable key={item.id} onPress={() => setSelectedGarmentId(item.id)} style={[styles.garmentTile, selected?.id === item.id && styles.selectedTile]}>
+              <Image source={{ uri: item.imageUrl }} style={styles.garmentImage} contentFit="cover" />
+              <Text style={styles.garmentLabel}>{item.category ?? 'piece'}</Text>
             </Pressable>
           ))}
+          <Pressable accessibilityRole="button" onPress={() => router.push('/add-garment')} style={styles.addGarment}>
+            <Plus size={18} color={colors.muted} />
+            <Text style={styles.addGarmentText}>Add piece</Text>
+          </Pressable>
         </View>
+        {garmentQuery.isError && <Text style={styles.garmentMessage}>Could not load your garments.</Text>}
+        {!garmentQuery.isLoading && garments.length === 0 && (
+          <Text style={styles.garmentMessage}>Add a garment before starting a fitting.</Text>
+        )}
 
         <Pressable
-          onPress={() => selectedBodyPhoto ? setStage('generating') : router.push('/add-body-photo')}
+          onPress={() => {
+            if (action === 'body-photo') router.push('/add-body-photo');
+            else if (action === 'garment') router.push('/add-garment');
+            else setStage('generating');
+          }}
           style={styles.tryButton}
           accessibilityRole="button"
         >
-          {selectedBodyPhoto ? <Sparkles size={16} color={colors.white} /> : <Plus size={16} color={colors.white} />}
-          <Text style={styles.tryText}>{selectedBodyPhoto ? 'Try it on' : 'Add body photo'}</Text>
+          {action === 'try-on' ? <Sparkles size={16} color={colors.white} /> : <Plus size={16} color={colors.white} />}
+          <Text style={styles.tryText}>{action === 'body-photo' ? 'Add body photo' : action === 'garment' ? 'Add garment' : 'Try it on'}</Text>
         </Pressable>
         <Text style={styles.quota}>{remaining} of {isPro ? 60 : 3} {isPro ? 'Pro' : 'free'} try-ons left today</Text>
       </ScrollView>
@@ -151,8 +168,11 @@ const styles = StyleSheet.create({
   photoMessage: { fontFamily: fonts.body, fontSize: 11, lineHeight: 16, color: colors.muted, marginTop: -19, marginBottom: 22 },
   garmentGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, marginBottom: 29 },
   garmentTile: { position: 'relative', width: '31.5%', aspectRatio: 1, borderRadius: 14, backgroundColor: colors.sage, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
+  addGarment: { width: '31.5%', aspectRatio: 1, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, alignItems: 'center', justifyContent: 'center', gap: 5 },
+  addGarmentText: { fontFamily: fonts.body, fontSize: 9, color: colors.muted },
   garmentImage: { width: '100%', height: '100%' },
   garmentLabel: { position: 'absolute', left: 8, bottom: 6, fontFamily: 'monospace', fontSize: 8, color: colors.white, backgroundColor: 'rgba(0,0,0,0.42)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  garmentMessage: { fontFamily: fonts.body, fontSize: 11, lineHeight: 16, color: colors.muted, marginTop: -20, marginBottom: 22 },
   tryButton: { width: '100%', height: 54, borderRadius: 14, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   tryText: { fontFamily: fonts.body, color: colors.white, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5 },
   quota: { fontFamily: fonts.body, color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: 12 },

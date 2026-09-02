@@ -19,14 +19,15 @@ describe('GarmentCaptureScreen', () => {
     const picker = createPicker();
     const onUpload = jest.fn().mockResolvedValue(undefined);
     const onClose = jest.fn();
-    const screen = render(
+    const screen = await render(
       <GarmentCaptureScreen picker={picker} onUpload={onUpload} onClose={onClose} />,
     );
 
     await fireEvent.press(screen.getByRole('button', { name: 'Take garment photo' }));
-    fireEvent.changeText(screen.getByLabelText('Garment name'), '  Linen shirt  ');
-    fireEvent.press(screen.getByRole('button', { name: 'Bottoms category' }));
-    fireEvent.changeText(screen.getByLabelText('Garment size'), ' M ');
+    await screen.findByLabelText('Selected garment photo');
+    await fireEvent.changeText(screen.getByLabelText('Garment name'), '  Linen shirt  ');
+    await fireEvent.press(screen.getByRole('button', { name: 'Bottoms category' }));
+    await fireEvent.changeText(screen.getByLabelText('Garment size'), ' M ');
     await fireEvent.press(screen.getByRole('button', { name: 'Add to my closet' }));
 
     await waitFor(() =>
@@ -47,49 +48,51 @@ describe('GarmentCaptureScreen', () => {
   it('explains camera permission denial', async () => {
     const picker = createPicker();
     picker.pick.mockResolvedValue({ status: 'permission-denied' });
-    const screen = render(
+    const screen = await render(
       <GarmentCaptureScreen picker={picker} onUpload={jest.fn()} onClose={jest.fn()} />,
     );
 
     await fireEvent.press(screen.getByRole('button', { name: 'Take garment photo' }));
 
-    expect(screen.getByText('Camera permission is needed to photograph a garment.')).toBeTruthy();
+    expect(await screen.findByText('Camera permission is needed to photograph a garment.')).toBeTruthy();
   });
 
   it('rejects an unsuitable image before upload', async () => {
     const picker = createPicker();
     picker.pick.mockResolvedValue({ status: 'selected', asset: { ...validAsset, width: 500 } });
-    const screen = render(
+    const screen = await render(
       <GarmentCaptureScreen picker={picker} onUpload={jest.fn()} onClose={jest.fn()} />,
     );
 
     await fireEvent.press(screen.getByRole('button', { name: 'Choose garment photo' }));
 
-    expect(screen.getByText('Choose a photo that is at least 600 × 600 pixels.')).toBeTruthy();
+    expect(await screen.findByText('Choose a photo that is at least 600 × 600 pixels.')).toBeTruthy();
     expect(screen.queryByLabelText('Selected garment photo')).toBeNull();
   });
 
   it('requires a name before upload', async () => {
     const onUpload = jest.fn();
-    const screen = render(
+    const screen = await render(
       <GarmentCaptureScreen picker={createPicker()} onUpload={onUpload} onClose={jest.fn()} />,
     );
 
     await fireEvent.press(screen.getByRole('button', { name: 'Take garment photo' }));
+    await screen.findByLabelText('Selected garment photo');
     await fireEvent.press(screen.getByRole('button', { name: 'Add to my closet' }));
 
-    expect(screen.getByText('Give this piece a name.')).toBeTruthy();
+    expect(await screen.findByText('Give this piece a name.')).toBeTruthy();
     expect(onUpload).not.toHaveBeenCalled();
   });
 
   it('keeps the form available after an upload error', async () => {
     const onUpload = jest.fn().mockRejectedValue(new Error('Garment limit reached'));
-    const screen = render(
+    const screen = await render(
       <GarmentCaptureScreen picker={createPicker()} onUpload={onUpload} onClose={jest.fn()} />,
     );
 
     await fireEvent.press(screen.getByRole('button', { name: 'Take garment photo' }));
-    fireEvent.changeText(screen.getByLabelText('Garment name'), 'Shirt');
+    await screen.findByLabelText('Selected garment photo');
+    await fireEvent.changeText(screen.getByLabelText('Garment name'), 'Shirt');
     await fireEvent.press(screen.getByRole('button', { name: 'Add to my closet' }));
 
     expect(await screen.findByText('Garment limit reached')).toBeTruthy();
