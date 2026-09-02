@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. Both AI adapters are deployed but still need their development API keys and per-image cost secrets before real-image smoke testing. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. Both image-processing adapters are deployed but still need development API keys before real-image smoke testing. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -37,10 +37,10 @@ Supabase client
           ▼
 Third-party providers
   ├─ remove.bg garment adapter (deployed; credentials pending)
-  └─ FASHN v1.6 try-on adapter (deployed; credentials pending)
+  └─ OpenRouter image try-on adapter (deployed; credential pending)
 ```
 
-The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → provider polling → private result storage, while the app polls the owner-scoped job row. Realtime delivery and scheduled stuck-job reconciliation remain planned hardening.
+The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → OpenRouter generation → private result storage, while the app polls the owner-scoped job row. Realtime delivery and scheduled stuck-job reconciliation remain planned hardening.
 
 ## Key Entry Points
 
@@ -59,7 +59,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `src/features/tryon/` — persisted jobs, quota queries, enqueue boundary, UI state, and tests.
 - `supabase/functions/process-garment/` — authenticated, retryable garment cleanup orchestration and remove.bg adapter.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
-- `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and privacy-focused FASHN adapter.
+- `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and privacy-focused OpenRouter adapter.
 
 ## Current Data Flow
 
@@ -111,7 +111,7 @@ The intended live flow is:
 - Atomic garment completion and background-removal cost ledger writes.
 - Server-computed try-on cache keys and transaction-safe Free/Pro daily quota reservation.
 - Idempotent try-on job claims, private base64 provider inputs/outputs, atomic completion/cost writes, and one-time quota refunds.
-- Authenticated `tryon-enqueue` Edge Function and FASHN v1.6 provider adapter deployed with JWT verification.
+- Authenticated `tryon-enqueue` Edge Function and OpenRouter provider adapter deployed with JWT verification.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
@@ -121,7 +121,7 @@ The intended live flow is:
 - Automated body-photo content moderation and pose/quality scoring.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment category and color tagging.
-- Configured FASHN credentials and a paid real-image try-on smoke test.
+- A configured OpenRouter key and a paid real-image try-on smoke test.
 - Persisted thumbs feedback, Realtime delivery, and scheduled recovery for jobs interrupted with the Edge Function.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Account deletion, analytics, error monitoring, broader feature tests, and CI.
@@ -139,11 +139,11 @@ The intended live flow is:
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
 - Configure garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets. Never put either value in the app or committed files.
-- Configure try-on: set `FASHN_API_KEY` and the real effective `FASHN_TRYON_COST_USD` in Supabase Edge Function secrets. Never put either value in the app or committed files.
+- Configure try-on: set `OPENROUTER_API_KEY` in Supabase Edge Function secrets. The default model is `google/gemini-3.1-flash-image`, pinned to the ZDR-capable `google-vertex/global` endpoint. Never put the key in the app or committed files.
 
 ## Recommended Build Order
 
-1. Configure both providers and smoke-test garment cleanup plus one real try-on. Reassess remove.bg before its announced December 2026 platform transition.
+1. Configure the image-processing providers and smoke-test garment cleanup plus one real OpenRouter try-on. Reassess remove.bg before its announced December 2026 platform transition.
 2. Persist try-on feedback and add Realtime delivery plus scheduled stuck-job reconciliation.
 3. Pro subscriptions, deletion, observability, broader tests, and beta release.
 4. Marketplace only after the Phase 1 activation and retention gates are credible.

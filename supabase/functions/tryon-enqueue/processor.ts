@@ -13,28 +13,29 @@ type ClaimResult =
     }
   | { state: 'running' | 'done' | 'failed' | 'not-found' };
 
-type PredictionStatus =
-  | { state: 'processing' }
-  | { state: 'failed' }
-  | { state: 'completed'; bytes: ArrayBuffer; contentType: 'image/jpeg' | 'image/png' };
+type ImageContentType = 'image/jpeg' | 'image/png' | 'image/webp';
 
 export type TryOnProcessingDependencies = {
   claim: (input: { jobId: string; userId: string }) => Promise<ClaimResult>;
   downloadInput: (bucket: 'body' | 'garments', path: string, contentType: 'image/jpeg' | 'image/png') => Promise<string>;
-  createPrediction: (input: {
+  generateTryOn: (input: {
     modelImage: string;
     garmentImage: string;
     category: TryOnCategory;
-  }) => Promise<{ id: string; provider: string; costUsd: number }>;
+  }) => Promise<{
+    id: string;
+    provider: string;
+    costUsd: number;
+    bytes: ArrayBuffer;
+    contentType: ImageContentType;
+  }>;
   setProviderJob: (input: {
     jobId: string;
     userId: string;
     provider: string;
     providerJobId: string;
   }) => Promise<void>;
-  getPrediction: (predictionId: string) => Promise<PredictionStatus>;
-  wait: (milliseconds: number) => Promise<void>;
-  uploadResult: (path: string, bytes: ArrayBuffer, contentType: 'image/jpeg' | 'image/png') => Promise<void>;
+  uploadResult: (path: string, bytes: ArrayBuffer, contentType: ImageContentType) => Promise<void>;
   complete: (input: {
     jobId: string;
     userId: string;
@@ -52,8 +53,6 @@ export type TryOnProcessingDependencies = {
   }) => Promise<void>;
   removeResult: (path: string) => Promise<void>;
   now?: () => number;
-  maxPolls?: number;
-  pollIntervalMs?: number;
 };
 
 export class TryOnProcessingFailure extends Error {
@@ -71,10 +70,8 @@ export async function processTryOn(
   if (claim.state !== 'claimed') return { state: claim.state };
 
   const now = dependencies.now ?? Date.now;
-  const maxPolls = dependencies.maxPolls ?? 30;
-  const pollIntervalMs = dependencies.pollIntervalMs ?? 3_000;
   const startedAt = now();
-  let provider = 'fashn';
+  let provider = 'openrouter';
   let costUsd = 0;
   let providerCompleted = false;
   let resultUploaded = false;
@@ -85,43 +82,36 @@ export async function processTryOn(
       dependencies.downloadInput('body', claim.job.bodyPath, 'image/jpeg'),
       dependencies.downloadInput('garments', claim.job.garmentPath, 'image/png'),
     ]);
-    const prediction = await dependencies.createPrediction({
+    const generation = await dependencies.generateTryOn({
       modelImage,
       garmentImage,
       category: claim.job.category,
     });
-    provider = prediction.provider;
-    costUsd = prediction.costUsd;
+    provider = generation.provider;
+    costUsd = generation.costUsd;
+    providerCompleted = true;
     await dependencies.setProviderJob({
       jobId: input.jobId,
       userId: input.userId,
       provider,
-      providerJobId: prediction.id,
+      providerJobId: generation.id,
     });
 
-    for (let attempt = 0; attempt < maxPolls; attempt += 1) {
-      const status = await dependencies.getPrediction(prediction.id);
-      if (status.state === 'failed') throw new TryOnProcessingFailure('generation_failed');
-      if (status.state === 'completed') {
-        providerCompleted = true;
-        const extension = status.contentType === 'image/png' ? 'png' : 'jpg';
-        resultPath = `${input.userId}/${input.jobId}.${extension}`;
-        await dependencies.uploadResult(resultPath, status.bytes, status.contentType);
-        resultUploaded = true;
-        await dependencies.complete({
-          jobId: input.jobId,
-          userId: input.userId,
-          resultPath,
-          provider,
-          costUsd,
-          latencyMs: Math.max(0, now() - startedAt),
-        });
-        return { state: 'done' as const, jobId: input.jobId, resultPath };
-      }
-      if (attempt < maxPolls - 1) await dependencies.wait(pollIntervalMs);
-    }
-
-    throw new TryOnProcessingFailure('timeout');
+    const extension = generation.contentType === 'image/png'
+      ? 'png'
+      : generation.contentType === 'image/webp' ? 'webp' : 'jpg';
+    resultPath = `${input.userId}/${input.jobId}.${extension}`;
+    await dependencies.uploadResult(resultPath, generation.bytes, generation.contentType);
+    resultUploaded = true;
+    await dependencies.complete({
+      jobId: input.jobId,
+      userId: input.userId,
+      resultPath,
+      provider,
+      costUsd,
+      latencyMs: Math.max(0, now() - startedAt),
+    });
+    return { state: 'done' as const, jobId: input.jobId, resultPath };
   } catch (error) {
     if (resultUploaded && resultPath) {
       await dependencies.removeResult(resultPath).catch(() => undefined);

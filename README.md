@@ -13,6 +13,8 @@ Open the app with Expo Go, an iOS/Android simulator, or press `w` for the web pr
 
 The interface includes realistic development data so the complete Phase 1 flow can be reviewed without service credentials. To connect a Supabase project, copy `.env.example` to `.env` and provide the project URL and publishable key. Apply the migration in `supabase/migrations` before using live data.
 
+Live Studio generation uses OpenRouter from the `tryon-enqueue` Supabase Edge Function. Configure `OPENROUTER_API_KEY` as an Edge Function secret; never add it to the Expo environment or repository.
+
 ## Included
 
 - Expo Router navigation and mobile-first UI
@@ -21,4 +23,3 @@ The interface includes realistic development data so the complete Phase 1 flow c
 - Interactive try-on flow, quota state, results, and feedback
 - Saved looks, Pro paywall, and account/privacy settings
 - Supabase client boundary, private storage policies, RLS, quota tables, cost ledger, and enqueue function
-

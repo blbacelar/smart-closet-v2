@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { createFashnProvider } from './fashnProvider.ts';
+import { createOpenRouterProvider } from './openRouterProvider.ts';
 import { handleTryOnEnqueueRequest, type EnqueueTryOnResult } from './handler.ts';
 import { processTryOn, type TryOnProcessingDependencies } from './processor.ts';
 
@@ -25,12 +25,24 @@ function secretKey() {
 }
 
 function providerConfiguration() {
-  const apiKey = Deno.env.get('FASHN_API_KEY') ?? '';
-  const costUsd = Number(Deno.env.get('FASHN_TRYON_COST_USD'));
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY') ?? '';
+  const model = Deno.env.get('OPENROUTER_IMAGE_MODEL') ?? 'google/gemini-3.1-flash-image';
+  const provider = Deno.env.get('OPENROUTER_IMAGE_PROVIDER') ?? 'google-vertex/global';
+  const fallbackCostValue = Deno.env.get('OPENROUTER_TRYON_COST_USD_FALLBACK') ?? '0';
+  const fallbackCostUsd = Number(fallbackCostValue);
+  const cacheNamespace = `openrouter:${model}:${provider}:v1`;
   return {
     apiKey,
-    costUsd,
-    ready: Boolean(apiKey) && Number.isFinite(costUsd) && costUsd >= 0,
+    model,
+    provider,
+    cacheNamespace,
+    fallbackCostUsd,
+    ready: Boolean(apiKey)
+      && Boolean(model)
+      && Boolean(provider)
+      && cacheNamespace.length <= 200
+      && Number.isFinite(fallbackCostUsd)
+      && fallbackCostUsd >= 0,
   };
 }
 
@@ -54,9 +66,11 @@ function base64(buffer: ArrayBuffer) {
 
 function processingDependencies(): TryOnProcessingDependencies {
   const config = providerConfiguration();
-  const provider = createFashnProvider({
+  const provider = createOpenRouterProvider({
     apiKey: config.apiKey,
-    costUsd: config.costUsd,
+    model: config.model,
+    provider: config.provider,
+    fallbackCostUsd: config.fallbackCostUsd,
     fetch: (url, init) => fetch(url, init as RequestInit),
   });
 
@@ -74,7 +88,7 @@ function processingDependencies(): TryOnProcessingDependencies {
       throwIfError(error);
       return `data:${contentType};base64,${base64(await data.arrayBuffer())}`;
     },
-    createPrediction: provider.createPrediction,
+    generateTryOn: provider.generateTryOn,
     async setProviderJob(input) {
       const { error } = await admin.rpc('set_tryon_provider_job', {
         p_job_id: input.jobId,
@@ -84,8 +98,6 @@ function processingDependencies(): TryOnProcessingDependencies {
       });
       throwIfError(error);
     },
-    getPrediction: provider.getPrediction,
-    wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     async uploadResult(path, bytes, contentType) {
       const { error } = await admin.storage.from('results').upload(
         path,
@@ -138,10 +150,12 @@ Deno.serve(async (request) => {
       },
       isConfigured: () => providerConfiguration().ready,
       async reserve(input) {
+        const config = providerConfiguration();
         const { data, error } = await admin.rpc('reserve_tryon_job', {
           p_user_id: input.userId,
           p_body_photo_id: input.bodyPhotoId,
           p_garment_id: input.garmentId,
+          p_cache_namespace: config.cacheNamespace,
         });
         throwIfError(error);
         return data as EnqueueTryOnResult;
