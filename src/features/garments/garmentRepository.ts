@@ -14,6 +14,10 @@ const garmentRowSchema = z.object({
   size: z.string().nullable(),
   season: z.string().nullable(),
   status: z.enum(['processing', 'ready', 'failed']),
+  processing_attempts: z.number().int().min(0),
+  processing_error: z.string().nullable(),
+  processing_started_at: z.string().nullable(),
+  processing_completed_at: z.string().nullable(),
   created_at: z.string().min(1),
 });
 
@@ -29,6 +33,10 @@ export type Garment = {
   size: string | null;
   season: string | null;
   status: 'processing' | 'ready' | 'failed';
+  processingAttempts: number;
+  processingError: string | null;
+  processingStartedAt: string | null;
+  processingCompletedAt: string | null;
   createdAt: string;
   imageUrl: string;
 };
@@ -59,7 +67,7 @@ export function createGarmentRepository(
 ): GarmentRepository {
   const bucket = client.storage.from('garments');
   const selection =
-    'id, original_path, clean_path, name, category, color, size, season, status, created_at';
+    'id, original_path, clean_path, name, category, color, size, season, status, processing_attempts, processing_error, processing_started_at, processing_completed_at, created_at';
 
   const withSignedUrl = async (
     rowInput: unknown,
@@ -81,6 +89,10 @@ export function createGarmentRepository(
       size: row.size,
       season: row.season,
       status: row.status,
+      processingAttempts: row.processing_attempts,
+      processingError: row.processing_error,
+      processingStartedAt: row.processing_started_at,
+      processingCompletedAt: row.processing_completed_at,
       createdAt: row.created_at,
       imageUrl: data.signedUrl,
     };

@@ -1,4 +1,4 @@
-import { ProcessingResult } from './processor';
+import type { ProcessingResult } from './processor.ts';
 
 type HandlerRequest = {
   method: string;

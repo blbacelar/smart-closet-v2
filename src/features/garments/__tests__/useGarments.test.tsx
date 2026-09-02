@@ -72,7 +72,9 @@ describe('useGarments', () => {
 
     await expect(act(() => result.current.mutateAsync('garment-1'))).rejects.toThrow('Still unavailable');
     expect(repository.process).toHaveBeenCalledWith('garment-1');
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: garmentKeys.list('user-1') });
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: garmentKeys.list('user-1') }),
+    );
     await unmount();
     client.clear();
   });

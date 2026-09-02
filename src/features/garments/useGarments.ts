@@ -16,6 +16,8 @@ export function useGarments(
     queryFn: () => repository.list(userId!),
     enabled: Boolean(userId),
     staleTime: 5 * 60 * 1000,
+    refetchInterval: (query) =>
+      query.state.data?.some((garment) => garment.status === 'processing') ? 5_000 : false,
   });
 }
 
