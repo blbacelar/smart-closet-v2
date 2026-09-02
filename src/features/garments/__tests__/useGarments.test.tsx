@@ -14,6 +14,7 @@ function setup() {
   const repository: jest.Mocked<GarmentRepository> = {
     list: jest.fn().mockResolvedValue([]),
     upload: jest.fn().mockResolvedValue({ id: 'garment-1' }),
+    process: jest.fn().mockResolvedValue({ state: 'ready' }),
   } as never;
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -45,7 +46,20 @@ describe('useGarments', () => {
 
     await act(() => result.current.mutateAsync({ asset: {} as never, details: {} as never }));
 
+    expect(repository.process).toHaveBeenCalledWith('garment-1');
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: garmentKeys.list('user-1') }));
+    await unmount();
+    client.clear();
+  });
+
+  it('keeps a successful upload when automatic processing is unavailable', async () => {
+    const { client, repository, wrapper } = setup();
+    repository.process.mockRejectedValue(new Error('Provider unavailable'));
+    const { result, unmount } = await renderHook(() => useUploadGarment('user-1', repository), { wrapper });
+
+    await expect(
+      act(() => result.current.mutateAsync({ asset: {} as never, details: {} as never })),
+    ).resolves.toEqual({ id: 'garment-1' });
     await unmount();
     client.clear();
   });

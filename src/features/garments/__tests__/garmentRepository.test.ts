@@ -37,9 +37,10 @@ function createClient() {
   const remove = jest.fn().mockResolvedValue({ error: null });
   const bucket = { upload, createSignedUrl, remove };
   const fromBucket = jest.fn(() => bucket);
+  const invoke = jest.fn().mockResolvedValue({ data: { state: 'ready' }, error: null });
 
   return {
-    client: { from: fromTable, storage: { from: fromBucket } },
+    client: { from: fromTable, storage: { from: fromBucket }, functions: { invoke } },
     eq,
     order,
     insert,
@@ -47,6 +48,7 @@ function createClient() {
     upload,
     createSignedUrl,
     remove,
+    invoke,
   };
 }
 
@@ -142,6 +144,24 @@ describe('garmentRepository', () => {
 
     await expect(repository.upload({ userId: 'user-1', asset, details })).rejects.toThrow('Upload failed');
     expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it('requests privileged background processing without provider secrets', async () => {
+    const mocks = createClient();
+    const repository = createGarmentRepository(mocks.client as never);
+
+    await expect(repository.process('garment-1')).resolves.toEqual({ state: 'ready' });
+    expect(mocks.invoke).toHaveBeenCalledWith('process-garment', {
+      body: { garmentId: 'garment-1' },
+    });
+  });
+
+  it('propagates processing invocation failures', async () => {
+    const mocks = createClient();
+    mocks.invoke.mockResolvedValue({ data: null, error: new Error('Function unavailable') });
+    const repository = createGarmentRepository(mocks.client as never);
+
+    await expect(repository.process('garment-1')).rejects.toThrow('Function unavailable');
   });
 
   it('requires Supabase configuration', async () => {
