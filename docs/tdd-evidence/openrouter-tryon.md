@@ -31,7 +31,7 @@ Result: both suites failed before implementation because the OpenRouter adapter 
 
 ## Deployment
 
-The cache migration and `tryon-enqueue` Edge Function are deployed. The function remains safely unavailable before quota reservation until `OPENROUTER_API_KEY` is configured as a Supabase secret. No real provider request was made during implementation.
+The cache migration and `tryon-enqueue` Edge Function are deployed. `OPENROUTER_API_KEY` was validated through OpenRouter's key endpoint and installed as a Supabase Edge Function secret without printing or committing it. No paid image-generation request was made during implementation.
 
 ## Verification
 

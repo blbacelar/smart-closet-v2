@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. Both image-processing adapters are deployed but still need development API keys before real-image smoke testing. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. The OpenRouter key is configured; garment cleanup still needs its development provider key before both real-image paths can be smoke-tested. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -37,7 +37,7 @@ Supabase client
           ▼
 Third-party providers
   ├─ remove.bg garment adapter (deployed; credentials pending)
-  └─ OpenRouter image try-on adapter (deployed; credential pending)
+  └─ OpenRouter image try-on adapter (deployed; credential configured)
 ```
 
 The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → OpenRouter generation → private result storage, while the app polls the owner-scoped job row. Realtime delivery and scheduled stuck-job reconciliation remain planned hardening.
@@ -121,7 +121,7 @@ The intended live flow is:
 - Automated body-photo content moderation and pose/quality scoring.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment category and color tagging.
-- A configured OpenRouter key and a paid real-image try-on smoke test.
+- A paid real-image OpenRouter try-on smoke test.
 - Persisted thumbs feedback, Realtime delivery, and scheduled recovery for jobs interrupted with the Edge Function.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Account deletion, analytics, error monitoring, broader feature tests, and CI.
@@ -139,7 +139,7 @@ The intended live flow is:
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
 - Configure garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets. Never put either value in the app or committed files.
-- Configure try-on: set `OPENROUTER_API_KEY` in Supabase Edge Function secrets. The default model is `google/gemini-3.1-flash-image`, pinned to the ZDR-capable `google-vertex/global` endpoint. Never put the key in the app or committed files.
+- Try-on configuration: `OPENROUTER_API_KEY` is set in Supabase Edge Function secrets. The default model is `google/gemini-3.1-flash-image`, pinned to the ZDR-capable `google-vertex/global` endpoint. Never put the key in the app or committed files.
 
 ## Recommended Build Order
 

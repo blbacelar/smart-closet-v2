@@ -24,7 +24,7 @@ Fitly is a privacy-first Expo mobile app for building a digital closet and gener
 - The privileged garment background-removal worker, state machine, cost ledger, and Closet retry behavior are implemented and deployed.
 - The cleanup provider still requires `REMOVE_BG_API_KEY` and `REMOVE_BG_COST_USD` as server-side secrets before a live image can complete.
 - The Studio uses persisted private try-on jobs, server-authoritative quota, deterministic caching, one-time refunds, and a deployed OpenRouter image adapter instead of a simulated timer.
-- OpenRouter is pinned to the ZDR-capable Google Vertex endpoint for `google/gemini-3.1-flash-image`; live generation still requires `OPENROUTER_API_KEY` as a server-side secret and a real-image smoke test.
+- OpenRouter is pinned to the ZDR-capable Google Vertex endpoint for `google/gemini-3.1-flash-image`; `OPENROUTER_API_KEY` is configured as a server-side secret and a real-image smoke test remains.
 - After provider smoke testing, the next implementation boundary is persisted feedback plus stuck-job reconciliation and Realtime delivery.
 - Do not present simulated timers or seeded records as working AI/backend behavior.
 
