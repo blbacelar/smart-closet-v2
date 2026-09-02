@@ -18,6 +18,10 @@ const row = {
   size: 'M',
   season: 'All year',
   status: 'processing',
+  processing_attempts: 1,
+  processing_error: null,
+  processing_started_at: '2026-09-02T20:00:01Z',
+  processing_completed_at: null,
   created_at: '2026-09-02T20:00:00Z',
 };
 
@@ -85,6 +89,10 @@ describe('garmentRepository', () => {
         size: 'M',
         season: 'All year',
         status: 'processing',
+        processingAttempts: 1,
+        processingError: null,
+        processingStartedAt: '2026-09-02T20:00:01Z',
+        processingCompletedAt: null,
         createdAt: '2026-09-02T20:00:00Z',
         imageUrl: 'https://signed.example/garment-1',
       },

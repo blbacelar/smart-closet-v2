@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import React, { PropsWithChildren } from 'react';
 import { GarmentRepository } from '../garmentRepository';
-import { garmentKeys, useGarments, useUploadGarment } from '../useGarments';
+import { garmentKeys, useGarments, useProcessGarment, useUploadGarment } from '../useGarments';
 
 function setup() {
   const client = new QueryClient({
@@ -60,6 +60,19 @@ describe('useGarments', () => {
     await expect(
       act(() => result.current.mutateAsync({ asset: {} as never, details: {} as never })),
     ).resolves.toEqual({ id: 'garment-1' });
+    await unmount();
+    client.clear();
+  });
+
+  it('retries processing and refreshes status even after a failure', async () => {
+    const { client, repository, wrapper } = setup();
+    const invalidate = jest.spyOn(client, 'invalidateQueries');
+    repository.process.mockRejectedValue(new Error('Still unavailable'));
+    const { result, unmount } = await renderHook(() => useProcessGarment('user-1', repository), { wrapper });
+
+    await expect(act(() => result.current.mutateAsync('garment-1'))).rejects.toThrow('Still unavailable');
+    expect(repository.process).toHaveBeenCalledWith('garment-1');
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: garmentKeys.list('user-1') });
     await unmount();
     client.clear();
   });
