@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: the visual product flow is implemented, while most screens still use local sample data. Supabase connectivity and the initial protected database schema are in place.
+The codebase is currently between prototype and MVP: authentication and private body photos are live, while garments, try-ons, subscriptions, and marketplace screens still use local sample behavior.
 
 ## Tech Stack
 
@@ -44,6 +44,7 @@ The client must never receive AI-provider, Stripe, or service-role secrets. Try-
 
 - `app/_layout.tsx` — global providers and root navigation.
 - `app/sign-in.tsx` — thin route for email/password sign-in and account creation.
+- `app/add-body-photo.tsx` — authenticated body-photo upload route.
 - `app/(tabs)/_layout.tsx` — Closet, Studio, Market, and Profile tabs.
 - `app/(tabs)/tryon.tsx` — prototype try-on journey and quota display.
 - `app/add-garment.tsx` — image picker and prototype garment creation.
@@ -51,12 +52,13 @@ The client must never receive AI-provider, Stripe, or service-role secrets. Try-
 - `src/lib/supabase.ts` — shared authenticated Supabase client.
 - `src/features/auth/` — validation, Supabase auth gateway, auth UI, and tests.
 - `src/providers/AuthProvider.tsx` — session restoration and app-wide authenticated identity.
+- `src/features/body-photos/` — capture, validation, private persistence, queries, UI, and tests.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/index.ts` — initial authenticated enqueue boundary; it creates jobs but does not call an AI provider yet.
 
 ## Current Data Flow
 
-Today, a user selects an Unsplash-backed sample garment, starts a timer, and sees the same sample body photo as a simulated result. Adding a garment picks a local image and prepends it to Zustand; it is not uploaded or persisted.
+Today, authentication and body photos use Supabase. A body photo can be captured or selected, checked for upload size, resolution, and portrait orientation, saved under the authenticated user's private Storage path, and displayed through a short-lived signed URL. Garments and try-on results remain simulated: a user selects an Unsplash-backed garment, starts a timer, and sees their body photo without a generated garment composite. Adding a garment still prepends a local image to Zustand rather than uploading it.
 
 The intended live flow is:
 
@@ -92,13 +94,17 @@ The intended live flow is:
 - Email/password sign-in and account creation with user profile metadata.
 - Session-gated Expo Router routes, launch-time session restoration, and current-device sign-out.
 - Jest/React Native Testing Library setup with an enforced 80% coverage floor for auth.
+- Camera/library body-photo capture with local size, resolution, and orientation validation.
+- Private body-photo Storage uploads, database metadata, signed URLs, and TanStack Query caching.
+- Database-enforced one-photo Free and three-photo Pro limits.
+- Hardened profile and body-photo permissions so clients cannot promote their own tier or approve moderation status.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
 
 ## Not Implemented Yet
 
-- Body-photo capture, upload, moderation, and quality validation.
+- Automated body-photo content moderation and pose/quality scoring.
 - Persisted garment uploads, background removal, or automatic tagging.
 - Real AI-provider integration, webhook completion, result storage, and Realtime updates.
 - Atomic quota accounting, cache-key generation, and quota refunds on failure.
@@ -120,8 +126,7 @@ The intended live flow is:
 
 ## Recommended Build Order
 
-1. Body-photo capture and private upload with validation.
-2. Garment upload, processing status, and live closet query.
-3. End-to-end try-on provider, caching, quota, and feedback.
-4. Pro subscriptions, deletion, observability, broader tests, and beta release.
-5. Marketplace only after the Phase 1 activation and retention gates are credible.
+1. Garment upload, processing status, and live closet query.
+2. End-to-end try-on provider, caching, quota, and feedback.
+3. Pro subscriptions, deletion, observability, broader tests, and beta release.
+4. Marketplace only after the Phase 1 activation and retention gates are credible.

@@ -42,31 +42,38 @@ function setup() {
 
 describe('body photo query hooks', () => {
   it('loads the authenticated user body photos', async () => {
-    const { repository, wrapper } = setup();
-    const { result } = await renderHook(() => useBodyPhotos('user-1', repository), { wrapper });
+    const { queryClient, repository, wrapper } = setup();
+    const { result, unmount } = await renderHook(() => useBodyPhotos('user-1', repository), { wrapper });
 
     await waitFor(() => expect(result.current.data).toEqual([photo]));
     expect(repository.list).toHaveBeenCalledWith('user-1');
+    await unmount();
+    queryClient.clear();
   });
 
   it('does not make a request without an authenticated user', async () => {
-    const { repository, wrapper } = setup();
-    const { result } = await renderHook(() => useBodyPhotos(undefined, repository), { wrapper });
+    const { queryClient, repository, wrapper } = setup();
+    const { result, unmount } = await renderHook(() => useBodyPhotos(undefined, repository), { wrapper });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(repository.list).not.toHaveBeenCalled();
+    await unmount();
+    queryClient.clear();
   });
 
   it('uploads and invalidates the owner-scoped list', async () => {
     const { queryClient, repository, wrapper } = setup();
     const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
-    const { result } = await renderHook(() => useUploadBodyPhoto('user-1', repository), {
+    const { result, unmount } = await renderHook(() => useUploadBodyPhoto('user-1', repository), {
       wrapper,
     });
 
     await act(() => result.current.mutateAsync(asset));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(repository.upload).toHaveBeenCalledWith({ userId: 'user-1', asset });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['body-photos', 'user-1'] });
+    await unmount();
+    queryClient.clear();
   });
 });
