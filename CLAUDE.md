@@ -21,7 +21,9 @@ Fitly is a privacy-first Expo mobile app for building a digital closet and gener
 - Email/password authentication, persisted sessions, protected routing, and local-device sign-out are implemented.
 - Body-photo camera/library capture, local validation, private Storage persistence, signed display URLs, and plan limits are implemented.
 - Garment camera/library capture, validation, private Storage persistence, signed display URLs, live Closet/Studio queries, and Free-plan limits are implemented.
-- The next implementation boundary is the privileged garment background-removal worker with retry behavior.
+- The privileged garment background-removal worker, state machine, cost ledger, and Closet retry behavior are implemented and deployed.
+- The cleanup provider still requires `REMOVE_BG_API_KEY` and `REMOVE_BG_COST_USD` as server-side secrets before a live image can complete.
+- After the cleanup smoke test, the next implementation boundary is the end-to-end try-on pipeline with atomic quota and caching.
 - Do not present simulated timers or seeded records as working AI/backend behavior.
 
 ## Commands

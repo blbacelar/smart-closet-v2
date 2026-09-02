@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, private body photos, and private garment uploads are live. Background cleanup, try-ons, subscriptions, and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, and the garment-processing pipeline are live. The cleanup provider adapter is deployed but still needs its development API key and per-image cost secret. Try-ons, subscriptions, and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -35,7 +35,9 @@ Supabase client
   └─ Edge Functions for AI orchestration and other privileged work
           │
           ▼
-Third-party AI provider (not connected yet)
+Third-party providers
+  ├─ remove.bg garment adapter (deployed; credentials pending)
+  └─ try-on provider (not connected yet)
 ```
 
 The client must never receive AI-provider, Stripe, or service-role secrets. Try-on is designed as an asynchronous enqueue → provider → webhook → Realtime flow.
@@ -54,12 +56,13 @@ The client must never receive AI-provider, Stripe, or service-role secrets. Try-
 - `src/providers/AuthProvider.tsx` — session restoration and app-wide authenticated identity.
 - `src/features/body-photos/` — capture, validation, private persistence, queries, UI, and tests.
 - `src/features/garments/` — garment capture, validation, private persistence, queries, UI, and tests.
+- `supabase/functions/process-garment/` — authenticated, retryable garment cleanup orchestration and remove.bg adapter.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/index.ts` — initial authenticated enqueue boundary; it creates jobs but does not call an AI provider yet.
 
 ## Current Data Flow
 
-Today, authentication, body photos, and garments use Supabase. Images can be captured or selected, validated locally, saved under the authenticated user's private Storage path, and displayed through short-lived signed URLs. A garment is created in `processing` state and its original remains visible while automated background cleanup is pending. Try-on results remain simulated: the Studio uses the member's real private inputs, but its timer still returns the body photo rather than an AI-generated composite.
+Today, authentication, body photos, and garments use Supabase. Images can be captured or selected, validated locally, saved under the authenticated user's private Storage path, and displayed through short-lived signed URLs. A garment is created in `processing` state, then the authenticated client invokes the privileged `process-garment` function. The worker claims the row, downloads the private original, retries transient provider failures, uploads a transparent PNG, hashes it, and atomically marks the garment ready while recording provider cost. Until provider secrets are configured, processing safely moves to a visible failed state and can be retried from Closet. Try-on results remain simulated.
 
 The intended live flow is:
 
@@ -102,6 +105,9 @@ The intended live flow is:
 - Database-enforced 50-garment Free limit, with unlimited Pro garment inserts.
 - Hardened profile and body-photo permissions so clients cannot promote their own tier or approve moderation status.
 - Hardened garment permissions so clients can edit descriptive metadata but cannot set cleanup paths, hashes, or processing state.
+- Retryable, concurrency-safe garment processing state with three-attempt limits, stale-claim recovery, safe failure messages, and Closet retry controls.
+- Authenticated `process-garment` Edge Function deployed with provider credentials isolated to server-side secrets.
+- Atomic garment completion and background-removal cost ledger writes.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
@@ -109,7 +115,8 @@ The intended live flow is:
 ## Not Implemented Yet
 
 - Automated body-photo content moderation and pose/quality scoring.
-- Automated garment background removal and automatic tagging; uploaded originals remain marked `processing` until this exists.
+- A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
+- Automatic garment category and color tagging.
 - Real AI-provider integration, webhook completion, result storage, and Realtime updates.
 - Atomic quota accounting, cache-key generation, and quota refunds on failure.
 - RevenueCat subscriptions and real Pro entitlement checks.
@@ -127,10 +134,11 @@ The intended live flow is:
 - Add a screen: create a route under `app/` and register it only when Expo Router cannot infer it.
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
+- Configure garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets. Never put either value in the app or committed files.
 
 ## Recommended Build Order
 
-1. Garment background-removal worker and failure/retry handling.
+1. Configure the cleanup-provider secrets and smoke-test one real garment. Reassess remove.bg before its announced December 2026 platform transition.
 2. End-to-end try-on provider, caching, quota, and feedback.
 3. Pro subscriptions, deletion, observability, broader tests, and beta release.
 4. Marketplace only after the Phase 1 activation and retention gates are credible.
