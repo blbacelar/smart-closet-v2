@@ -1,24 +1,33 @@
 import { useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { Bookmark, ChevronLeft, Lock, Plus, Repeat2, Share2, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { bodyPhoto } from '../../src/data';
 import { useFitlyStore } from '../../src/store';
 import { colors, fonts } from '../../src/theme';
+import { useAuth } from '../../src/providers/AuthProvider';
+import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
 
 type Stage = 'idle' | 'generating' | 'result';
 const captions = ['Fitting the shoulders…', 'Matching the light…', 'Draping the fabric…', 'Almost there…'];
 
 export default function TryOnScreen() {
   const insets = useSafeAreaInsets();
+  const { identity } = useAuth();
+  const bodyPhotoQuery = useBodyPhotos(identity?.id);
   const { garments, selectedGarmentId, selectGarment, tryOnsUsed, useTryOn, isPro } = useFitlyStore();
   const [stage, setStage] = useState<Stage>('idle');
   const [bodyIndex, setBodyIndex] = useState(0);
   const [captionIndex, setCaptionIndex] = useState(0);
   const selected = useMemo(() => garments.find((item) => item.id === selectedGarmentId) ?? garments[0], [garments, selectedGarmentId]);
+  const bodyPhotos = useMemo(
+    () => (bodyPhotoQuery.data ?? []).filter((photo) => photo.status !== 'rejected'),
+    [bodyPhotoQuery.data],
+  );
+  const selectedBodyPhoto = bodyPhotos[bodyIndex] ?? bodyPhotos[0];
   const remaining = isPro ? Math.max(0, 60 - tryOnsUsed) : Math.max(0, 3 - tryOnsUsed);
 
   useEffect(() => {
@@ -39,7 +48,7 @@ export default function TryOnScreen() {
       <View style={[styles.busyScreen, { paddingTop: insets.top }]}>
         <StatusBar style="dark" />
         <View style={styles.mergeStage}>
-          <View style={[styles.mergeCard, styles.mergeLeft]}><Image source={{ uri: bodyPhoto }} style={styles.mergeImage} contentFit="cover" contentPosition="top" /></View>
+          <View style={[styles.mergeCard, styles.mergeLeft]}><Image source={{ uri: selectedBodyPhoto?.signedUrl }} style={styles.mergeImage} contentFit="cover" contentPosition="top" /></View>
           <View style={[styles.mergeCard, styles.mergeRight]}><Image source={{ uri: selected.image }} style={styles.mergeImage} contentFit="cover" /></View>
           <View style={styles.scanLine} />
         </View>
@@ -53,7 +62,7 @@ export default function TryOnScreen() {
       <View style={styles.resultScreen}>
         <StatusBar style="light" />
         <View style={styles.resultImageWrap}>
-          <Image source={{ uri: bodyPhoto }} style={styles.resultImage} contentFit="cover" contentPosition="top" />
+          <Image source={{ uri: selectedBodyPhoto?.signedUrl }} style={styles.resultImage} contentFit="cover" contentPosition="top" />
           <Pressable accessibilityLabel="Back to studio" onPress={() => setStage('idle')} style={[styles.backButton, { top: insets.top + 12 }]}><ChevronLeft size={22} color={colors.white} /></Pressable>
           <View style={styles.privatePill}><Lock size={12} color={colors.white} /><Text style={styles.privatePillText}>Only you can see this</Text></View>
           {!isPro && <Text style={styles.watermark}>FITLY</Text>}
@@ -85,17 +94,21 @@ export default function TryOnScreen() {
 
         <Text style={styles.label}>Your photo</Text>
         <View style={styles.bodyRow}>
-          {[0, 1, 2].map((index) => (
-            <Pressable key={index} onPress={() => setBodyIndex(index)} style={[styles.bodyTile, bodyIndex === index && styles.selectedTile]}>
-              <Image source={{ uri: bodyPhoto }} style={styles.bodyImage} contentFit="cover" contentPosition={index === 0 ? 'top' : 'center'} />
+          {bodyPhotos.map((photo, index) => (
+            <Pressable key={photo.id} onPress={() => setBodyIndex(index)} style={[styles.bodyTile, selectedBodyPhoto?.id === photo.id && styles.selectedTile]}>
+              <Image source={{ uri: photo.signedUrl }} style={styles.bodyImage} contentFit="cover" contentPosition="top" />
               <View style={styles.lockBadge}><Lock size={10} color={colors.white} /></View>
             </Pressable>
           ))}
-          <Pressable style={styles.addBody}>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/add-body-photo')} style={styles.addBody}>
             <Plus size={17} color={colors.muted} />
             <Text style={styles.addBodyText}>Add</Text>
           </Pressable>
         </View>
+        {bodyPhotoQuery.isError && <Text style={styles.photoMessage}>Could not load your private photos.</Text>}
+        {!bodyPhotoQuery.isLoading && bodyPhotos.length === 0 && (
+          <Text style={styles.photoMessage}>Add a full-body photo before starting a fitting.</Text>
+        )}
 
         <Text style={styles.label}>The garment</Text>
         <View style={styles.garmentGrid}>
@@ -107,9 +120,13 @@ export default function TryOnScreen() {
           ))}
         </View>
 
-        <Pressable onPress={() => setStage('generating')} style={styles.tryButton} accessibilityRole="button">
-          <Sparkles size={16} color={colors.white} />
-          <Text style={styles.tryText}>Try it on</Text>
+        <Pressable
+          onPress={() => selectedBodyPhoto ? setStage('generating') : router.push('/add-body-photo')}
+          style={styles.tryButton}
+          accessibilityRole="button"
+        >
+          {selectedBodyPhoto ? <Sparkles size={16} color={colors.white} /> : <Plus size={16} color={colors.white} />}
+          <Text style={styles.tryText}>{selectedBodyPhoto ? 'Try it on' : 'Add body photo'}</Text>
         </Pressable>
         <Text style={styles.quota}>{remaining} of {isPro ? 60 : 3} {isPro ? 'Pro' : 'free'} try-ons left today</Text>
       </ScrollView>
@@ -131,6 +148,7 @@ const styles = StyleSheet.create({
   lockBadge: { position: 'absolute', left: 5, bottom: 5, width: 19, height: 19, borderRadius: 10, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
   addBody: { width: 58, height: 78, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, alignItems: 'center', justifyContent: 'center', gap: 3 },
   addBodyText: { fontFamily: fonts.body, fontSize: 9, color: colors.muted },
+  photoMessage: { fontFamily: fonts.body, fontSize: 11, lineHeight: 16, color: colors.muted, marginTop: -19, marginBottom: 22 },
   garmentGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, marginBottom: 29 },
   garmentTile: { position: 'relative', width: '31.5%', aspectRatio: 1, borderRadius: 14, backgroundColor: colors.sage, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
   garmentImage: { width: '100%', height: '100%' },

@@ -88,4 +88,28 @@ describe('BodyPhotoCaptureScreen', () => {
     expect(await screen.findByText('Photo limit reached')).toBeTruthy();
     expect(screen.getByLabelText('Selected body photo')).toBeTruthy();
   });
+
+  it('returns to capture guidance when the selected photo is changed', async () => {
+    const screen = await render(
+      <BodyPhotoCaptureScreen picker={createPicker()} onUpload={jest.fn()} onClose={jest.fn()} />,
+    );
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Take photo' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Change' }));
+
+    expect(screen.queryByLabelText('Selected body photo')).toBeNull();
+    expect(screen.getByText('Show your full look.')).toBeTruthy();
+  });
+
+  it('uses a safe fallback for unexpected picker errors', async () => {
+    const picker = createPicker();
+    picker.pick.mockRejectedValue('unexpected');
+    const screen = await render(
+      <BodyPhotoCaptureScreen picker={picker} onUpload={jest.fn()} onClose={jest.fn()} />,
+    );
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Take photo' }));
+
+    expect(screen.getByText('Could not save that photo. Try again.')).toBeTruthy();
+  });
 });

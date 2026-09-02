@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Bell, Camera, ChevronRight, Globe2, Lock, LogOut, Shield } from 'lucide-react-native';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { bodyPhoto } from '../../src/data';
 import { useFitlyStore } from '../../src/store';
 import { useAuth } from '../../src/providers/AuthProvider';
+import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
 import { colors, fonts } from '../../src/theme';
 
 const settings = [
@@ -19,6 +19,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const isPro = useFitlyStore((state) => state.isPro);
   const { identity, signOut } = useAuth();
+  const bodyPhotos = useBodyPhotos(identity?.id);
 
   const handleSettingPress = async (label: string) => {
     if (label !== 'Sign out') {
@@ -42,17 +43,34 @@ export default function ProfileScreen() {
         <View style={styles.privateLabel}><Lock size={12} color={colors.ink} /><Text style={styles.privateText}>Only you can see these</Text></View>
       </View>
       <View style={styles.photoRow}>
-        {[0, 1, 2].map((index) => (
-          <View key={index} style={styles.bodyPhoto}>
-            <Image source={{ uri: bodyPhoto }} style={styles.bodyImage} contentFit="cover" contentPosition={index === 0 ? 'top' : 'center'} />
+        {bodyPhotos.isLoading && (
+          <View style={styles.photoLoading}>
+            <ActivityIndicator color={colors.ink} />
+          </View>
+        )}
+        {(bodyPhotos.data ?? []).map((photo) => (
+          <View key={photo.id} style={styles.bodyPhoto}>
+            <Image source={{ uri: photo.signedUrl }} style={styles.bodyImage} contentFit="cover" contentPosition="top" />
             <View style={styles.lockBadge}><Lock size={11} color={colors.white} /></View>
+            {photo.status !== 'approved' && (
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>{photo.status}</Text>
+              </View>
+            )}
           </View>
         ))}
-        <Pressable style={styles.addPhoto}>
+        {!bodyPhotos.isLoading && (bodyPhotos.data?.length ?? 0) < 3 && (
+        <Pressable accessibilityRole="button" onPress={() => router.push('/add-body-photo')} style={styles.addPhoto}>
           <Camera size={19} color={colors.muted} />
           <Text style={styles.addPhotoText}>Add photo</Text>
         </Pressable>
+        )}
       </View>
+      {bodyPhotos.isError && (
+        <Pressable accessibilityRole="button" onPress={() => bodyPhotos.refetch()} style={styles.retryRow}>
+          <Text style={styles.retryText}>Could not load your photos. Tap to retry.</Text>
+        </Pressable>
+      )}
 
       <Pressable onPress={() => !isPro && router.push('/pro')} style={styles.proCard}>
         <View style={styles.proBadge}><Text style={styles.proBadgeText}>FITLY PRO</Text></View>
@@ -91,10 +109,15 @@ const styles = StyleSheet.create({
   privateText: { fontFamily: fonts.body, fontSize: 10.5, color: colors.ink },
   photoRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
   bodyPhoto: { position: 'relative', width: 70, height: 96, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.sage, borderWidth: 1, borderColor: colors.line },
+  photoLoading: { width: 70, height: 96, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sage },
   bodyImage: { width: '100%', height: '100%' },
   lockBadge: { position: 'absolute', left: 6, bottom: 6, width: 21, height: 21, borderRadius: 11, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  statusBadge: { position: 'absolute', right: 5, top: 5, paddingHorizontal: 5, paddingVertical: 3, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.9)' },
+  statusText: { fontFamily: fonts.body, fontSize: 7, fontWeight: '800', color: colors.ink, textTransform: 'uppercase', letterSpacing: 0.5 },
   addPhoto: { width: 70, height: 96, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, alignItems: 'center', justifyContent: 'center', gap: 5 },
   addPhotoText: { fontFamily: fonts.body, color: colors.muted, fontSize: 9 },
+  retryRow: { marginTop: -18, marginBottom: 22 },
+  retryText: { fontFamily: fonts.body, color: '#8C3C34', fontSize: 11 },
   proCard: { borderRadius: 14, backgroundColor: colors.ink, padding: 22, marginBottom: 22 },
   proBadge: { alignSelf: 'flex-start', backgroundColor: colors.white, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4, marginBottom: 14 },
   proBadgeText: { fontFamily: fonts.body, color: colors.ink, fontSize: 8.5, fontWeight: '800', letterSpacing: 1.2 },
