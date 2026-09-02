@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, and the garment-processing pipeline are live. The cleanup provider adapter is deployed but still needs its development API key and per-image cost secret. Try-ons, subscriptions, and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. Both AI adapters are deployed but still need their development API keys and per-image cost secrets before real-image smoke testing. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -25,7 +25,7 @@ The codebase is currently between prototype and MVP: authentication, private bod
 Expo Router screens
   ├─ shared UI and design tokens
   ├─ Zustand (temporary UI state; currently also seeded prototype data)
-  └─ TanStack Query (authenticated body-photo and garment server state)
+  └─ TanStack Query (authenticated photo, garment, job, and quota server state)
           │
           ▼
 Supabase client
@@ -37,10 +37,10 @@ Supabase client
           ▼
 Third-party providers
   ├─ remove.bg garment adapter (deployed; credentials pending)
-  └─ try-on provider (not connected yet)
+  └─ FASHN v1.6 try-on adapter (deployed; credentials pending)
 ```
 
-The client must never receive AI-provider, Stripe, or service-role secrets. Try-on is designed as an asynchronous enqueue → provider → webhook → Realtime flow.
+The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → provider polling → private result storage, while the app polls the owner-scoped job row. Realtime delivery and scheduled stuck-job reconciliation remain planned hardening.
 
 ## Key Entry Points
 
@@ -48,7 +48,7 @@ The client must never receive AI-provider, Stripe, or service-role secrets. Try-
 - `app/sign-in.tsx` — thin route for email/password sign-in and account creation.
 - `app/add-body-photo.tsx` — authenticated body-photo upload route.
 - `app/(tabs)/_layout.tsx` — Closet, Studio, Market, and Profile tabs.
-- `app/(tabs)/tryon.tsx` — live private inputs with a prototype try-on result and quota display.
+- `app/(tabs)/tryon.tsx` — live private inputs, persisted job status, stored results, and server quota display.
 - `app/add-garment.tsx` — authenticated garment upload route.
 - `src/store.ts` — current in-memory prototype state.
 - `src/lib/supabase.ts` — shared authenticated Supabase client.
@@ -56,13 +56,14 @@ The client must never receive AI-provider, Stripe, or service-role secrets. Try-
 - `src/providers/AuthProvider.tsx` — session restoration and app-wide authenticated identity.
 - `src/features/body-photos/` — capture, validation, private persistence, queries, UI, and tests.
 - `src/features/garments/` — garment capture, validation, private persistence, queries, UI, and tests.
+- `src/features/tryon/` — persisted jobs, quota queries, enqueue boundary, UI state, and tests.
 - `supabase/functions/process-garment/` — authenticated, retryable garment cleanup orchestration and remove.bg adapter.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
-- `supabase/functions/tryon-enqueue/index.ts` — initial authenticated enqueue boundary; it creates jobs but does not call an AI provider yet.
+- `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and privacy-focused FASHN adapter.
 
 ## Current Data Flow
 
-Today, authentication, body photos, and garments use Supabase. Images can be captured or selected, validated locally, saved under the authenticated user's private Storage path, and displayed through short-lived signed URLs. A garment is created in `processing` state, then the authenticated client invokes the privileged `process-garment` function. The worker claims the row, downloads the private original, retries transient provider failures, uploads a transparent PNG, hashes it, and atomically marks the garment ready while recording provider cost. Until provider secrets are configured, processing safely moves to a visible failed state and can be retried from Closet. Try-on results remain simulated.
+Today, authentication, body photos, garments, try-on jobs, and quota use Supabase. Images are validated locally, saved under authenticated private Storage paths, and displayed through short-lived signed URLs. Garment cleanup and try-on generation are isolated behind authenticated Edge Functions. Try-on cache keys are computed on the server, quota is reserved atomically, duplicate combinations reuse an existing job, results are copied from base64 provider output into private Storage, and failures refund quota once. Without provider secrets, the functions fail before spend; no simulated result is shown.
 
 The intended live flow is:
 
@@ -91,7 +92,7 @@ The intended live flow is:
 - Mobile-first Fitly visual system and four-tab navigation.
 - Closet browsing and category filtering.
 - Camera/library garment selection and editable garment metadata.
-- Simulated try-on states, quota display, feedback controls, and saved-look UI.
+- Persisted try-on selection, progress, private result display, and server-authoritative quota UI.
 - Marketplace preview, Pro paywall, and privacy/account settings UI.
 - Expo SDK 54 compatibility for App Store Expo Go.
 - Supabase client with persisted mobile sessions and app-state token refresh.
@@ -108,6 +109,9 @@ The intended live flow is:
 - Retryable, concurrency-safe garment processing state with three-attempt limits, stale-claim recovery, safe failure messages, and Closet retry controls.
 - Authenticated `process-garment` Edge Function deployed with provider credentials isolated to server-side secrets.
 - Atomic garment completion and background-removal cost ledger writes.
+- Server-computed try-on cache keys and transaction-safe Free/Pro daily quota reservation.
+- Idempotent try-on job claims, private base64 provider inputs/outputs, atomic completion/cost writes, and one-time quota refunds.
+- Authenticated `tryon-enqueue` Edge Function and FASHN v1.6 provider adapter deployed with JWT verification.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
@@ -117,8 +121,8 @@ The intended live flow is:
 - Automated body-photo content moderation and pose/quality scoring.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment category and color tagging.
-- Real AI-provider integration, webhook completion, result storage, and Realtime updates.
-- Atomic quota accounting, cache-key generation, and quota refunds on failure.
+- Configured FASHN credentials and a paid real-image try-on smoke test.
+- Persisted thumbs feedback, Realtime delivery, and scheduled recovery for jobs interrupted with the Edge Function.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Account deletion, analytics, error monitoring, broader feature tests, and CI.
 - Marketplace tables and flows; those are intentionally Phase 2.
@@ -135,10 +139,11 @@ The intended live flow is:
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
 - Configure garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets. Never put either value in the app or committed files.
+- Configure try-on: set `FASHN_API_KEY` and the real effective `FASHN_TRYON_COST_USD` in Supabase Edge Function secrets. Never put either value in the app or committed files.
 
 ## Recommended Build Order
 
-1. Configure the cleanup-provider secrets and smoke-test one real garment. Reassess remove.bg before its announced December 2026 platform transition.
-2. End-to-end try-on provider, caching, quota, and feedback.
+1. Configure both providers and smoke-test garment cleanup plus one real try-on. Reassess remove.bg before its announced December 2026 platform transition.
+2. Persist try-on feedback and add Realtime delivery plus scheduled stuck-job reconciliation.
 3. Pro subscriptions, deletion, observability, broader tests, and beta release.
 4. Marketplace only after the Phase 1 activation and retention gates are credible.
