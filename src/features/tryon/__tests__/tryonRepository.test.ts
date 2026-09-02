@@ -75,6 +75,20 @@ describe('tryonRepository', () => {
     expect(mocks.createSignedUrl).toHaveBeenCalledWith('user-1/job-1.jpg', 600);
   });
 
+  it('does not create a result URL for an unfinished job', async () => {
+    const mocks = createClient();
+    mocks.order.mockResolvedValue({
+      data: [{ ...row, status: 'running', result_path: null, completed_at: null }],
+      error: null,
+    });
+    const repository = createTryOnRepository(mocks.client as never);
+
+    await expect(repository.list('user-1')).resolves.toEqual([
+      expect.objectContaining({ status: 'running', resultPath: null, resultUrl: null }),
+    ]);
+    expect(mocks.createSignedUrl).not.toHaveBeenCalled();
+  });
+
   it('enqueues only trusted input identifiers and never accepts a client cache key', async () => {
     const mocks = createClient();
     const repository = createTryOnRepository(mocks.client as never);
@@ -93,6 +107,29 @@ describe('tryonRepository', () => {
 
     await expect(repository.quota()).resolves.toEqual({ tier: 'free', limit: 3, used: 1, remaining: 2 });
     expect(mocks.rpc).toHaveBeenCalledWith('get_my_tryon_quota');
+  });
+
+  it('turns a typed function response into a safe client error', async () => {
+    const mocks = createClient();
+    mocks.invoke.mockResolvedValue({
+      data: null,
+      error: {
+        context: {
+          json: jest.fn().mockResolvedValue({
+            code: 'provider_unavailable',
+            message: 'Virtual try-on is not configured yet.',
+          }),
+        },
+      },
+    });
+    const repository = createTryOnRepository(mocks.client as never);
+
+    await expect(repository.enqueue({ bodyPhotoId: 'body-1', garmentId: 'garment-1' })).rejects.toEqual(
+      expect.objectContaining({
+        code: 'provider_unavailable',
+        message: 'Virtual try-on is not configured yet.',
+      }),
+    );
   });
 
   it('requires Supabase configuration', async () => {

@@ -1,55 +1,157 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createFashnProvider } from './fashnProvider.ts';
+import { handleTryOnEnqueueRequest, type EnqueueTryOnResult } from './handler.ts';
+import { processTryOn, type TryOnProcessingDependencies } from './processor.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+function requiredEnvironment(name: string) {
+  const value = Deno.env.get(name);
+  if (!value) throw new Error(`${name} is not configured.`);
+  return value;
+}
+
+function secretKey() {
+  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacy) return legacy;
+  const keys = JSON.parse(requiredEnvironment('SUPABASE_SECRET_KEYS')) as Record<string, string>;
+  if (!keys.default) throw new Error('Default Supabase secret key is not configured.');
+  return keys.default;
+}
+
+function providerConfiguration() {
+  const apiKey = Deno.env.get('FASHN_API_KEY') ?? '';
+  const costUsd = Number(Deno.env.get('FASHN_TRYON_COST_USD'));
+  return {
+    apiKey,
+    costUsd,
+    ready: Boolean(apiKey) && Number.isFinite(costUsd) && costUsd >= 0,
+  };
+}
+
+const admin = createClient(requiredEnvironment('SUPABASE_URL'), secretKey(), {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+function throwIfError(error: unknown): asserts error is null | undefined {
+  if (error) throw error;
+}
+
+function base64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 32_768;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function processingDependencies(): TryOnProcessingDependencies {
+  const config = providerConfiguration();
+  const provider = createFashnProvider({
+    apiKey: config.apiKey,
+    costUsd: config.costUsd,
+    fetch: (url, init) => fetch(url, init as RequestInit),
+  });
+
+  return {
+    async claim(input) {
+      const { data, error } = await admin.rpc('claim_tryon_job', {
+        p_job_id: input.jobId,
+        p_user_id: input.userId,
+      });
+      throwIfError(error);
+      return data as Awaited<ReturnType<TryOnProcessingDependencies['claim']>>;
+    },
+    async downloadInput(bucket, path, contentType) {
+      const { data, error } = await admin.storage.from(bucket).download(path);
+      throwIfError(error);
+      return `data:${contentType};base64,${base64(await data.arrayBuffer())}`;
+    },
+    createPrediction: provider.createPrediction,
+    async setProviderJob(input) {
+      const { error } = await admin.rpc('set_tryon_provider_job', {
+        p_job_id: input.jobId,
+        p_user_id: input.userId,
+        p_provider: input.provider,
+        p_provider_job_id: input.providerJobId,
+      });
+      throwIfError(error);
+    },
+    getPrediction: provider.getPrediction,
+    wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    async uploadResult(path, bytes, contentType) {
+      const { error } = await admin.storage.from('results').upload(
+        path,
+        new Blob([bytes], { type: contentType }),
+        { contentType, upsert: false },
+      );
+      throwIfError(error);
+    },
+    async complete(input) {
+      const { error } = await admin.rpc('complete_tryon_job', {
+        p_job_id: input.jobId,
+        p_user_id: input.userId,
+        p_result_path: input.resultPath,
+        p_provider: input.provider,
+        p_cost_usd: input.costUsd,
+        p_latency_ms: input.latencyMs,
+      });
+      throwIfError(error);
+    },
+    async fail(input) {
+      const { error } = await admin.rpc('fail_tryon_job', {
+        p_job_id: input.jobId,
+        p_user_id: input.userId,
+        p_failure_code: input.failureCode,
+        p_provider: input.provider,
+        p_cost_usd: input.costUsd,
+      });
+      throwIfError(error);
+    },
+    async removeResult(path) {
+      const { error } = await admin.storage.from('results').remove([path]);
+      throwIfError(error);
+    },
+  };
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return Response.json({ code: 'unauthorized' }, { status: 401, headers: corsHeaders });
 
-    const client = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) return Response.json({ code: 'unauthorized' }, { status: 401, headers: corsHeaders });
+  const authorization = request.headers.get('Authorization') ?? '';
+  const result = await handleTryOnEnqueueRequest(
+    { method: request.method, authorization, json: () => request.json() },
+    {
+      async authenticate(header) {
+        const token = header.replace(/^Bearer\s+/i, '');
+        if (!token || token === header) return null;
+        const { data, error } = await admin.auth.getUser(token);
+        if (error) return null;
+        return data.user?.id ?? null;
+      },
+      isConfigured: () => providerConfiguration().ready,
+      async reserve(input) {
+        const { data, error } = await admin.rpc('reserve_tryon_job', {
+          p_user_id: input.userId,
+          p_body_photo_id: input.bodyPhotoId,
+          p_garment_id: input.garmentId,
+        });
+        throwIfError(error);
+        return data as EnqueueTryOnResult;
+      },
+      schedule(input) {
+        const task = processTryOn(input, processingDependencies()).catch(() => undefined);
+        EdgeRuntime.waitUntil(task);
+      },
+    },
+  );
 
-    const { bodyPhotoId, garmentId, cacheKey } = await request.json();
-    if (!bodyPhotoId || !garmentId || !cacheKey) {
-      return Response.json({ code: 'invalid_request' }, { status: 400, headers: corsHeaders });
-    }
-
-    const { data: cached } = await client
-      .from('tryon_jobs')
-      .select('id,status,result_path')
-      .eq('cache_key', cacheKey)
-      .eq('status', 'done')
-      .maybeSingle();
-    if (cached) return Response.json({ cached: true, job: cached }, { headers: corsHeaders });
-
-    const { data: profile } = await client.from('profiles').select('tier').single();
-    const limit = profile?.tier === 'pro' ? 60 : 3;
-    const { data: usage } = await client.from('usage_daily').select('tryon_count').eq('day', new Date().toISOString().slice(0, 10)).maybeSingle();
-    if ((usage?.tryon_count ?? 0) >= limit) {
-      return Response.json({ code: 'quota_exceeded', limit }, { status: 429, headers: corsHeaders });
-    }
-
-    const { data: job, error } = await client
-      .from('tryon_jobs')
-      .insert({ user_id: user.id, body_photo_id: bodyPhotoId, garment_id: garmentId, cache_key: cacheKey })
-      .select('id,status')
-      .single();
-    if (error) throw error;
-
-    return Response.json({ cached: false, job }, { status: 202, headers: corsHeaders });
-  } catch (error) {
-    return Response.json({ code: 'internal_error', message: error instanceof Error ? error.message : 'Unknown error' }, { status: 500, headers: corsHeaders });
-  }
+  return Response.json(result.body, { status: result.status, headers: corsHeaders });
 });
-

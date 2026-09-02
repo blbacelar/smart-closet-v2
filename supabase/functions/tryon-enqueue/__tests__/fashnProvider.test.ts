@@ -98,6 +98,27 @@ describe('FASHN provider adapter', () => {
     expect(wait).toHaveBeenNthCalledWith(2, 1_000);
   });
 
+  it('does not retry permanent API errors', async () => {
+    const fetch = jest.fn().mockResolvedValue(jsonResponse(400, {}));
+    const wait = jest.fn();
+    const provider = createFashnProvider({ apiKey: 'private-key', costUsd: 0.075, fetch, wait });
+
+    await expect(provider.createPrediction({ modelImage: 'body', garmentImage: 'garment', category: 'top' }))
+      .rejects.toEqual(expect.objectContaining({ status: 400, retryable: false }));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown prediction states', async () => {
+    const provider = createFashnProvider({
+      apiKey: 'private-key',
+      costUsd: 0.075,
+      fetch: jest.fn().mockResolvedValue(jsonResponse(200, { id: 'prediction-1', status: 'unknown' })),
+    });
+
+    await expect(provider.getPrediction('prediction-1')).rejects.toBeInstanceOf(FashnProviderError);
+  });
+
   it('requires valid server-side configuration and rejects malformed output', async () => {
     expect(() => createFashnProvider({ apiKey: '', costUsd: Number.NaN, fetch: jest.fn() })).toThrow(
       'Virtual try-on is not configured.',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -6,13 +6,13 @@ import { Bookmark, ChevronLeft, Lock, Plus, Repeat2, Share2, Sparkles, ThumbsDow
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useFitlyStore } from '../../src/store';
 import { colors, fonts } from '../../src/theme';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
 import { useGarments } from '../../src/features/garments/useGarments';
+import { useEnqueueTryOn, useTryOnJobs, useTryOnQuota } from '../../src/features/tryon/useTryOns';
+import { getTryOnAction, tryOnErrorMessage } from '../../src/features/tryon/tryonState';
 
-type Stage = 'idle' | 'generating' | 'result';
 const captions = ['Fitting the shoulders…', 'Matching the light…', 'Draping the fabric…', 'Almost there…'];
 
 export default function TryOnScreen() {
@@ -20,35 +20,80 @@ export default function TryOnScreen() {
   const { identity } = useAuth();
   const bodyPhotoQuery = useBodyPhotos(identity?.id);
   const garmentQuery = useGarments(identity?.id);
+  const jobsQuery = useTryOnJobs(identity?.id);
+  const quotaQuery = useTryOnQuota(identity?.id);
+  const enqueue = useEnqueueTryOn(identity?.id ?? 'signed-out');
   const garments = garmentQuery.data ?? [];
-  const { tryOnsUsed, useTryOn, isPro } = useFitlyStore();
-  const [stage, setStage] = useState<Stage>('idle');
+  const readyGarments = useMemo(() => garments.filter((item) => item.status === 'ready'), [garments]);
   const [bodyIndex, setBodyIndex] = useState(0);
   const [selectedGarmentId, setSelectedGarmentId] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
   const [captionIndex, setCaptionIndex] = useState(0);
-  const selected = useMemo(() => garments.find((item) => item.id === selectedGarmentId) ?? garments[0], [garments, selectedGarmentId]);
+  const notifiedJobId = useRef<string | null>(null);
+  const selected = useMemo(
+    () => readyGarments.find((item) => item.id === selectedGarmentId) ?? readyGarments[0],
+    [readyGarments, selectedGarmentId],
+  );
   const bodyPhotos = useMemo(
     () => (bodyPhotoQuery.data ?? []).filter((photo) => photo.status !== 'rejected'),
     [bodyPhotoQuery.data],
   );
   const selectedBodyPhoto = bodyPhotos[bodyIndex] ?? bodyPhotos[0];
-  const remaining = isPro ? Math.max(0, 60 - tryOnsUsed) : Math.max(0, 3 - tryOnsUsed);
-  const action = !selectedBodyPhoto ? 'body-photo' : !selected ? 'garment' : 'try-on';
+  const activeJob = (jobsQuery.data ?? []).find((job) => job.id === activeJobId);
+  const quota = quotaQuery.data;
+  const remaining = quota?.remaining ?? 1;
+  const limit = quota?.limit ?? 3;
+  const isPro = quota?.tier === 'pro';
+  const action = getTryOnAction({
+    hasBodyPhoto: Boolean(selectedBodyPhoto),
+    garmentCount: garments.length,
+    readyGarmentCount: readyGarments.length,
+    remaining,
+  });
+  const waitingForJob = Boolean(
+    activeJobId
+      && !activeJob
+      && (enqueue.isPending || enqueue.data?.jobId === activeJobId),
+  );
+  const isGenerating = enqueue.isPending
+    || waitingForJob
+    || activeJob?.status === 'queued'
+    || activeJob?.status === 'running';
+  const resultJob = activeJob?.status === 'done' ? activeJob : null;
 
   useEffect(() => {
-    if (stage !== 'generating') return;
+    if (!isGenerating) return;
     setCaptionIndex(0);
     const captionTimer = setInterval(() => setCaptionIndex((value) => Math.min(value + 1, captions.length - 1)), 650);
-    const resultTimer = setTimeout(() => {
-      clearInterval(captionTimer);
-      useTryOn();
-      setStage('result');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    }, 2800);
-    return () => { clearInterval(captionTimer); clearTimeout(resultTimer); };
-  }, [stage, useTryOn]);
+    return () => clearInterval(captionTimer);
+  }, [isGenerating]);
 
-  if (stage === 'generating') {
+  useEffect(() => {
+    if (resultJob && notifiedJobId.current !== resultJob.id) {
+      notifiedJobId.current = resultJob.id;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    }
+    if (activeJob?.status === 'failed') {
+      setMessage('That fitting could not be generated. Your try-on was returned—please try again.');
+    }
+  }, [activeJob?.status, resultJob]);
+
+  const startTryOn = async () => {
+    if (!selectedBodyPhoto || !selected) return;
+    setMessage('');
+    try {
+      const result = await enqueue.mutateAsync({
+        bodyPhotoId: selectedBodyPhoto.id,
+        garmentId: selected.id,
+      });
+      setActiveJobId(result.jobId);
+    } catch (error) {
+      setMessage(tryOnErrorMessage(error));
+    }
+  };
+
+  if (isGenerating) {
     return (
       <View style={[styles.busyScreen, { paddingTop: insets.top }]}>
         <StatusBar style="dark" />
@@ -62,13 +107,13 @@ export default function TryOnScreen() {
     );
   }
 
-  if (stage === 'result') {
+  if (resultJob?.resultUrl) {
     return (
       <View style={styles.resultScreen}>
         <StatusBar style="light" />
         <View style={styles.resultImageWrap}>
-          <Image source={{ uri: selectedBodyPhoto?.signedUrl }} style={styles.resultImage} contentFit="cover" contentPosition="top" />
-          <Pressable accessibilityLabel="Back to studio" onPress={() => setStage('idle')} style={[styles.backButton, { top: insets.top + 12 }]}><ChevronLeft size={22} color={colors.white} /></Pressable>
+          <Image source={{ uri: resultJob.resultUrl }} style={styles.resultImage} contentFit="cover" contentPosition="top" />
+          <Pressable accessibilityLabel="Back to studio" onPress={() => setActiveJobId(null)} style={[styles.backButton, { top: insets.top + 12 }]}><ChevronLeft size={22} color={colors.white} /></Pressable>
           <View style={styles.privatePill}><Lock size={12} color={colors.white} /><Text style={styles.privatePillText}>Only you can see this</Text></View>
           {!isPro && <Text style={styles.watermark}>FITLY</Text>}
         </View>
@@ -83,7 +128,7 @@ export default function TryOnScreen() {
           <View style={styles.resultActions}>
             <Pressable style={[styles.resultAction, styles.resultActionActive]}><Bookmark size={15} color={colors.white} /><Text style={styles.resultActionActiveText}>Save</Text></Pressable>
             <Pressable style={styles.resultAction}><Share2 size={15} color={colors.ink} /><Text style={styles.resultActionText}>Share</Text></Pressable>
-            <Pressable onPress={() => setStage('idle')} style={styles.resultAction}><Repeat2 size={15} color={colors.ink} /><Text style={styles.resultActionText}>Again</Text></Pressable>
+            <Pressable onPress={() => setActiveJobId(null)} style={styles.resultAction}><Repeat2 size={15} color={colors.ink} /><Text style={styles.resultActionText}>Again</Text></Pressable>
           </View>
         </View>
       </View>
@@ -117,7 +162,7 @@ export default function TryOnScreen() {
 
         <Text style={styles.label}>The garment</Text>
         <View style={styles.garmentGrid}>
-          {garments.slice(0, 6).map((item) => (
+          {readyGarments.slice(0, 6).map((item) => (
             <Pressable key={item.id} onPress={() => setSelectedGarmentId(item.id)} style={[styles.garmentTile, selected?.id === item.id && styles.selectedTile]}>
               <Image source={{ uri: item.imageUrl }} style={styles.garmentImage} contentFit="cover" />
               <Text style={styles.garmentLabel}>{item.category ?? 'piece'}</Text>
@@ -132,20 +177,39 @@ export default function TryOnScreen() {
         {!garmentQuery.isLoading && garments.length === 0 && (
           <Text style={styles.garmentMessage}>Add a garment before starting a fitting.</Text>
         )}
+        {!garmentQuery.isLoading && garments.length > 0 && readyGarments.length === 0 && (
+          <Text style={styles.garmentMessage}>Your garment is still being prepared. Check Closet to retry processing.</Text>
+        )}
+
+        {!!message && <Text accessibilityRole="alert" style={styles.errorMessage}>{message}</Text>}
+        {quotaQuery.isError && (
+          <Text accessibilityRole="alert" style={styles.errorMessage}>Could not load today’s try-on allowance.</Text>
+        )}
+        {jobsQuery.isError && (
+          <Text accessibilityRole="alert" style={styles.errorMessage}>Could not refresh this fitting’s status.</Text>
+        )}
 
         <Pressable
           onPress={() => {
             if (action === 'body-photo') router.push('/add-body-photo');
             else if (action === 'garment') router.push('/add-garment');
-            else setStage('generating');
+            else if (action === 'closet') router.push('/(tabs)/closet');
+            else if (action === 'upgrade') router.push('/pro');
+            else startTryOn();
           }}
           style={styles.tryButton}
           accessibilityRole="button"
         >
           {action === 'try-on' ? <Sparkles size={16} color={colors.white} /> : <Plus size={16} color={colors.white} />}
-          <Text style={styles.tryText}>{action === 'body-photo' ? 'Add body photo' : action === 'garment' ? 'Add garment' : 'Try it on'}</Text>
+          <Text style={styles.tryText}>{
+            action === 'body-photo' ? 'Add body photo'
+              : action === 'garment' ? 'Add garment'
+                : action === 'closet' ? 'Check garment status'
+                  : action === 'upgrade' ? 'Unlock more try-ons'
+                    : 'Try it on'
+          }</Text>
         </Pressable>
-        <Text style={styles.quota}>{remaining} of {isPro ? 60 : 3} {isPro ? 'Pro' : 'free'} try-ons left today</Text>
+        <Text style={styles.quota}>{quotaQuery.isLoading ? 'Checking today’s allowance…' : `${remaining} of ${limit} ${isPro ? 'Pro' : 'free'} try-ons left today`}</Text>
       </ScrollView>
     </View>
   );
@@ -173,6 +237,7 @@ const styles = StyleSheet.create({
   garmentImage: { width: '100%', height: '100%' },
   garmentLabel: { position: 'absolute', left: 8, bottom: 6, fontFamily: 'monospace', fontSize: 8, color: colors.white, backgroundColor: 'rgba(0,0,0,0.42)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
   garmentMessage: { fontFamily: fonts.body, fontSize: 11, lineHeight: 16, color: colors.muted, marginTop: -20, marginBottom: 22 },
+  errorMessage: { marginBottom: 12, padding: 12, borderRadius: 12, overflow: 'hidden', backgroundColor: '#F4E5E2', fontFamily: fonts.body, color: '#8C3C34', fontSize: 11.5, lineHeight: 17 },
   tryButton: { width: '100%', height: 54, borderRadius: 14, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   tryText: { fontFamily: fonts.body, color: colors.white, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5 },
   quota: { fontFamily: fonts.body, color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: 12 },

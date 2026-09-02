@@ -9,7 +9,11 @@ function request(input: { method?: string; authorization?: string; body?: unknow
     authorization: input.authorization ?? 'Bearer session',
     json: input.throws
       ? jest.fn().mockRejectedValue(new Error('bad json'))
-      : jest.fn().mockResolvedValue(input.body ?? { bodyPhotoId, garmentId }),
+      : jest.fn().mockResolvedValue(
+          Object.prototype.hasOwnProperty.call(input, 'body')
+            ? input.body
+            : { bodyPhotoId, garmentId },
+        ),
   };
 }
 
@@ -43,9 +47,21 @@ describe('tryon-enqueue handler', () => {
     expect(deps.reserve).not.toHaveBeenCalled();
   });
 
+  it('rejects an invalid session returned by authentication', async () => {
+    const deps = dependencies();
+    deps.authenticate.mockResolvedValue(null);
+
+    await expect(handleTryOnEnqueueRequest(request(), deps)).resolves.toEqual({
+      status: 401,
+      body: { code: 'unauthorized' },
+    });
+    expect(deps.reserve).not.toHaveBeenCalled();
+  });
+
   it.each([
     request({ body: { bodyPhotoId: 'bad', garmentId } }),
     request({ body: { bodyPhotoId, garmentId: 'bad' } }),
+    request({ body: null }),
     request({ throws: true }),
   ])('rejects malformed input', async (input) => {
     await expect(handleTryOnEnqueueRequest(input, dependencies())).resolves.toEqual({
