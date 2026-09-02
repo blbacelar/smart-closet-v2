@@ -61,6 +61,7 @@
     "collectCoverageFrom": [
       "src/features/auth/**/*.{ts,tsx}",
       "src/features/body-photos/**/*.{ts,tsx}",
+      "src/features/garments/**/*.{ts,tsx}",
       "src/providers/AuthProvider.tsx"
     ],
     "coverageThreshold": {
