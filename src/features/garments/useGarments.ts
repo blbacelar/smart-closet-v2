@@ -26,8 +26,23 @@ export function useUploadGarment(
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { asset: ValidatedGarmentAsset; details: GarmentDetails }) =>
-      repository.upload({ userId, ...input }),
+    mutationFn: async (input: { asset: ValidatedGarmentAsset; details: GarmentDetails }) => {
+      const garment = await repository.upload({ userId, ...input });
+      await repository.process(garment.id).catch(() => undefined);
+      return garment;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: garmentKeys.list(userId) }),
+  });
+}
+
+export function useProcessGarment(
+  userId: string,
+  repository: GarmentRepository = supabaseGarmentRepository,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (garmentId: string) => repository.process(garmentId),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: garmentKeys.list(userId) }),
   });
 }

@@ -40,6 +40,7 @@ export type GarmentRepository = {
     asset: ValidatedGarmentAsset;
     details: GarmentDetails;
   }) => Promise<Garment>;
+  process: (garmentId: string) => Promise<{ state: string }>;
 };
 
 function randomPathSegment() {
@@ -125,6 +126,14 @@ export function createGarmentRepository(
 
       return withSignedUrl(data, storagePath);
     },
+
+    async process(garmentId) {
+      const { data, error } = await client.functions.invoke('process-garment', {
+        body: { garmentId },
+      });
+      throwIfError(error);
+      return z.object({ state: z.string().min(1) }).parse(data);
+    },
   };
 }
 
@@ -141,5 +150,8 @@ export const supabaseGarmentRepository: GarmentRepository = {
   },
   async upload(input) {
     return requireRepository().upload(input);
+  },
+  async process(garmentId) {
+    return requireRepository().process(garmentId);
   },
 };
