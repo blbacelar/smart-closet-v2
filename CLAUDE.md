@@ -16,11 +16,12 @@ Fitly is a privacy-first Expo mobile app for building a digital closet and gener
 
 ## Current State
 
-- The mobile UI is a polished prototype backed by seeded data in `src/data.ts` and `src/store.ts`.
+- The marketplace and some secondary screens remain a polished prototype backed by seeded data in `src/data.ts` and `src/store.ts`.
 - Supabase is configured in `src/lib/supabase.ts` and the initial Phase 1 schema is deployed.
 - Email/password authentication, persisted sessions, protected routing, and local-device sign-out are implemented.
 - Body-photo camera/library capture, local validation, private Storage persistence, signed display URLs, and plan limits are implemented.
-- The next implementation boundary is garment upload, processing status, and live closet queries.
+- Garment camera/library capture, validation, private Storage persistence, signed display URLs, live Closet/Studio queries, and Free-plan limits are implemented.
+- The next implementation boundary is the privileged garment background-removal worker with retry behavior.
 - Do not present simulated timers or seeded records as working AI/backend behavior.
 
 ## Commands

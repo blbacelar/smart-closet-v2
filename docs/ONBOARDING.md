@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication and private body photos are live, while garments, try-ons, subscriptions, and marketplace screens still use local sample behavior.
+The codebase is currently between prototype and MVP: authentication, private body photos, and private garment uploads are live. Background cleanup, try-ons, subscriptions, and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -25,7 +25,7 @@ The codebase is currently between prototype and MVP: authentication and private 
 Expo Router screens
   ├─ shared UI and design tokens
   ├─ Zustand (temporary UI state; currently also seeded prototype data)
-  └─ TanStack Query (intended server-state boundary)
+  └─ TanStack Query (authenticated body-photo and garment server state)
           │
           ▼
 Supabase client
@@ -46,19 +46,20 @@ The client must never receive AI-provider, Stripe, or service-role secrets. Try-
 - `app/sign-in.tsx` — thin route for email/password sign-in and account creation.
 - `app/add-body-photo.tsx` — authenticated body-photo upload route.
 - `app/(tabs)/_layout.tsx` — Closet, Studio, Market, and Profile tabs.
-- `app/(tabs)/tryon.tsx` — prototype try-on journey and quota display.
-- `app/add-garment.tsx` — image picker and prototype garment creation.
+- `app/(tabs)/tryon.tsx` — live private inputs with a prototype try-on result and quota display.
+- `app/add-garment.tsx` — authenticated garment upload route.
 - `src/store.ts` — current in-memory prototype state.
 - `src/lib/supabase.ts` — shared authenticated Supabase client.
 - `src/features/auth/` — validation, Supabase auth gateway, auth UI, and tests.
 - `src/providers/AuthProvider.tsx` — session restoration and app-wide authenticated identity.
 - `src/features/body-photos/` — capture, validation, private persistence, queries, UI, and tests.
+- `src/features/garments/` — garment capture, validation, private persistence, queries, UI, and tests.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/index.ts` — initial authenticated enqueue boundary; it creates jobs but does not call an AI provider yet.
 
 ## Current Data Flow
 
-Today, authentication and body photos use Supabase. A body photo can be captured or selected, checked for upload size, resolution, and portrait orientation, saved under the authenticated user's private Storage path, and displayed through a short-lived signed URL. Garments and try-on results remain simulated: a user selects an Unsplash-backed garment, starts a timer, and sees their body photo without a generated garment composite. Adding a garment still prepends a local image to Zustand rather than uploading it.
+Today, authentication, body photos, and garments use Supabase. Images can be captured or selected, validated locally, saved under the authenticated user's private Storage path, and displayed through short-lived signed URLs. A garment is created in `processing` state and its original remains visible while automated background cleanup is pending. Try-on results remain simulated: the Studio uses the member's real private inputs, but its timer still returns the body photo rather than an AI-generated composite.
 
 The intended live flow is:
 
@@ -96,8 +97,11 @@ The intended live flow is:
 - Jest/React Native Testing Library setup with an enforced 80% coverage floor for auth.
 - Camera/library body-photo capture with local size, resolution, and orientation validation.
 - Private body-photo Storage uploads, database metadata, signed URLs, and TanStack Query caching.
+- Private garment Storage uploads, normalized metadata, signed URLs, TanStack Query caching, and live Closet/Studio rendering.
 - Database-enforced one-photo Free and three-photo Pro limits.
+- Database-enforced 50-garment Free limit, with unlimited Pro garment inserts.
 - Hardened profile and body-photo permissions so clients cannot promote their own tier or approve moderation status.
+- Hardened garment permissions so clients can edit descriptive metadata but cannot set cleanup paths, hashes, or processing state.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
@@ -105,7 +109,7 @@ The intended live flow is:
 ## Not Implemented Yet
 
 - Automated body-photo content moderation and pose/quality scoring.
-- Persisted garment uploads, background removal, or automatic tagging.
+- Automated garment background removal and automatic tagging; uploaded originals remain marked `processing` until this exists.
 - Real AI-provider integration, webhook completion, result storage, and Realtime updates.
 - Atomic quota accounting, cache-key generation, and quota refunds on failure.
 - RevenueCat subscriptions and real Pro entitlement checks.
@@ -126,7 +130,7 @@ The intended live flow is:
 
 ## Recommended Build Order
 
-1. Garment upload, processing status, and live closet query.
+1. Garment background-removal worker and failure/retry handling.
 2. End-to-end try-on provider, caching, quota, and feedback.
 3. Pro subscriptions, deletion, observability, broader tests, and beta release.
 4. Marketplace only after the Phase 1 activation and retention gates are credible.
