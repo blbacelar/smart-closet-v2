@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { TryOnRepository, supabaseTryOnRepository } from './tryonRepository';
+import { TryOnFeedbackInput, TryOnJob, TryOnRepository, supabaseTryOnRepository } from './tryonRepository';
 
 export const tryOnKeys = {
   all: ['try-ons'] as const,
@@ -44,6 +44,32 @@ export function useEnqueueTryOn(
         queryClient.invalidateQueries({ queryKey: tryOnKeys.jobs(userId) }),
         queryClient.invalidateQueries({ queryKey: tryOnKeys.quota(userId) }),
       ]);
+    },
+  });
+}
+
+export function useSetTryOnFeedback(
+  userId: string,
+  repository: TryOnRepository = supabaseTryOnRepository,
+) {
+  const queryClient = useQueryClient();
+  const jobsKey = tryOnKeys.jobs(userId);
+
+  return useMutation({
+    mutationFn: (input: TryOnFeedbackInput) => repository.setFeedback(input),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: jobsKey });
+      const previousJobs = queryClient.getQueryData<TryOnJob[]>(jobsKey);
+      queryClient.setQueryData<TryOnJob[]>(jobsKey, (jobs = []) =>
+        jobs.map((job) => job.id === input.jobId ? { ...job, feedback: input.feedback } : job),
+      );
+      return { previousJobs };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousJobs) queryClient.setQueryData(jobsKey, context.previousJobs);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: jobsKey });
     },
   });
 }

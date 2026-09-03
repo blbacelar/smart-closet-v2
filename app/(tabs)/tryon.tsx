@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { Bookmark, ChevronLeft, Lock, Plus, Repeat2, Share2, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react-native';
+import { Bookmark, ChevronLeft, Lock, Plus, Repeat2, Share2, Sparkles } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -10,7 +10,8 @@ import { colors, fonts } from '../../src/theme';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
 import { useGarments } from '../../src/features/garments/useGarments';
-import { useEnqueueTryOn, useTryOnJobs, useTryOnQuota } from '../../src/features/tryon/useTryOns';
+import { TryOnFeedback } from '../../src/features/tryon/TryOnFeedback';
+import { useEnqueueTryOn, useSetTryOnFeedback, useTryOnJobs, useTryOnQuota } from '../../src/features/tryon/useTryOns';
 import { getTryOnAction, tryOnErrorMessage } from '../../src/features/tryon/tryonState';
 
 const captions = ['Fitting the shoulders…', 'Matching the light…', 'Draping the fabric…', 'Almost there…'];
@@ -23,6 +24,7 @@ export default function TryOnScreen() {
   const jobsQuery = useTryOnJobs(identity?.id);
   const quotaQuery = useTryOnQuota(identity?.id);
   const enqueue = useEnqueueTryOn(identity?.id ?? 'signed-out');
+  const setFeedback = useSetTryOnFeedback(identity?.id ?? 'signed-out');
   const garments = garmentQuery.data ?? [];
   const readyGarments = useMemo(() => garments.filter((item) => item.status === 'ready'), [garments]);
   const [bodyIndex, setBodyIndex] = useState(0);
@@ -120,11 +122,19 @@ export default function TryOnScreen() {
         <View style={styles.resultSheet}>
           <View style={styles.fitRow}>
             <Text style={styles.fitTitle}>How’s the fit?</Text>
-            <View style={styles.voteRow}>
-              <Pressable style={styles.voteActive}><ThumbsUp size={19} color={colors.white} /></Pressable>
-              <Pressable style={styles.vote}><ThumbsDown size={19} color={colors.muted} /></Pressable>
-            </View>
+            <TryOnFeedback
+              value={resultJob.feedback}
+              pending={setFeedback.isPending}
+              onChange={(feedback) => {
+                setMessage('');
+                setFeedback.mutate(
+                  { jobId: resultJob.id, feedback },
+                  { onError: () => setMessage('Could not save your feedback. Try again.') },
+                );
+              }}
+            />
           </View>
+          {!!message && <Text accessibilityRole="alert" style={styles.errorMessage}>{message}</Text>}
           <View style={styles.resultActions}>
             <Pressable style={[styles.resultAction, styles.resultActionActive]}><Bookmark size={15} color={colors.white} /><Text style={styles.resultActionActiveText}>Save</Text></Pressable>
             <Pressable style={styles.resultAction}><Share2 size={15} color={colors.ink} /><Text style={styles.resultActionText}>Share</Text></Pressable>
@@ -259,9 +269,6 @@ const styles = StyleSheet.create({
   resultSheet: { backgroundColor: colors.canvas, paddingHorizontal: 22, paddingTop: 18, paddingBottom: 22, borderTopLeftRadius: 22, borderTopRightRadius: 22 },
   fitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   fitTitle: { fontFamily: fonts.body, fontSize: 16, fontWeight: '600', color: colors.ink },
-  voteRow: { flexDirection: 'row', gap: 10 },
-  voteActive: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
-  vote: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.05)', alignItems: 'center', justifyContent: 'center' },
   resultActions: { flexDirection: 'row', gap: 10 },
   resultAction: { flex: 1, height: 46, borderRadius: 14, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   resultActionActive: { backgroundColor: colors.ink, borderColor: colors.ink },

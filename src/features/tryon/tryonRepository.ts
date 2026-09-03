@@ -30,6 +30,11 @@ const enqueueSchema = z.object({
   remaining: z.number().int().min(0),
 });
 
+const feedbackInputSchema = z.object({
+  jobId: z.string().min(1),
+  feedback: z.union([z.literal(-1), z.literal(1)]),
+});
+
 export type TryOnJob = {
   id: string;
   bodyPhotoId: string;
@@ -46,11 +51,13 @@ export type TryOnJob = {
 
 export type TryOnQuota = z.infer<typeof quotaSchema>;
 export type EnqueueTryOnResult = z.infer<typeof enqueueSchema>;
+export type TryOnFeedbackInput = z.infer<typeof feedbackInputSchema>;
 
 export type TryOnRepository = {
   list: (userId: string) => Promise<TryOnJob[]>;
   quota: () => Promise<TryOnQuota>;
   enqueue: (input: { bodyPhotoId: string; garmentId: string }) => Promise<EnqueueTryOnResult>;
+  setFeedback: (input: TryOnFeedbackInput) => Promise<void>;
 };
 
 export class TryOnRequestError extends Error {
@@ -131,6 +138,18 @@ export function createTryOnRepository(client: SupabaseClient): TryOnRepository {
       if (error) return parseFunctionError(error);
       return enqueueSchema.parse(data);
     },
+
+    async setFeedback(input) {
+      const value = feedbackInputSchema.parse(input);
+      const { error } = await client
+        .from('tryon_jobs')
+        .update({ feedback: value.feedback })
+        .eq('id', value.jobId)
+        .eq('status', 'done')
+        .select('id')
+        .single();
+      throwIfError(error);
+    },
   };
 }
 
@@ -148,5 +167,8 @@ export const supabaseTryOnRepository: TryOnRepository = {
   },
   async enqueue(input) {
     return requireRepository().enqueue(input);
+  },
+  async setFeedback(input) {
+    return requireRepository().setFeedback(input);
   },
 };
