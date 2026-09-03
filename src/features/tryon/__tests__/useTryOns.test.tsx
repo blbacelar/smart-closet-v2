@@ -1,8 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import React, { PropsWithChildren } from 'react';
+import { TryOnRealtime } from '../tryonRealtime';
 import { TryOnJob, TryOnRepository } from '../tryonRepository';
-import { tryOnKeys, useEnqueueTryOn, useSetTryOnFeedback, useTryOnJobs, useTryOnQuota } from '../useTryOns';
+import {
+  tryOnKeys,
+  useEnqueueTryOn,
+  useSetTryOnFeedback,
+  useTryOnJobs,
+  useTryOnQuota,
+  useTryOnRealtime,
+} from '../useTryOns';
 
 const completedJob: TryOnJob = {
   id: 'job-1',
@@ -37,10 +45,14 @@ function setup() {
     }),
     setFeedback: jest.fn().mockResolvedValue(undefined),
   };
+  const unsubscribe = jest.fn();
+  const realtime: jest.Mocked<TryOnRealtime> = {
+    subscribe: jest.fn().mockReturnValue(unsubscribe),
+  };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  return { client, repository, wrapper };
+  return { client, repository, realtime, unsubscribe, wrapper };
 }
 
 describe('try-on hooks', () => {
@@ -112,6 +124,30 @@ describe('try-on hooks', () => {
 
     expect(client.getQueryData<TryOnJob[]>(tryOnKeys.jobs('user-1'))?.[0].feedback).toBe(1);
     await unmount();
+    client.clear();
+  });
+
+  it('refreshes jobs and quota when a private Realtime update arrives', async () => {
+    const { client, realtime, unsubscribe, wrapper } = setup();
+    const invalidate = jest.spyOn(client, 'invalidateQueries');
+    const hook = await renderHook(() => useTryOnRealtime('user-1', realtime), { wrapper });
+    const onUpdate = realtime.subscribe.mock.calls[0][1];
+
+    await act(() => onUpdate());
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: tryOnKeys.jobs('user-1') }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: tryOnKeys.quota('user-1') }));
+    await hook.unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    client.clear();
+  });
+
+  it('does not open a Realtime channel while signed out', async () => {
+    const { client, realtime, wrapper } = setup();
+    const hook = await renderHook(() => useTryOnRealtime(undefined, realtime), { wrapper });
+
+    expect(realtime.subscribe).not.toHaveBeenCalled();
+    await hook.unmount();
     client.clear();
   });
 });
