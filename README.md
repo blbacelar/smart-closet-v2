@@ -21,5 +21,6 @@ Live Studio generation calls Google Gemini directly from the `tryon-enqueue` Sup
 - Closet browsing, search, category filters, and garment capture
 - Body-photo selection and privacy guidance
 - Interactive try-on flow, quota state, results, and feedback
+- Realtime fitting completion with scheduled stale-job recovery
 - Saved looks, Pro paywall, and account/privacy settings
 - Supabase client boundary, private storage policies, RLS, quota tables, cost ledger, and enqueue function

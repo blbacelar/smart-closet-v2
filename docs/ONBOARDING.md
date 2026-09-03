@@ -40,7 +40,7 @@ Third-party providers
   └─ Google Gemini image try-on adapter (deployed; credential configured)
 ```
 
-The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → direct Gemini generation → private result storage, while the app polls the owner-scoped job row. Realtime delivery and scheduled stuck-job reconciliation remain planned hardening.
+The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → direct Gemini generation → private result storage. The Studio subscribes to owner-filtered job updates through Supabase Realtime and retains polling as a connection-loss fallback. A five-minute database schedule marks jobs stale after ten minutes, safely fails at most 100 per run, and reuses the atomic one-time quota refund path.
 
 ## Key Entry Points
 
@@ -113,6 +113,8 @@ The intended live flow is:
 - Idempotent try-on job claims, private base64 provider inputs/outputs, atomic completion/cost writes, and one-time quota refunds.
 - Authenticated `tryon-enqueue` Edge Function and direct Gemini provider adapter deployed with JWT verification.
 - Persisted thumbs-up/down try-on feedback with optimistic UI updates, owner-only database enforcement, and failure rollback.
+- Owner-filtered Supabase Realtime job updates with query polling retained as a fallback.
+- Scheduled, skip-locked recovery for interrupted try-on jobs with bounded batches and idempotent quota refunds.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
@@ -123,7 +125,6 @@ The intended live flow is:
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment category and color tagging.
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
-- Realtime delivery and scheduled recovery for jobs interrupted with the Edge Function.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Account deletion, analytics, error monitoring, broader feature tests, and CI.
 - Marketplace tables and flows; those are intentionally Phase 2.
@@ -145,6 +146,5 @@ The intended live flow is:
 ## Recommended Build Order
 
 1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
-2. Add Realtime delivery plus scheduled stuck-job reconciliation.
-3. Pro subscriptions, deletion, observability, broader tests, and beta release.
-4. Marketplace only after the Phase 1 activation and retention gates are credible.
+2. Add Pro subscriptions, deletion, observability, broader tests, and prepare the beta release.
+3. Build the marketplace only after the Phase 1 activation and retention gates are credible.
