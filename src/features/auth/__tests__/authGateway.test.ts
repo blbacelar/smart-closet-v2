@@ -17,6 +17,9 @@ function createClient() {
       signUp: jest.fn().mockResolvedValue({ data: { session: null }, error: null }),
       signOut: jest.fn().mockResolvedValue({ error: null }),
     },
+    functions: {
+      invoke: jest.fn().mockResolvedValue({ data: { deleted: true }, error: null }),
+    },
   };
 }
 
@@ -167,6 +170,33 @@ describe('supabaseAuthGateway', () => {
     const error = new Error('Network unavailable');
     mockSupabase.auth.signOut.mockResolvedValue({ error });
     await expect(supabaseAuthGateway.signOut()).rejects.toBe(error);
+  });
+
+  it('permanently deletes the authenticated account and clears the local session', async () => {
+    await supabaseAuthGateway.deleteAccount();
+
+    expect(mockSupabase.functions.invoke).toHaveBeenCalledWith('delete-account', {
+      body: { confirmation: 'DELETE' },
+    });
+    expect(mockSupabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  it('does not expose provider details or sign out when account deletion fails', async () => {
+    mockSupabase.functions.invoke.mockResolvedValue({
+      data: null,
+      error: new Error('service_role database detail'),
+    });
+
+    await expect(supabaseAuthGateway.deleteAccount()).rejects.toThrow(
+      "We couldn't delete your account. Please try again.",
+    );
+    expect(mockSupabase.auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('treats server deletion as successful even if local sign-out reports an error', async () => {
+    mockSupabase.auth.signOut.mockResolvedValue({ error: new Error('session already removed') });
+
+    await expect(supabaseAuthGateway.deleteAccount()).resolves.toBeUndefined();
   });
 
   it('explains missing Supabase configuration for mutations', async () => {

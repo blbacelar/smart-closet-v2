@@ -21,6 +21,7 @@ function createGateway(initialIdentity: AuthIdentity | null = bruno) {
     signIn: jest.fn(),
     signUp: jest.fn(),
     signOut: jest.fn().mockResolvedValue(undefined),
+    deleteAccount: jest.fn().mockResolvedValue(undefined),
   };
 
   return { gateway, emit: (identity: AuthIdentity | null) => listener(identity), unsubscribe };
@@ -64,6 +65,33 @@ describe('AuthProvider', () => {
 
     expect(gateway.signOut).toHaveBeenCalledTimes(1);
     expect(result.current.identity).toBeNull();
+  });
+
+  it('clears the local identity only after permanent account deletion succeeds', async () => {
+    const { gateway } = createGateway();
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AuthProvider gateway={gateway}>{children}</AuthProvider>
+    );
+    const { result } = await renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(() => result.current.deleteAccount());
+
+    expect(gateway.deleteAccount).toHaveBeenCalledTimes(1);
+    expect(result.current.identity).toBeNull();
+  });
+
+  it('keeps the identity when permanent account deletion fails', async () => {
+    const { gateway } = createGateway();
+    gateway.deleteAccount = jest.fn().mockRejectedValue(new Error('Deletion unavailable'));
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AuthProvider gateway={gateway}>{children}</AuthProvider>
+    );
+    const { result } = await renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await expect(act(() => result.current.deleteAccount())).rejects.toThrow('Deletion unavailable');
+    expect(result.current.identity).toEqual(bruno);
   });
 
   it('keeps a newer auth event when initial session restoration finishes later', async () => {
