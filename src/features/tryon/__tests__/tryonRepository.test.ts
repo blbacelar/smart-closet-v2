@@ -25,7 +25,12 @@ function createClient() {
   const order = jest.fn().mockResolvedValue({ data: [row], error: null });
   const eq = jest.fn(() => ({ order }));
   const select = jest.fn(() => ({ eq }));
-  const from = jest.fn(() => ({ select }));
+  const single = jest.fn().mockResolvedValue({ data: { id: 'job-1' }, error: null });
+  const updateSelect = jest.fn(() => ({ single }));
+  const updateStatusEq = jest.fn(() => ({ select: updateSelect }));
+  const updateIdEq = jest.fn(() => ({ eq: updateStatusEq }));
+  const update = jest.fn(() => ({ eq: updateIdEq }));
+  const from = jest.fn(() => ({ select, update }));
   const createSignedUrl = jest.fn().mockResolvedValue({
     data: { signedUrl: 'https://signed.example/result' },
     error: null,
@@ -45,6 +50,11 @@ function createClient() {
     from,
     eq,
     order,
+    update,
+    updateIdEq,
+    updateStatusEq,
+    updateSelect,
+    single,
     createSignedUrl,
     invoke,
     rpc,
@@ -107,6 +117,29 @@ describe('tryonRepository', () => {
 
     await expect(repository.quota()).resolves.toEqual({ tier: 'free', limit: 3, used: 1, remaining: 2 });
     expect(mocks.rpc).toHaveBeenCalledWith('get_my_tryon_quota');
+  });
+
+  it('persists feedback only for a completed job with a validated value', async () => {
+    const mocks = createClient();
+    const repository = createTryOnRepository(mocks.client as never);
+
+    await expect(repository.setFeedback({ jobId: 'job-1', feedback: -1 })).resolves.toBeUndefined();
+
+    expect(mocks.from).toHaveBeenCalledWith('tryon_jobs');
+    expect(mocks.update).toHaveBeenCalledWith({ feedback: -1 });
+    expect(mocks.updateIdEq).toHaveBeenCalledWith('id', 'job-1');
+    expect(mocks.updateStatusEq).toHaveBeenCalledWith('status', 'done');
+    expect(mocks.updateSelect).toHaveBeenCalledWith('id');
+  });
+
+  it('surfaces a rejected feedback update', async () => {
+    const mocks = createClient();
+    mocks.single.mockResolvedValue({ data: null, error: new Error('Feedback update rejected') });
+    const repository = createTryOnRepository(mocks.client as never);
+
+    await expect(repository.setFeedback({ jobId: 'job-1', feedback: 1 })).rejects.toThrow(
+      'Feedback update rejected',
+    );
   });
 
   it('turns a typed function response into a safe client error', async () => {
