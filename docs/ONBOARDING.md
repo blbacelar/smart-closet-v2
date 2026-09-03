@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, account deletion, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -50,6 +50,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `app/(tabs)/_layout.tsx` — Closet, Studio, Market, and Profile tabs.
 - `app/(tabs)/tryon.tsx` — live private inputs, persisted job status, stored results, and server quota display.
 - `app/add-garment.tsx` — authenticated garment upload route.
+- `app/delete-account.tsx` — destructive-confirmation route for permanent Phase 1 account deletion.
 - `src/store.ts` — current in-memory prototype state.
 - `src/lib/supabase.ts` — shared authenticated Supabase client.
 - `src/features/auth/` — validation, Supabase auth gateway, auth UI, and tests.
@@ -60,6 +61,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `supabase/functions/process-garment/` — authenticated, retryable garment preparation with a zero-cost original-image fallback and optional remove.bg cleanup.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and stateless direct Gemini adapter.
+- `supabase/functions/delete-account/` — authenticated Storage purge followed by permanent Auth-user deletion.
 
 ## Current Data Flow
 
@@ -98,7 +100,7 @@ The intended live flow is:
 - Supabase client with persisted mobile sessions and app-state token refresh.
 - Email/password sign-in and account creation with user profile metadata.
 - Session-gated Expo Router routes, launch-time session restoration, and current-device sign-out.
-- Jest/React Native Testing Library setup with an enforced 80% coverage floor for auth.
+- Jest/React Native Testing Library setup with an enforced 80% global coverage floor.
 - Camera/library body-photo capture with local size, resolution, and orientation validation.
 - Private body-photo Storage uploads, database metadata, signed URLs, and TanStack Query caching.
 - Private garment Storage uploads, normalized metadata, signed URLs, TanStack Query caching, and live Closet/Studio rendering.
@@ -115,6 +117,8 @@ The intended live flow is:
 - Persisted thumbs-up/down try-on feedback with optimistic UI updates, owner-only database enforcement, and failure rollback.
 - Owner-filtered Supabase Realtime job updates with query polling retained as a fallback.
 - Scheduled, skip-locked recovery for interrupted try-on jobs with bounded batches and idempotent quota refunds.
+- Permanent account deletion with typed confirmation, generic retry errors, private-object cleanup, Auth cascade deletion, and local cache/session clearing.
+- Live-profile Storage guards that prevent a deleted user's unexpired JWT from accessing private image buckets.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
@@ -126,7 +130,7 @@ The intended live flow is:
 - Automatic garment category and color tagging.
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
 - RevenueCat subscriptions and real Pro entitlement checks.
-- Account deletion, analytics, error monitoring, broader feature tests, and CI.
+- Analytics, error monitoring, broader feature tests, and CI.
 - Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.
 
 ## Common Tasks
@@ -146,5 +150,5 @@ The intended live flow is:
 ## Recommended Build Order
 
 1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
-2. Add Pro subscriptions, deletion, observability, broader tests, and prepare the beta release.
+2. Add Pro subscriptions, observability, broader tests, and prepare the beta release.
 3. Build the marketplace only after the Phase 1 activation and retention gates are credible.
