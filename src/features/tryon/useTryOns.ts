@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { supabaseTryOnRealtime, TryOnRealtime } from './tryonRealtime';
 import { TryOnFeedbackInput, TryOnJob, TryOnRepository, supabaseTryOnRepository } from './tryonRepository';
 
 export const tryOnKeys = {
@@ -72,4 +74,22 @@ export function useSetTryOnFeedback(
       await queryClient.invalidateQueries({ queryKey: jobsKey });
     },
   });
+}
+
+export function useTryOnRealtime(
+  userId: string | undefined,
+  realtime: TryOnRealtime = supabaseTryOnRealtime,
+) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!userId) return;
+
+    return realtime.subscribe(userId, () => {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: tryOnKeys.jobs(userId) }),
+        queryClient.invalidateQueries({ queryKey: tryOnKeys.quota(userId) }),
+      ]).catch(() => undefined);
+    });
+  }, [queryClient, realtime, userId]);
 }

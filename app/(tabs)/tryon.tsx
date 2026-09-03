@@ -11,7 +11,7 @@ import { useAuth } from '../../src/providers/AuthProvider';
 import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
 import { useGarments } from '../../src/features/garments/useGarments';
 import { TryOnFeedback } from '../../src/features/tryon/TryOnFeedback';
-import { useEnqueueTryOn, useSetTryOnFeedback, useTryOnJobs, useTryOnQuota } from '../../src/features/tryon/useTryOns';
+import { useEnqueueTryOn, useSetTryOnFeedback, useTryOnJobs, useTryOnQuota, useTryOnRealtime } from '../../src/features/tryon/useTryOns';
 import { getTryOnAction, tryOnErrorMessage } from '../../src/features/tryon/tryonState';
 
 const captions = ['Fitting the shoulders…', 'Matching the light…', 'Draping the fabric…', 'Almost there…'];
@@ -23,6 +23,7 @@ export default function TryOnScreen() {
   const garmentQuery = useGarments(identity?.id);
   const jobsQuery = useTryOnJobs(identity?.id);
   const quotaQuery = useTryOnQuota(identity?.id);
+  useTryOnRealtime(identity?.id);
   const enqueue = useEnqueueTryOn(identity?.id ?? 'signed-out');
   const setFeedback = useSetTryOnFeedback(identity?.id ?? 'signed-out');
   const garments = garmentQuery.data ?? [];
