@@ -33,6 +33,10 @@ Result: both suites failed before implementation because the OpenRouter adapter 
 
 The cache migration and `tryon-enqueue` Edge Function are deployed. `OPENROUTER_API_KEY` was validated through OpenRouter's key endpoint and installed as a Supabase Edge Function secret without printing or committing it. No paid image-generation request was made during implementation.
 
+## Original-image MIME regression
+
+The zero-cost garment-preparation fallback stores a JPEG. A focused processor test first demonstrated that the try-on worker incorrectly labeled that JPEG as PNG. The worker now derives the private input data URL MIME type from its server-controlled storage path. The focused suite passes 9 tests, and the full project passes 141 tests with 93.08% statement and 80.97% branch coverage.
+
 ## Verification
 
 - 23 test suites and 138 tests passing

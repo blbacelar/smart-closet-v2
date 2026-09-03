@@ -15,6 +15,10 @@ type ClaimResult =
 
 type ImageContentType = 'image/jpeg' | 'image/png' | 'image/webp';
 
+function storedInputContentType(path: string): 'image/jpeg' | 'image/png' {
+  return path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+}
+
 export type TryOnProcessingDependencies = {
   claim: (input: { jobId: string; userId: string }) => Promise<ClaimResult>;
   downloadInput: (bucket: 'body' | 'garments', path: string, contentType: 'image/jpeg' | 'image/png') => Promise<string>;
@@ -79,8 +83,16 @@ export async function processTryOn(
 
   try {
     const [modelImage, garmentImage] = await Promise.all([
-      dependencies.downloadInput('body', claim.job.bodyPath, 'image/jpeg'),
-      dependencies.downloadInput('garments', claim.job.garmentPath, 'image/png'),
+      dependencies.downloadInput(
+        'body',
+        claim.job.bodyPath,
+        storedInputContentType(claim.job.bodyPath),
+      ),
+      dependencies.downloadInput(
+        'garments',
+        claim.job.garmentPath,
+        storedInputContentType(claim.job.garmentPath),
+      ),
     ]);
     const generation = await dependencies.generateTryOn({
       modelImage,

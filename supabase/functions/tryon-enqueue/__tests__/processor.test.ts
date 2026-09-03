@@ -60,6 +60,29 @@ describe('processTryOn', () => {
     });
   });
 
+  it('labels an original-image garment fallback as JPEG', async () => {
+    const deps = dependencies();
+    deps.claim.mockResolvedValue({
+      state: 'claimed',
+      job: {
+        id: 'job-1',
+        userId: 'user-1',
+        bodyPath: 'user-1/body.jpg',
+        garmentPath: 'user-1/garment-clean.jpg',
+        category: 'top',
+      },
+    });
+
+    await processTryOn({ jobId: 'job-1', userId: 'user-1' }, deps);
+
+    expect(deps.downloadInput).toHaveBeenNthCalledWith(
+      2,
+      'garments',
+      'user-1/garment-clean.jpg',
+      'image/jpeg',
+    );
+  });
+
   it.each(['running', 'done', 'failed', 'not-found'] as const)('does not spend for claim state %s', async (state) => {
     const deps = dependencies();
     deps.claim.mockResolvedValue({ state } as never);
