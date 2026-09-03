@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. The OpenRouter key is configured; garment cleanup still needs its development provider key before both real-image paths can be smoke-tested. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -37,10 +37,10 @@ Supabase client
           ▼
 Third-party providers
   ├─ remove.bg garment adapter (deployed; credentials pending)
-  └─ OpenRouter image try-on adapter (deployed; credential configured)
+  └─ Google Gemini image try-on adapter (deployed; credential configured)
 ```
 
-The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → OpenRouter generation → private result storage, while the app polls the owner-scoped job row. Realtime delivery and scheduled stuck-job reconciliation remain planned hardening.
+The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → direct Gemini generation → private result storage, while the app polls the owner-scoped job row. Realtime delivery and scheduled stuck-job reconciliation remain planned hardening.
 
 ## Key Entry Points
 
@@ -92,7 +92,7 @@ The intended live flow is:
 - Mobile-first Fitly visual system and four-tab navigation.
 - Closet browsing and category filtering.
 - Camera/library garment selection and editable garment metadata.
-- Persisted try-on selection, progress, private result display, and server-authoritative quota UI.
+- Persisted try-on selection, progress, private result display, server-authoritative quota UI, and owner-only fit feedback.
 - Marketplace preview, Pro paywall, and privacy/account settings UI.
 - Expo SDK 54 compatibility for App Store Expo Go.
 - Supabase client with persisted mobile sessions and app-state token refresh.
@@ -111,7 +111,8 @@ The intended live flow is:
 - Atomic garment completion and background-removal cost ledger writes.
 - Server-computed try-on cache keys and transaction-safe Free/Pro daily quota reservation.
 - Idempotent try-on job claims, private base64 provider inputs/outputs, atomic completion/cost writes, and one-time quota refunds.
-- Authenticated `tryon-enqueue` Edge Function and OpenRouter provider adapter deployed with JWT verification.
+- Authenticated `tryon-enqueue` Edge Function and direct Gemini provider adapter deployed with JWT verification.
+- Persisted thumbs-up/down try-on feedback with optimistic UI updates, owner-only database enforcement, and failure rollback.
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
@@ -121,8 +122,8 @@ The intended live flow is:
 - Automated body-photo content moderation and pose/quality scoring.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment category and color tagging.
-- A paid real-image OpenRouter try-on smoke test.
-- Persisted thumbs feedback, Realtime delivery, and scheduled recovery for jobs interrupted with the Edge Function.
+- A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
+- Realtime delivery and scheduled recovery for jobs interrupted with the Edge Function.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Account deletion, analytics, error monitoring, broader feature tests, and CI.
 - Marketplace tables and flows; those are intentionally Phase 2.
@@ -143,7 +144,7 @@ The intended live flow is:
 
 ## Recommended Build Order
 
-1. Configure the image-processing providers and smoke-test garment cleanup plus one real OpenRouter try-on. Reassess remove.bg before its announced December 2026 platform transition.
-2. Persist try-on feedback and add Realtime delivery plus scheduled stuck-job reconciliation.
+1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
+2. Add Realtime delivery plus scheduled stuck-job reconciliation.
 3. Pro subscriptions, deletion, observability, broader tests, and beta release.
 4. Marketplace only after the Phase 1 activation and retention gates are credible.
