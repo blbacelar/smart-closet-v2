@@ -1,6 +1,6 @@
 # TDD Evidence: Persisted Try-On Pipeline
 
-> Historical implementation record: the original FASHN adapter documented here was replaced by OpenRouter on 2026-09-02. See `docs/tdd-evidence/openrouter-tryon.md` for the current provider contract and deployment state.
+> Historical implementation record: the original FASHN adapter documented here was replaced by OpenRouter and then by direct Gemini on 2026-09-02. See `docs/tdd-evidence/gemini-tryon.md` for the current provider contract and deployment state.
 
 - Source plan: Fitly PRD and technical architecture
 - Feature: Authenticated asynchronous try-on with atomic quota, deterministic caching, private results, and one-time refunds

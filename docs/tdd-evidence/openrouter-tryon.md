@@ -1,4 +1,6 @@
-# TDD Evidence: OpenRouter Try-On Adapter
+# Historical TDD Evidence: OpenRouter Try-On Adapter
+
+> Replaced by the direct Gemini adapter on 2026-09-02. See `docs/tdd-evidence/gemini-tryon.md` for the current provider contract.
 
 - Source: owner decision to consolidate image generation through OpenRouter
 - Completed: 2026-09-02

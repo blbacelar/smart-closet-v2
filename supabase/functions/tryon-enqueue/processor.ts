@@ -75,7 +75,7 @@ export async function processTryOn(
 
   const now = dependencies.now ?? Date.now;
   const startedAt = now();
-  let provider = 'openrouter';
+  let provider = 'gemini';
   let costUsd = 0;
   let providerCompleted = false;
   let resultUploaded = false;

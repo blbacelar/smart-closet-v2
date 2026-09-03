@@ -9,11 +9,9 @@ type FetchResponse = {
 type ProviderDependencies = {
   apiKey: string;
   model: string;
-  provider: string;
   fallbackCostUsd: number;
   fetch: (url: string, init: Record<string, unknown>) => Promise<FetchResponse>;
   wait?: (milliseconds: number) => Promise<void>;
-  createRequestId?: () => string;
 };
 
 type ImageContentType = 'image/jpeg' | 'image/png' | 'image/webp';
@@ -26,10 +24,10 @@ const categoryDescription: Record<TryOnCategory, string> = {
   shoes: 'pair of shoes',
 };
 
-export class OpenRouterProviderError extends Error {
+export class GeminiProviderError extends Error {
   constructor(public readonly status: number | null, public readonly retryable: boolean) {
     super('Virtual try-on provider failed.');
-    this.name = 'OpenRouterProviderError';
+    this.name = 'GeminiProviderError';
   }
 }
 
@@ -37,26 +35,54 @@ function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
 }
 
+function validBase64(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length > 0
+    && /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value);
+}
+
+function inlineImage(dataUrl: string) {
+  const match = /^data:(image\/(?:jpeg|png));base64,(.+)$/.exec(dataUrl);
+  if (!match || !validBase64(match[2])) {
+    throw new GeminiProviderError(null, false);
+  }
+  return { type: 'image', mime_type: match[1], data: match[2] };
+}
+
+function imageBlock(payload: Record<string, unknown>) {
+  const direct = record(payload.output_image);
+  if (direct.type === 'image') return direct;
+
+  const steps = Array.isArray(payload.steps) ? [...payload.steps].reverse() : [];
+  for (const stepValue of steps) {
+    const step = record(stepValue);
+    if (step.type !== 'model_output' || !Array.isArray(step.content)) continue;
+    const content = [...step.content].reverse();
+    for (const contentValue of content) {
+      const block = record(contentValue);
+      if (block.type === 'image') return block;
+    }
+  }
+  return {};
+}
+
 function decodeImage(payload: Record<string, unknown>) {
-  const data = Array.isArray(payload.data) ? record(payload.data[0]) : {};
-  const encoded = data.b64_json;
-  const contentType = data.media_type;
+  const block = imageBlock(payload);
+  const contentType = block.mime_type;
   if (
-    typeof encoded !== 'string'
-    || encoded.length === 0
-    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)
+    !validBase64(block.data)
     || !['image/jpeg', 'image/png', 'image/webp'].includes(String(contentType))
   ) {
-    throw new OpenRouterProviderError(null, false);
+    throw new GeminiProviderError(null, false);
   }
 
   try {
-    const binary = atob(encoded);
+    const binary = atob(block.data);
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     return { bytes: bytes.buffer, contentType: contentType as ImageContentType };
   } catch {
-    throw new OpenRouterProviderError(null, false);
+    throw new GeminiProviderError(null, false);
   }
 }
 
@@ -72,11 +98,10 @@ function tryOnPrompt(category: TryOnCategory) {
   ].join(' ');
 }
 
-export function createOpenRouterProvider(dependencies: ProviderDependencies) {
+export function createGeminiProvider(dependencies: ProviderDependencies) {
   if (
     !dependencies.apiKey
     || !dependencies.model
-    || !dependencies.provider
     || !Number.isFinite(dependencies.fallbackCostUsd)
     || dependencies.fallbackCostUsd < 0
   ) {
@@ -85,30 +110,32 @@ export function createOpenRouterProvider(dependencies: ProviderDependencies) {
 
   const wait = dependencies.wait
     ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-  const createRequestId = dependencies.createRequestId ?? (() => crypto.randomUUID());
   const headers = {
-    Authorization: `Bearer ${dependencies.apiKey}`,
+    'x-goog-api-key': dependencies.apiKey,
     'Content-Type': 'application/json',
   };
 
   const request = async (init: Record<string, unknown>, attempts = 3) => {
-    let lastError: OpenRouterProviderError | null = null;
+    let lastError: GeminiProviderError | null = null;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const response = await dependencies.fetch('https://openrouter.ai/api/v1/images', init);
+        const response = await dependencies.fetch(
+          'https://generativelanguage.googleapis.com/v1beta/interactions',
+          init,
+        );
         if (response.ok) return record(await response.json());
         const retryable = response.status === 429 || response.status >= 500;
-        lastError = new OpenRouterProviderError(response.status, retryable);
+        lastError = new GeminiProviderError(response.status, retryable);
         if (!retryable) throw lastError;
       } catch (error) {
-        lastError = error instanceof OpenRouterProviderError
+        lastError = error instanceof GeminiProviderError
           ? error
-          : new OpenRouterProviderError(null, true);
+          : new GeminiProviderError(null, true);
         if (!lastError.retryable) throw lastError;
       }
       if (attempt < attempts - 1) await wait(500 * (2 ** attempt));
     }
-    throw lastError ?? new OpenRouterProviderError(null, false);
+    throw lastError ?? new GeminiProviderError(null, false);
   };
 
   return {
@@ -117,34 +144,36 @@ export function createOpenRouterProvider(dependencies: ProviderDependencies) {
       garmentImage: string;
       category: TryOnCategory;
     }) {
+      const modelImage = inlineImage(input.modelImage);
+      const garmentImage = inlineImage(input.garmentImage);
       const payload = await request({
         method: 'POST',
         headers,
         body: JSON.stringify({
           model: dependencies.model,
-          prompt: tryOnPrompt(input.category),
-          input_references: [
-            { type: 'image_url', image_url: { url: input.modelImage } },
-            { type: 'image_url', image_url: { url: input.garmentImage } },
+          input: [
+            { type: 'text', text: tryOnPrompt(input.category) },
+            modelImage,
+            garmentImage,
           ],
-          n: 1,
-          resolution: '1K',
-          aspect_ratio: '2:3',
-          provider: {
-            only: [dependencies.provider],
-            allow_fallbacks: false,
+          response_format: {
+            type: 'image',
+            mime_type: 'image/jpeg',
+            aspect_ratio: '2:3',
+            image_size: '1K',
           },
+          store: false,
         }),
       });
-      const usageCost = record(payload.usage).cost;
-      const costUsd = typeof usageCost === 'number' && Number.isFinite(usageCost) && usageCost >= 0
-        ? usageCost
-        : dependencies.fallbackCostUsd;
+      const id = payload.id;
+      if (typeof id !== 'string' || id.length === 0) {
+        throw new GeminiProviderError(null, false);
+      }
 
       return {
-        id: createRequestId(),
-        provider: 'openrouter',
-        costUsd,
+        id,
+        provider: 'gemini',
+        costUsd: dependencies.fallbackCostUsd,
         ...decodeImage(payload),
       };
     },

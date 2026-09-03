@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { createOpenRouterProvider } from './openRouterProvider.ts';
+import { createGeminiProvider } from './geminiProvider.ts';
 import { handleTryOnEnqueueRequest, type EnqueueTryOnResult } from './handler.ts';
 import { processTryOn, type TryOnProcessingDependencies } from './processor.ts';
 
@@ -25,21 +25,18 @@ function secretKey() {
 }
 
 function providerConfiguration() {
-  const apiKey = Deno.env.get('OPENROUTER_API_KEY') ?? '';
-  const model = Deno.env.get('OPENROUTER_IMAGE_MODEL') ?? 'google/gemini-3.1-flash-image';
-  const provider = Deno.env.get('OPENROUTER_IMAGE_PROVIDER') ?? 'google-vertex/global';
-  const fallbackCostValue = Deno.env.get('OPENROUTER_TRYON_COST_USD_FALLBACK') ?? '0';
+  const apiKey = Deno.env.get('GOOGLE_GEMINI_API_KEY') ?? '';
+  const model = Deno.env.get('GOOGLE_GEMINI_IMAGE_MODEL') ?? 'gemini-3.1-flash-image';
+  const fallbackCostValue = Deno.env.get('GOOGLE_GEMINI_TRYON_COST_USD_FALLBACK') ?? '0.07';
   const fallbackCostUsd = Number(fallbackCostValue);
-  const cacheNamespace = `openrouter:${model}:${provider}:v1`;
+  const cacheNamespace = `gemini:${model}:interactions:stateless:v1`;
   return {
     apiKey,
     model,
-    provider,
     cacheNamespace,
     fallbackCostUsd,
     ready: Boolean(apiKey)
       && Boolean(model)
-      && Boolean(provider)
       && cacheNamespace.length <= 200
       && Number.isFinite(fallbackCostUsd)
       && fallbackCostUsd >= 0,
@@ -66,10 +63,9 @@ function base64(buffer: ArrayBuffer) {
 
 function processingDependencies(): TryOnProcessingDependencies {
   const config = providerConfiguration();
-  const provider = createOpenRouterProvider({
+  const provider = createGeminiProvider({
     apiKey: config.apiKey,
     model: config.model,
-    provider: config.provider,
     fallbackCostUsd: config.fallbackCostUsd,
     fetch: (url, init) => fetch(url, init as RequestInit),
   });

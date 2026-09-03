@@ -65,7 +65,7 @@
       "src/features/tryon/**/*.{ts,tsx}",
       "src/providers/AuthProvider.tsx",
       "supabase/functions/process-garment/{handler,processor,removeBgProvider}.ts",
-      "supabase/functions/tryon-enqueue/{handler,processor,openRouterProvider}.ts"
+      "supabase/functions/tryon-enqueue/{handler,processor,geminiProvider}.ts"
     ],
     "coverageThreshold": {
       "global": {

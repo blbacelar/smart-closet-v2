@@ -59,7 +59,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `src/features/tryon/` — persisted jobs, quota queries, enqueue boundary, UI state, and tests.
 - `supabase/functions/process-garment/` — authenticated, retryable garment preparation with a zero-cost original-image fallback and optional remove.bg cleanup.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
-- `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and privacy-focused OpenRouter adapter.
+- `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and stateless direct Gemini adapter.
 
 ## Current Data Flow
 
@@ -139,7 +139,7 @@ The intended live flow is:
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
 - Optional garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets to enable background removal. Without them, the worker securely prepares the original garment JPEG at zero provider cost. Never put provider credentials in the app or committed files.
-- Try-on configuration: `OPENROUTER_API_KEY` is set in Supabase Edge Function secrets. The default model is `google/gemini-3.1-flash-image`, pinned to the ZDR-capable `google-vertex/global` endpoint. Never put the key in the app or committed files.
+- Try-on configuration: `GOOGLE_GEMINI_API_KEY` is set in Supabase Edge Function secrets. The default model is `gemini-3.1-flash-image`, called through Google's Interactions API with `store: false`. Optional server-only overrides are `GOOGLE_GEMINI_IMAGE_MODEL` and `GOOGLE_GEMINI_TRYON_COST_USD_FALLBACK`. Never put the key in an `EXPO_PUBLIC_` variable or committed file.
 
 ## Recommended Build Order
 
