@@ -127,7 +127,7 @@ The intended live flow is:
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Account deletion, analytics, error monitoring, broader feature tests, and CI.
-- Marketplace tables and flows; those are intentionally Phase 2.
+- Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.
 
 ## Common Tasks
 
