@@ -60,12 +60,14 @@
     ],
     "collectCoverageFrom": [
       "src/features/auth/**/*.{ts,tsx}",
+      "src/features/account/**/*.{ts,tsx}",
       "src/features/body-photos/**/*.{ts,tsx}",
       "src/features/garments/**/*.{ts,tsx}",
       "src/features/tryon/**/*.{ts,tsx}",
       "src/providers/AuthProvider.tsx",
       "supabase/functions/process-garment/{handler,processor,removeBgProvider}.ts",
-      "supabase/functions/tryon-enqueue/{handler,processor,geminiProvider}.ts"
+      "supabase/functions/tryon-enqueue/{handler,processor,geminiProvider}.ts",
+      "supabase/functions/delete-account/{handler,deleteAccount}.ts"
     ],
     "coverageThreshold": {
       "global": {
