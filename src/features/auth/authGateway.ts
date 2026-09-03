@@ -22,7 +22,10 @@ export type AuthGateway = {
   signIn: (input: SignInInput) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<{ requiresEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 };
+
+const deletionFailureMessage = "We couldn't delete your account. Please try again.";
 
 function requireClient() {
   if (!supabase) {
@@ -103,6 +106,29 @@ export const supabaseAuthGateway: AuthGateway = {
     const { error } = await client.auth.signOut({ scope: 'local' });
     if (error) {
       throw error;
+    }
+  },
+
+  async deleteAccount() {
+    const client = requireClient();
+    const { data, error } = await client.functions.invoke('delete-account', {
+      body: { confirmation: 'DELETE' },
+    });
+    if (
+      error
+      || typeof data !== 'object'
+      || data === null
+      || !('deleted' in data)
+      || data.deleted !== true
+    ) {
+      throw new Error(deletionFailureMessage);
+    }
+
+    try {
+      await client.auth.signOut({ scope: 'local' });
+    } catch {
+      // The server deletion already revoked refresh access. The provider clears
+      // its in-memory identity even if the local SDK reports an expired session.
     }
   },
 };

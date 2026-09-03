@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
-import { Bell, Camera, ChevronRight, Globe2, Lock, LogOut, Shield } from 'lucide-react-native';
+import { Bell, Camera, ChevronRight, Globe2, Lock, LogOut, Shield, Trash2 } from 'lucide-react-native';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitlyStore } from '../../src/store';
@@ -13,6 +13,7 @@ const settings = [
   { Icon: Bell, label: 'Notifications' },
   { Icon: Globe2, label: 'Language' },
   { Icon: LogOut, label: 'Sign out' },
+  { Icon: Trash2, label: 'Delete account' },
 ];
 
 export default function ProfileScreen() {
@@ -22,6 +23,10 @@ export default function ProfileScreen() {
   const bodyPhotos = useBodyPhotos(identity?.id);
 
   const handleSettingPress = async (label: string) => {
+    if (label === 'Delete account') {
+      router.push('/delete-account');
+      return;
+    }
     if (label !== 'Sign out') {
       return;
     }
@@ -88,7 +93,7 @@ export default function ProfileScreen() {
             style={[styles.setting, index === settings.length - 1 && styles.settingLast]}
           >
             <Icon size={17} color={colors.ink} />
-            <Text style={styles.settingText}>{label}</Text>
+            <Text style={[styles.settingText, label === 'Delete account' && styles.dangerText]}>{label}</Text>
             <ChevronRight size={16} color={colors.muted} />
           </Pressable>
         ))}
@@ -129,5 +134,6 @@ const styles = StyleSheet.create({
   setting: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   settingLast: { borderBottomWidth: 0 },
   settingText: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.ink },
+  dangerText: { color: '#8C3C34' },
   version: { fontFamily: fonts.body, fontSize: 9, color: colors.muted, textAlign: 'center', marginTop: 20 },
 });

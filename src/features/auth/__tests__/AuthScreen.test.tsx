@@ -10,6 +10,7 @@ function createGateway(): jest.Mocked<AuthGateway> {
     signIn: jest.fn().mockResolvedValue(undefined),
     signUp: jest.fn().mockResolvedValue({ requiresEmailConfirmation: false }),
     signOut: jest.fn(),
+    deleteAccount: jest.fn(),
   };
 }
 

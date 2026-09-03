@@ -9,6 +9,7 @@ type AuthContextValue = {
   identity: AuthIdentity | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -62,6 +63,10 @@ export function AuthProvider({ children, gateway = supabaseAuthGateway }: AuthPr
       isLoading,
       signOut: async () => {
         await gateway.signOut();
+        setIdentity(null);
+      },
+      deleteAccount: async () => {
+        await gateway.deleteAccount();
         setIdentity(null);
       },
     }),
