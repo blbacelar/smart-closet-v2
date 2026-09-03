@@ -7,6 +7,8 @@ type FetchResponse = {
 type FetchLike = (url: string, init: RequestInit) => Promise<FetchResponse>;
 type Wait = (milliseconds: number) => Promise<void>;
 
+export type GarmentImageContentType = 'image/jpeg' | 'image/png';
+
 export class RemoveBgError extends Error {
   constructor(
     readonly status: number,
@@ -52,6 +54,7 @@ export function createRemoveBgProvider(input: {
               bytes: await response.arrayBuffer(),
               provider: 'remove-bg',
               costUsd: input.costUsd,
+              contentType: 'image/png' as const,
             };
           }
 
@@ -74,4 +77,31 @@ export function createRemoveBgProvider(input: {
       throw new RemoveBgError(0, true);
     },
   };
+}
+
+export function createGarmentImageProvider(input: {
+  apiKey?: string;
+  costUsd?: number;
+  fetch: FetchLike;
+  wait?: Wait;
+}) {
+  if (!input.apiKey) {
+    return {
+      async remove(bytes: ArrayBuffer) {
+        return {
+          bytes,
+          provider: 'original-image',
+          costUsd: 0,
+          contentType: 'image/jpeg' as const,
+        };
+      },
+    };
+  }
+
+  return createRemoveBgProvider({
+    apiKey: input.apiKey,
+    costUsd: input.costUsd ?? Number.NaN,
+    fetch: input.fetch,
+    wait: input.wait,
+  });
 }

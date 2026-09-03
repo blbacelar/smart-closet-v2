@@ -16,6 +16,7 @@ function createDependencies() {
       bytes: new ArrayBuffer(8),
       provider: 'remove-bg',
       costUsd: 0.08,
+      contentType: 'image/png' as const,
     }),
     hash: jest.fn().mockResolvedValue('clean-sha256'),
     uploadClean: jest.fn().mockResolvedValue(undefined),
@@ -38,6 +39,7 @@ describe('processGarment', () => {
     expect(dependencies.uploadClean).toHaveBeenCalledWith(
       'user-1/garment-1-clean.png',
       expect.any(ArrayBuffer),
+      'image/png',
     );
     expect(dependencies.complete).toHaveBeenCalledWith({
       garmentId: 'garment-1',
@@ -48,6 +50,32 @@ describe('processGarment', () => {
       costUsd: 0.08,
     });
     expect(dependencies.fail).not.toHaveBeenCalled();
+  });
+
+  it('keeps a JPEG extension when the original-image fallback is used', async () => {
+    const dependencies = createDependencies();
+    dependencies.removeBackground.mockResolvedValue({
+      bytes: new ArrayBuffer(8),
+      provider: 'original-image',
+      costUsd: 0,
+      contentType: 'image/jpeg',
+    });
+
+    await expect(processGarment({ garmentId: 'garment-1', userId: 'user-1' }, dependencies)).resolves.toEqual({
+      state: 'ready',
+      garmentId: 'garment-1',
+      cleanPath: 'user-1/garment-1-clean.jpg',
+    });
+    expect(dependencies.uploadClean).toHaveBeenCalledWith(
+      'user-1/garment-1-clean.jpg',
+      expect.any(ArrayBuffer),
+      'image/jpeg',
+    );
+    expect(dependencies.complete).toHaveBeenCalledWith(expect.objectContaining({
+      cleanPath: 'user-1/garment-1-clean.jpg',
+      provider: 'original-image',
+      costUsd: 0,
+    }));
   });
 
   it.each(['ready', 'busy', 'exhausted'] as const)('returns the database claim state %s without spending', async (state) => {

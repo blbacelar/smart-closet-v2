@@ -1,3 +1,5 @@
+import type { GarmentImageContentType } from './removeBgProvider';
+
 export type ProcessingState = 'ready' | 'busy' | 'exhausted' | 'not-found';
 
 export type ProcessingResult =
@@ -21,9 +23,14 @@ export type ProcessingDependencies = {
     bytes: ArrayBuffer;
     provider: string;
     costUsd: number;
+    contentType: GarmentImageContentType;
   }>;
   hash: (bytes: ArrayBuffer) => Promise<string>;
-  uploadClean: (storagePath: string, bytes: ArrayBuffer) => Promise<void>;
+  uploadClean: (
+    storagePath: string,
+    bytes: ArrayBuffer,
+    contentType: GarmentImageContentType,
+  ) => Promise<void>;
   complete: (input: {
     garmentId: string;
     userId: string;
@@ -55,14 +62,16 @@ export async function processGarment(
   }
 
   const { garment } = claim;
-  const cleanPath = `${garment.userId}/${garment.id}-clean.png`;
+  let cleanPath: string | undefined;
   let cleanWasUploaded = false;
 
   try {
     const original = await dependencies.downloadOriginal(garment.originalPath);
     const cleaned = await dependencies.removeBackground(original);
+    const extension = cleaned.contentType === 'image/png' ? 'png' : 'jpg';
+    cleanPath = `${garment.userId}/${garment.id}-clean.${extension}`;
     const imageHash = await dependencies.hash(cleaned.bytes);
-    await dependencies.uploadClean(cleanPath, cleaned.bytes);
+    await dependencies.uploadClean(cleanPath, cleaned.bytes, cleaned.contentType);
     cleanWasUploaded = true;
     await dependencies.complete({
       garmentId: garment.id,
@@ -75,7 +84,7 @@ export async function processGarment(
 
     return { state: 'ready', garmentId: garment.id, cleanPath };
   } catch {
-    if (cleanWasUploaded) {
+    if (cleanWasUploaded && cleanPath) {
       await dependencies.removeClean(cleanPath).catch(() => undefined);
     }
     await dependencies

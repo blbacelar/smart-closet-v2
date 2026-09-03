@@ -1,4 +1,8 @@
-import { RemoveBgError, createRemoveBgProvider } from '../removeBgProvider';
+import {
+  RemoveBgError,
+  createGarmentImageProvider,
+  createRemoveBgProvider,
+} from '../removeBgProvider';
 
 function response(status: number, bytes = new ArrayBuffer(8)) {
   return {
@@ -17,6 +21,7 @@ describe('remove.bg provider adapter', () => {
       bytes: expect.any(ArrayBuffer),
       provider: 'remove-bg',
       costUsd: 0.08,
+      contentType: 'image/png',
     });
     expect(fetch).toHaveBeenCalledWith(
       'https://api.remove.bg/v1.0/removebg',
@@ -59,5 +64,19 @@ describe('remove.bg provider adapter', () => {
     expect(() => createRemoveBgProvider({ apiKey: '', costUsd: Number.NaN, fetch: jest.fn() })).toThrow(
       'Background removal is not configured.',
     );
+  });
+
+  it('uses the original JPEG at zero cost when remove.bg is not configured', async () => {
+    const fetch = jest.fn();
+    const bytes = new ArrayBuffer(4);
+    const provider = createGarmentImageProvider({ fetch });
+
+    await expect(provider.remove(bytes)).resolves.toEqual({
+      bytes,
+      provider: 'original-image',
+      costUsd: 0,
+      contentType: 'image/jpeg',
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

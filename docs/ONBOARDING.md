@@ -57,7 +57,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `src/features/body-photos/` — capture, validation, private persistence, queries, UI, and tests.
 - `src/features/garments/` — garment capture, validation, private persistence, queries, UI, and tests.
 - `src/features/tryon/` — persisted jobs, quota queries, enqueue boundary, UI state, and tests.
-- `supabase/functions/process-garment/` — authenticated, retryable garment cleanup orchestration and remove.bg adapter.
+- `supabase/functions/process-garment/` — authenticated, retryable garment preparation with a zero-cost original-image fallback and optional remove.bg cleanup.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and privacy-focused OpenRouter adapter.
 
@@ -138,7 +138,7 @@ The intended live flow is:
 - Add a screen: create a route under `app/` and register it only when Expo Router cannot infer it.
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
-- Configure garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets. Never put either value in the app or committed files.
+- Optional garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets to enable background removal. Without them, the worker securely prepares the original garment JPEG at zero provider cost. Never put provider credentials in the app or committed files.
 - Try-on configuration: `OPENROUTER_API_KEY` is set in Supabase Edge Function secrets. The default model is `google/gemini-3.1-flash-image`, pinned to the ZDR-capable `google-vertex/global` endpoint. Never put the key in the app or committed files.
 
 ## Recommended Build Order

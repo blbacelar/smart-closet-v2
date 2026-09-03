@@ -27,9 +27,17 @@ Status/retry command:
 
 Result: two suites failed because persisted processing state was not mapped and retry invalidation was not yet guaranteed. Preserved in commit `5213b1e`.
 
+Original-image fallback regression command:
+
+`npm test -- --runTestsByPath supabase/functions/process-garment/__tests__/processor.test.ts supabase/functions/process-garment/__tests__/removeBgProvider.test.ts`
+
+Result: four assertions failed because unconfigured remove.bg still threw, provider results had no content type, uploads were forced to PNG, and JPEG fallback paths were unsupported.
+
 ## GREEN
 
 The provider-neutral processing core passed 30 focused tests before database/UI integration and is preserved in commit `d54a3cf`. The completed worker, client status handling, migration, deployment, and retry UI passed 31 focused tests and are preserved in commit `1617abf`.
+
+The original-image fallback passed all 12 focused tests, then the complete project passed 140 tests. The linked `process-garment` worker was deployed as active version 3 with JWT verification enabled.
 
 ## Test Specification
 
@@ -51,13 +59,13 @@ The provider-neutral processing core passed 30 focused tests before database/UI 
 
 Final command: `npm run test:coverage`
 
-- 93 tests passing
-- 93.56% statements
-- 82.59% branches
-- 89.18% functions
-- 94.08% lines
+- 140 tests passing
+- 93.07% statements
+- 80.88% branches
+- 86.92% functions
+- 94.05% lines
 
-`REMOVE_BG_API_KEY` and `REMOVE_BG_COST_USD` are intentionally absent from source control and are not configured on the linked project yet. Consequently, no paid provider request or real-image smoke test was performed. The deployed worker will record a safe failure and preserve the original for retry until those secrets are supplied.
+`REMOVE_BG_API_KEY` and `REMOVE_BG_COST_USD` remain optional and absent from source control. When they are not configured, the worker uses the original private JPEG, records an `original-image` provider entry at zero cost, and marks the garment ready for OpenRouter. When both are configured, the existing bounded remove.bg adapter produces a PNG. No paid remove.bg request is required for local or linked-project development.
 
 `npm audit --omit=dev --audit-level=high` currently reports 25 transitive advisories (16 moderate and 9 high) in the existing Expo/Metro dependency chain. The automated remediation requires a breaking Expo SDK upgrade, so it was not forced while this development build intentionally remains on SDK 54 for App Store Expo Go compatibility.
 

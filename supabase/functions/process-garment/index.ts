@@ -2,7 +2,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { handleProcessGarmentRequest } from './handler.ts';
 import { processGarment, type ProcessingDependencies } from './processor.ts';
-import { createRemoveBgProvider } from './removeBgProvider.ts';
+import { createGarmentImageProvider } from './removeBgProvider.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,9 +49,11 @@ function processingDependencies(): ProcessingDependencies {
       return data.arrayBuffer();
     },
     async removeBackground(bytes) {
-      const provider = createRemoveBgProvider({
-        apiKey: requiredEnvironment('REMOVE_BG_API_KEY'),
-        costUsd: Number(requiredEnvironment('REMOVE_BG_COST_USD')),
+      const provider = createGarmentImageProvider({
+        apiKey: Deno.env.get('REMOVE_BG_API_KEY'),
+        costUsd: Deno.env.get('REMOVE_BG_COST_USD')
+          ? Number(Deno.env.get('REMOVE_BG_COST_USD'))
+          : undefined,
         fetch,
       });
       return provider.remove(bytes);
@@ -60,11 +62,11 @@ function processingDependencies(): ProcessingDependencies {
       const digest = await crypto.subtle.digest('SHA-256', bytes);
       return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
     },
-    async uploadClean(storagePath, bytes) {
+    async uploadClean(storagePath, bytes, contentType) {
       const { error } = await admin.storage.from('garments').upload(
         storagePath,
-        new Blob([bytes], { type: 'image/png' }),
-        { contentType: 'image/png', upsert: true },
+        new Blob([bytes], { type: contentType }),
+        { contentType, upsert: true },
       );
       throwIfError(error);
     },
