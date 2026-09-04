@@ -28,6 +28,14 @@ function createGateway(initialIdentity: AuthIdentity | null = bruno) {
 }
 
 describe('AuthProvider', () => {
+  function telemetry() {
+    return {
+      setUser: jest.fn(),
+      track: jest.fn(),
+      captureError: jest.fn(),
+    };
+  }
+
   it('restores the existing identity and tracks auth changes', async () => {
     const { gateway, emit, unsubscribe } = createGateway();
     let resolveIdentity: (identity: AuthIdentity | null) => void = () => undefined;
@@ -116,13 +124,35 @@ describe('AuthProvider', () => {
 
   it('settles as signed out when session restoration fails', async () => {
     const { gateway } = createGateway();
-    gateway.getCurrentIdentity = jest.fn().mockRejectedValue(new Error('Storage unavailable'));
+    const error = new Error('Storage unavailable');
+    gateway.getCurrentIdentity = jest.fn().mockRejectedValue(error);
+    const observabilityClient = telemetry();
     const wrapper = ({ children }: PropsWithChildren) => (
-      <AuthProvider gateway={gateway}>{children}</AuthProvider>
+      <AuthProvider gateway={gateway} observabilityClient={observabilityClient}>{children}</AuthProvider>
     );
     const { result } = await renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.identity).toBeNull();
+    expect(observabilityClient.captureError).toHaveBeenCalledWith(error, {
+      operation: 'auth_session_restore',
+      code: 'session_restore_failed',
+      fatal: false,
+    });
+  });
+
+  it('identifies only the current opaque user id and clears it on sign-out', async () => {
+    const { gateway } = createGateway();
+    const observabilityClient = telemetry();
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AuthProvider gateway={gateway} observabilityClient={observabilityClient}>{children}</AuthProvider>
+    );
+    const { result } = await renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.identity).toEqual(bruno));
+    expect(observabilityClient.setUser).toHaveBeenLastCalledWith('user-1');
+
+    await act(() => result.current.signOut());
+    expect(observabilityClient.setUser).toHaveBeenLastCalledWith(null);
   });
 });
