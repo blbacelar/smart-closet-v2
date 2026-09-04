@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
 import { I18nProvider } from '../src/i18n/i18n';
@@ -13,6 +14,10 @@ const queryClient = new QueryClient();
 
 function RootNavigator() {
   const { identity, isLoading } = useAuth();
+
+  useEffect(() => {
+    observability.track('app_opened', { source: 'launch' });
+  }, []);
 
   if (isLoading) {
     return (
@@ -42,8 +47,6 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
-  observability.track('app_opened', { source: 'launch' });
-
   return (
     <AppErrorBoundary>
       <I18nProvider>
