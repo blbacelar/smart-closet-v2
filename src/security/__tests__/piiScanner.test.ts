@@ -26,6 +26,20 @@ describe('PII safety scanner', () => {
     ]);
   });
 
+  it('rejects personal contact details and developer home-directory paths', () => {
+    const content = [
+      'owner=member@personalmail.co',
+      'phone=+1 (604) 555-0137',
+      'fixture=/Users/developer/Pictures/body-photo.jpg',
+    ].join('\n');
+
+    expect(scanText(content, 'src/leak.ts')).toEqual([
+      expect.objectContaining({ kind: 'email-address', line: 1 }),
+      expect.objectContaining({ kind: 'phone-number', line: 2 }),
+      expect.objectContaining({ kind: 'home-directory', line: 3 }),
+    ]);
+  });
+
   it('allows empty environment templates, example identities, and test-only logging', () => {
     expect(scanText('EXPO_PUBLIC_SUPABASE_KEY=\nemail=member@example.com', '.env.example')).toEqual([]);
     expect(scanText("console.error('expected failure');", 'src/example.test.ts')).toEqual([]);
