@@ -122,6 +122,8 @@ The intended live flow is:
 - Deployed profiles, body photos, garments, usage, try-on jobs, and AI cost tables.
 - RLS policies, private Storage buckets, indexes, constraints, and new-user profile trigger.
 - Supabase security advisor verified with zero errors and zero warnings.
+- GitHub Actions quality checks for locked install, typecheck, coverage, Expo Doctor, web export, and critical production advisories.
+- Manual EAS build workflow defaulting to an Android preview, plus weekly npm and GitHub Actions dependency monitoring.
 
 ## Not Implemented Yet
 
@@ -130,7 +132,7 @@ The intended live flow is:
 - Automatic garment category and color tagging.
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
 - RevenueCat subscriptions and real Pro entitlement checks.
-- Analytics, error monitoring, broader feature tests, and CI.
+- Analytics, error monitoring, broader feature tests, remote CI activation, and the `EXPO_TOKEN` needed for manual EAS builds.
 - Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.
 
 ## Common Tasks
@@ -141,6 +143,8 @@ The intended live flow is:
 - Check auth coverage: `npm run test:coverage`.
 - Validate Expo dependencies: `npx expo-doctor`.
 - Build the web bundle: `npm run build:web`.
+- Reproduce CI locally: run `npm ci`, typecheck, coverage, Expo Doctor, web export, and the critical-advisory audit in the same order as `.github/workflows/ci.yml`.
+- Queue a native cloud build: add `EXPO_TOKEN` as a GitHub Actions secret, open the manual EAS workflow, and keep Android/preview selected until Apple credentials are available.
 - Add a screen: create a route under `app/` and register it only when Expo Router cannot infer it.
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
@@ -150,5 +154,5 @@ The intended live flow is:
 ## Recommended Build Order
 
 1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
-2. Add Pro subscriptions, observability, broader tests, and prepare the beta release.
+2. Activate the committed GitHub workflows, then add Pro subscriptions, observability, broader tests, and prepare the beta release.
 3. Build the marketplace only after the Phase 1 activation and retention gates are credible.

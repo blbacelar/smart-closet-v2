@@ -24,3 +24,4 @@ Live Studio generation calls Google Gemini directly from the `tryon-enqueue` Sup
 - Realtime fitting completion with scheduled stale-job recovery
 - Saved looks, Pro paywall, account/privacy settings, and permanent account deletion
 - Supabase client boundary, private storage policies, RLS, quota tables, cost ledger, and enqueue function
+- GitHub quality CI, manual EAS builds, and weekly dependency monitoring
