@@ -132,6 +132,9 @@ The intended live flow is:
 - Manual EAS build workflow defaulting to an Android preview, plus weekly npm and GitHub Actions dependency monitoring.
 - Privacy-safe analytics/error hooks that allowlist event data, strip sensitive fields, and never forward raw error messages or image references.
 - Accessible global render-error recovery, system reduced-motion detection, and English/Brazilian Portuguese localization scaffolding.
+- A 32-assertion pgTAP suite covering RLS, anonymous access, owner isolation, private Storage boundaries, and allowed member mutations.
+- A CI PII-leak gate that blocks runtime console logging, committed secrets, private signed Storage URLs, personal contact details, and developer home-directory paths without echoing detected values.
+- Explicit least-privilege Data API grants and source-only private Storage writes, deployed through migration `20260904120000_explicit_authenticated_grants.sql`.
 
 ## Not Implemented Yet
 
@@ -142,7 +145,7 @@ The intended live flow is:
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Sentry/GlitchTip and PostHog projects, adapters, credentials, consent policy, and broader event instrumentation; the current observability adapter intentionally sends nothing.
 - Migration of existing screen copy into the localization catalog and a user-facing language selector.
-- Broader feature and RLS tests, remote CI activation, and the `EXPO_TOKEN` needed for manual EAS builds.
+- Broader feature/E2E tests, remote CI activation, and the `EXPO_TOKEN` needed for manual EAS builds.
 - Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.
 
 ## Common Tasks
@@ -151,6 +154,8 @@ The intended live flow is:
 - Typecheck: `npm run typecheck`.
 - Run tests: `npm test`.
 - Check auth coverage: `npm run test:coverage`.
+- Run the local RLS suite: start Docker and Supabase, then run `npm run test:db`.
+- Scan tracked first-party files for PII leakage: `npm run check:pii`.
 - Validate Expo dependencies: `npx expo-doctor`.
 - Build the web bundle: `npm run build:web`.
 - Reproduce CI locally: run `npm ci`, typecheck, coverage, Expo Doctor, web export, and the critical-advisory audit in the same order as `.github/workflows/ci.yml`.
@@ -164,5 +169,5 @@ The intended live flow is:
 ## Recommended Build Order
 
 1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
-2. Activate the committed GitHub workflows, wire approved observability vendors after defining consent, then add Pro subscriptions, broader tests, and prepare the beta release.
+2. Push and activate the committed GitHub workflows, wire approved observability vendors after defining consent, then add Pro subscriptions, broader tests, and prepare the beta release.
 3. Build the marketplace only after the Phase 1 activation and retention gates are credible.
