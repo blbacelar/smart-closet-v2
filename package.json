@@ -47,8 +47,10 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "build:web": "expo export --platform web",
+    "check:pii": "node scripts/check-pii.js",
     "test": "jest --runInBand",
-    "test:coverage": "jest --coverage --runInBand"
+    "test:coverage": "jest --coverage --runInBand",
+    "test:db": "supabase test db"
   },
   "jest": {
     "preset": "jest-expo",

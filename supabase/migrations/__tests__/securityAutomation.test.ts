@@ -10,7 +10,7 @@ describe('security automation contracts', () => {
     expect(existsSync(testPath)).toBe(true);
     const sql = readFileSync(testPath, 'utf8').toLowerCase();
     expect(sql).toContain('select plan(');
-    expect(sql).toContain("set local role 'authenticated'");
+    expect(sql).toMatch(/set local role\s+'?authenticated'?/);
     expect(sql).toContain('select * from finish()');
   });
 

@@ -1,4 +1,4 @@
-import type { GarmentImageContentType } from './removeBgProvider';
+import type { GarmentImageContentType } from './removeBgProvider.ts';
 
 export type ProcessingState = 'ready' | 'busy' | 'exhausted' | 'not-found';
 

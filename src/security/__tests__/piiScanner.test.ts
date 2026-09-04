@@ -1,4 +1,4 @@
-const { scanText } = require('../../../scripts/piiScanner.js') as {
+const { scanText } = require('../../../scripts/check-pii.js') as {
   scanText: (content: string, filePath: string) => Array<{
     kind: string;
     line: number;
