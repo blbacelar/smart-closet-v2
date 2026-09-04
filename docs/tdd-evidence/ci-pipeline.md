@@ -44,9 +44,12 @@ The quality workflow was reproduced locally in order:
 - `npm audit --omit=dev --audit-level=critical`: passed with no critical advisories.
 - Ruby YAML parsing: `ci.yml`, `eas-build.yml`, and `dependabot.yml` parsed successfully.
 
+The workflow was then published to `main`. GitHub Actions run
+[`33886647691`](https://github.com/blbacelar/smart-closet-v2/actions/runs/33886647691)
+completed successfully: both the app-quality job and the fresh-database RLS job passed.
+
 ## Known gaps
 
-- The workflows are committed locally and will become active on GitHub when this branch is pushed. The repository currently has no remote workflows.
 - The manual EAS job requires an `EXPO_TOKEN` GitHub Actions secret. No Actions secrets are currently configured, so no native build was queued.
 - iOS remains an explicit manual choice because the owner does not yet have Apple signing credentials.
 - The critical-only audit gate intentionally does not hide the 16 moderate and 9 high transitive advisories in Expo SDK 54. Dependabot will surface updates, and the breaking SDK 57 upgrade remains required before production release.

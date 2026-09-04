@@ -47,10 +47,10 @@ Roadmap item: GitHub issue #32, â€œRLS test suite (pgTAP) + PII scrubbing in CIâ
 - Expo web export: passed.
 - Production dependency audit at critical severity: passed with no critical advisories.
 - Hosted migration history confirms `20260904120000` was applied.
+- GitHub Actions run [`33886647691`](https://github.com/blbacelar/smart-closet-v2/actions/runs/33886647691) passed both the app-quality and fresh-database RLS jobs.
 
 ## Known Gaps
 
 - Hosted schema lint could not authenticate because `SUPABASE_DB_PASSWORD` is not available to the CLI session. The migration push and hosted migration-history verification both succeeded; only the linked lint remains unverified.
-- The GitHub jobs cannot execute remotely until the local commits are pushed.
 - Storage's statement-level deletion guard prevents direct SQL execution of delete-policy branches. The suite verifies owner visibility plus the exact delete-policy presence and owner/live-profile predicates; Storage API deletion remains covered by the application account-deletion tests.
 - The SDK 54 dependency tree retains 16 moderate and 9 high transitive advisories. The critical-severity gate passes, and the breaking SDK 57 upgrade remains deferred to preserve current Expo Go compatibility.

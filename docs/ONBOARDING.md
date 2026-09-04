@@ -145,7 +145,7 @@ The intended live flow is:
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Sentry/GlitchTip and PostHog projects, adapters, credentials, consent policy, and broader event instrumentation; the current observability adapter intentionally sends nothing.
 - Migration of existing screen copy into the localization catalog and a user-facing language selector.
-- Broader feature/E2E tests, remote CI activation, and the `EXPO_TOKEN` needed for manual EAS builds.
+- Broader feature/E2E tests and the `EXPO_TOKEN` needed for manual EAS builds.
 - Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.
 
 ## Common Tasks
@@ -169,5 +169,5 @@ The intended live flow is:
 ## Recommended Build Order
 
 1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
-2. Push and activate the committed GitHub workflows, wire approved observability vendors after defining consent, then add Pro subscriptions, broader tests, and prepare the beta release.
+2. Add `EXPO_TOKEN` when an Android cloud build is needed, wire approved observability vendors after defining consent, then add Pro subscriptions, broader tests, and prepare the beta release.
 3. Build the marketplace only after the Phase 1 activation and retention gates are credible.
