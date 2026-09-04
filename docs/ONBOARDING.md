@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, account deletion, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, account deletion, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -14,6 +14,7 @@ The codebase is currently between prototype and MVP: authentication, account del
 | Mobile framework | Expo / React Native | SDK 54 / RN 0.81 |
 | UI runtime | React | 19.1 |
 | Navigation | Expo Router | 6.0 |
+| Localization | Expo Localization | 17.x |
 | Server state | TanStack Query | 5.x |
 | Local UI state | Zustand | 5.x |
 | Backend | Supabase | Postgres, Auth, Storage, Edge Functions |
@@ -23,7 +24,8 @@ The codebase is currently between prototype and MVP: authentication, account del
 
 ```text
 Expo Router screens
-  ├─ shared UI and design tokens
+  ├─ shared UI, design tokens, localization, and accessibility preferences
+  ├─ privacy-safe observability boundary and global render fallback
   ├─ Zustand (temporary UI state; currently also seeded prototype data)
   └─ TanStack Query (authenticated photo, garment, job, and quota server state)
           │
@@ -53,6 +55,10 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `app/delete-account.tsx` — destructive-confirmation route for permanent Phase 1 account deletion.
 - `src/store.ts` — current in-memory prototype state.
 - `src/lib/supabase.ts` — shared authenticated Supabase client.
+- `src/lib/observability.ts` — allowlisted, privacy-safe analytics and error-reporting boundary; currently backed by a no-op adapter.
+- `src/i18n/i18n.tsx` — device-locale resolution, English/Brazilian Portuguese messages, and interpolation.
+- `src/providers/MotionPreferenceProvider.tsx` — system reduced-motion preference and duration helper.
+- `src/components/AppErrorBoundary.tsx` — accessible global render-error fallback and safe error capture.
 - `src/features/auth/` — validation, Supabase auth gateway, auth UI, and tests.
 - `src/providers/AuthProvider.tsx` — session restoration and app-wide authenticated identity.
 - `src/features/body-photos/` — capture, validation, private persistence, queries, UI, and tests.
@@ -124,6 +130,8 @@ The intended live flow is:
 - Supabase security advisor verified with zero errors and zero warnings.
 - GitHub Actions quality checks for locked install, typecheck, coverage, Expo Doctor, web export, and critical production advisories.
 - Manual EAS build workflow defaulting to an Android preview, plus weekly npm and GitHub Actions dependency monitoring.
+- Privacy-safe analytics/error hooks that allowlist event data, strip sensitive fields, and never forward raw error messages or image references.
+- Accessible global render-error recovery, system reduced-motion detection, and English/Brazilian Portuguese localization scaffolding.
 
 ## Not Implemented Yet
 
@@ -132,7 +140,9 @@ The intended live flow is:
 - Automatic garment category and color tagging.
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
 - RevenueCat subscriptions and real Pro entitlement checks.
-- Analytics, error monitoring, broader feature tests, remote CI activation, and the `EXPO_TOKEN` needed for manual EAS builds.
+- Sentry/GlitchTip and PostHog projects, adapters, credentials, consent policy, and broader event instrumentation; the current observability adapter intentionally sends nothing.
+- Migration of existing screen copy into the localization catalog and a user-facing language selector.
+- Broader feature and RLS tests, remote CI activation, and the `EXPO_TOKEN` needed for manual EAS builds.
 - Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.
 
 ## Common Tasks
@@ -154,5 +164,5 @@ The intended live flow is:
 ## Recommended Build Order
 
 1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
-2. Activate the committed GitHub workflows, then add Pro subscriptions, observability, broader tests, and prepare the beta release.
+2. Activate the committed GitHub workflows, wire approved observability vendors after defining consent, then add Pro subscriptions, broader tests, and prepare the beta release.
 3. Build the marketplace only after the Phase 1 activation and retention gates are credible.
