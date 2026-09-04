@@ -1,5 +1,6 @@
 import { fireEvent, render } from '@testing-library/react-native';
 import React from 'react';
+import { Text } from 'react-native';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ObservabilityClient } from '../../lib/observability';
 
@@ -17,7 +18,7 @@ describe('AppErrorBoundary', () => {
     let shouldThrow = true;
     const Problem = () => {
       if (shouldThrow) throw new Error('private render detail');
-      return <>Recovered</>;
+      return <Text>Recovered</Text>;
     };
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     const screen = await render(

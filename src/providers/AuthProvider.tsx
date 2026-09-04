@@ -4,6 +4,7 @@ import {
   AuthIdentity,
   supabaseAuthGateway,
 } from '../features/auth/authGateway';
+import { observability, ObservabilityClient } from '../lib/observability';
 
 type AuthContextValue = {
   identity: AuthIdentity | null;
@@ -16,9 +17,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 type AuthProviderProps = PropsWithChildren<{
   gateway?: AuthGateway;
+  observabilityClient?: ObservabilityClient;
 }>;
 
-export function AuthProvider({ children, gateway = supabaseAuthGateway }: AuthProviderProps) {
+export function AuthProvider({
+  children,
+  gateway = supabaseAuthGateway,
+  observabilityClient = observability,
+}: AuthProviderProps) {
   const [identity, setIdentity] = useState<AuthIdentity | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -40,7 +46,12 @@ export function AuthProvider({ children, gateway = supabaseAuthGateway }: AuthPr
           setIdentity(nextIdentity);
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        observabilityClient.captureError(error, {
+          operation: 'auth_session_restore',
+          code: 'session_restore_failed',
+          fatal: false,
+        });
         if (isMounted && !receivedAuthEvent) {
           setIdentity(null);
         }
@@ -55,7 +66,11 @@ export function AuthProvider({ children, gateway = supabaseAuthGateway }: AuthPr
       isMounted = false;
       unsubscribe();
     };
-  }, [gateway]);
+  }, [gateway, observabilityClient]);
+
+  useEffect(() => {
+    observabilityClient.setUser(identity?.id ?? null);
+  }, [identity?.id, observabilityClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

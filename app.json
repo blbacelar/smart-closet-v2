@@ -47,7 +47,8 @@
         {
           "cameraPermission": "Take photos for your private Fitly wardrobe."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "extra": {
       "router": {},

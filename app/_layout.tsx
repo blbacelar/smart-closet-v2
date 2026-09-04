@@ -2,6 +2,10 @@ import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
+import { I18nProvider } from '../src/i18n/i18n';
+import { observability } from '../src/lib/observability';
+import { MotionPreferenceProvider } from '../src/providers/MotionPreferenceProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 import { colors } from '../src/theme';
 
@@ -38,13 +42,21 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  observability.track('app_opened', { source: 'launch' });
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <StatusBar style="dark" />
-        <RootNavigator />
-      </AuthProvider>
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <I18nProvider>
+        <MotionPreferenceProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <StatusBar style="dark" />
+              <RootNavigator />
+            </AuthProvider>
+          </QueryClientProvider>
+        </MotionPreferenceProvider>
+      </I18nProvider>
+    </AppErrorBoundary>
   );
 }
 
