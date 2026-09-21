@@ -29,7 +29,11 @@ function createClient() {
     .fn()
     .mockResolvedValue({ data: { signedUrl: 'https://signed.example/photo-1' }, error: null });
   const remove = jest.fn().mockResolvedValue({ error: null });
-  const invoke = jest.fn().mockResolvedValue({ data: { deleted: true }, error: null });
+  const invoke = jest.fn().mockImplementation((name: string) => Promise.resolve(
+    name === 'validate-body-photo'
+      ? { data: { state: 'approved' }, error: null }
+      : { data: { deleted: true }, error: null },
+  ));
   const bucket = { upload, createSignedUrl, remove };
   const fromBucket = jest.fn(() => bucket);
 
@@ -96,6 +100,27 @@ describe('bodyPhotoRepository', () => {
       storage_path: 'user-1/generated-id.jpg',
       status: 'pending',
     });
+    expect(mocks.invoke).toHaveBeenCalledWith('validate-body-photo', {
+      body: { photoId: 'photo-1' },
+    });
+  });
+
+  it('keeps a successfully saved photo pending when validation is temporarily unavailable', async () => {
+    const mocks = createClient();
+    mocks.invoke.mockResolvedValue({ data: null, error: new Error('private provider detail') });
+    const repository = createBodyPhotoRepository(mocks.client as never, () => 'generated-id');
+
+    await expect(repository.upload({
+      userId: 'user-1',
+      asset: {
+        uri: 'file:///body.jpg',
+        base64: 'YWJjZA==',
+        width: 1200,
+        height: 1800,
+        contentType: 'image/jpeg',
+        byteLength: 4,
+      },
+    })).resolves.toMatchObject({ status: 'pending' });
   });
 
   it('removes the uploaded object when metadata insertion fails', async () => {
