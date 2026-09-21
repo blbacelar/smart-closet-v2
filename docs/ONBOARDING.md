@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with undoable per-photo removal, private garment uploads, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with Gemini moderation and undoable per-photo removal, private garment uploads, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -39,6 +39,7 @@ Supabase client
           ▼
 Third-party providers
   ├─ remove.bg garment adapter (deployed; credentials pending)
+  ├─ Google Gemini body-photo moderation adapter (deployed; credential configured)
   └─ Google Gemini image try-on adapter (deployed; credential configured)
 ```
 
@@ -69,10 +70,11 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and stateless direct Gemini adapter.
 - `supabase/functions/delete-account/` — authenticated Storage purge followed by permanent Auth-user deletion.
 - `supabase/functions/delete-body-photo/` — authenticated owner-only cleanup of one body photo and its generated result objects.
+- `supabase/functions/validate-body-photo/` — authenticated, owner-derived Gemini moderation and atomic cost recording.
 
 ## Current Data Flow
 
-Today, authentication, body photos, garments, try-on jobs, and quota use Supabase. Images are validated locally, saved under authenticated private Storage paths, and displayed through short-lived signed URLs. Garment cleanup and try-on generation are isolated behind authenticated Edge Functions. Try-on cache keys are computed on the server, quota is reserved atomically, duplicate combinations reuse an existing job, results are copied from base64 provider output into private Storage, and failures refund quota once. Without provider secrets, the functions fail before spend; no simulated result is shown.
+Today, authentication, body photos, garments, try-on jobs, and quota use Supabase. Images are validated locally, saved under authenticated private Storage paths, and displayed through short-lived signed URLs. New body photos invoke stateless Gemini moderation with safe reason codes; only approved photos can enter a try-on job, and moderation status plus cost commit atomically. Garment cleanup and try-on generation are isolated behind authenticated Edge Functions. Try-on cache keys are computed on the server, quota is reserved atomically, duplicate combinations reuse an existing job, results are copied from base64 provider output into private Storage, and failures refund quota once. Without provider secrets, the functions fail before spend; no simulated result is shown.
 
 The intended live flow is:
 
@@ -110,6 +112,8 @@ The intended live flow is:
 - Jest/React Native Testing Library setup with an enforced 80% global coverage floor.
 - Camera/library body-photo capture with local size, resolution, and orientation validation.
 - Private body-photo Storage uploads, database metadata, signed URLs, and TanStack Query caching.
+- Stateless Gemini checks for one clearly adult person, full-body framing, content safety, and usable image quality, with bounded retries and atomic moderation cost entries.
+- Database enforcement preventing pending or rejected body photos from entering try-on jobs; pre-moderation photos were grandfathered once during rollout.
 - Undoable per-photo body-photo deletion with accessible privacy guidance, safe failure recovery, and authenticated source/result cleanup.
 - Private garment Storage uploads, normalized metadata, signed URLs, TanStack Query caching, and live Closet/Studio rendering.
 - Database-enforced one-photo Free and three-photo Pro limits.
@@ -140,7 +144,7 @@ The intended live flow is:
 
 ## Not Implemented Yet
 
-- Automated body-photo content moderation and pose/quality scoring.
+- User-facing body-photo validation guidance, rejection details, and manual retry controls.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment category and color tagging.
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
