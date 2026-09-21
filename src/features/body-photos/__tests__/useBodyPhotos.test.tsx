@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import React, { PropsWithChildren } from 'react';
 import { BodyPhotoRepository } from '../bodyPhotoRepository';
-import { useBodyPhotos, useUploadBodyPhoto } from '../useBodyPhotos';
+import { useBodyPhotos, useDeleteBodyPhoto, useUploadBodyPhoto } from '../useBodyPhotos';
 
 const photo = {
   id: 'photo-1',
@@ -32,6 +32,7 @@ function setup() {
   const repository: jest.Mocked<BodyPhotoRepository> = {
     list: jest.fn().mockResolvedValue([photo]),
     upload: jest.fn().mockResolvedValue(photo),
+    remove: jest.fn().mockResolvedValue(undefined),
   };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -72,6 +73,22 @@ describe('body photo query hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(repository.upload).toHaveBeenCalledWith({ userId: 'user-1', asset });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['body-photos', 'user-1'] });
+    await unmount();
+    queryClient.clear();
+  });
+
+  it('deletes and invalidates the owner-scoped list', async () => {
+    const { queryClient, repository, wrapper } = setup();
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+    const { result, unmount } = await renderHook(() => useDeleteBodyPhoto('user-1', repository), {
+      wrapper,
+    });
+
+    await act(() => result.current.mutateAsync('photo-1'));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(repository.remove).toHaveBeenCalledWith('photo-1');
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['body-photos', 'user-1'] });
     await unmount();
     queryClient.clear();

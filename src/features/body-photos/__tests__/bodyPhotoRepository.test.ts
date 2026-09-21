@@ -29,11 +29,12 @@ function createClient() {
     .fn()
     .mockResolvedValue({ data: { signedUrl: 'https://signed.example/photo-1' }, error: null });
   const remove = jest.fn().mockResolvedValue({ error: null });
+  const invoke = jest.fn().mockResolvedValue({ data: { deleted: true }, error: null });
   const bucket = { upload, createSignedUrl, remove };
   const fromBucket = jest.fn(() => bucket);
 
   return {
-    client: { from: fromTable, storage: { from: fromBucket } },
+    client: { from: fromTable, storage: { from: fromBucket }, functions: { invoke } },
     fromTable,
     selectList,
     eq,
@@ -45,6 +46,7 @@ function createClient() {
     upload,
     createSignedUrl,
     remove,
+    invoke,
   };
 }
 
@@ -138,6 +140,24 @@ describe('bodyPhotoRepository', () => {
       }),
     ).rejects.toBe(error);
     expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it('deletes through the authenticated server cleanup boundary', async () => {
+    const mocks = createClient();
+    const repository = createBodyPhotoRepository(mocks.client as never, () => 'generated-id');
+
+    await expect(repository.remove('photo-1')).resolves.toBeUndefined();
+    expect(mocks.invoke).toHaveBeenCalledWith('delete-body-photo', {
+      body: { photoId: 'photo-1' },
+    });
+  });
+
+  it('returns a safe retry error when server cleanup fails', async () => {
+    const mocks = createClient();
+    mocks.invoke.mockResolvedValue({ data: null, error: new Error('service role details') });
+    const repository = createBodyPhotoRepository(mocks.client as never, () => 'generated-id');
+
+    await expect(repository.remove('photo-1')).rejects.toThrow('Could not delete that photo. Try again.');
   });
 
   it('requires Supabase configuration', async () => {
