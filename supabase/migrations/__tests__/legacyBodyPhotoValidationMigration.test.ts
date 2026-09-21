@@ -13,7 +13,7 @@ describe('legacy body-photo validation data migration', () => {
     expect(sql).toContain('update public.body_photos');
     expect(sql).toContain("set status = 'approved'");
     expect(sql).toContain("where status = 'pending'");
-    expect(sql).toContain("created_at < '2026-09-21 21:31:00+00'::timestamptz");
+    expect(sql).toContain('created_at < transaction_timestamp()');
   });
 
   it('marks administrative completion without inventing provider spend', () => {
