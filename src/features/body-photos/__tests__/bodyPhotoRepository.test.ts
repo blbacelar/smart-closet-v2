@@ -123,6 +123,24 @@ describe('bodyPhotoRepository', () => {
     })).resolves.toMatchObject({ status: 'pending' });
   });
 
+  it('keeps a successfully saved photo when validation invocation rejects', async () => {
+    const mocks = createClient();
+    mocks.invoke.mockRejectedValue(new Error('network unavailable'));
+    const repository = createBodyPhotoRepository(mocks.client as never, () => 'generated-id');
+
+    await expect(repository.upload({
+      userId: 'user-1',
+      asset: {
+        uri: 'file:///body.jpg',
+        base64: 'YWJjZA==',
+        width: 1200,
+        height: 1800,
+        contentType: 'image/jpeg',
+        byteLength: 4,
+      },
+    })).resolves.toMatchObject({ status: 'pending' });
+  });
+
   it('removes the uploaded object when metadata insertion fails', async () => {
     const mocks = createClient();
     const error = new Error('Photo limit reached');

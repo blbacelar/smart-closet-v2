@@ -37,4 +37,10 @@ describe('body-photo validation migration', () => {
     expect(sql).toContain('revoke all on function public.fail_body_photo_validation');
     expect(sql).toContain('to service_role');
   });
+
+  it('prevents try-on jobs from using unapproved body photos', () => {
+    expect(sql).toContain('private.require_approved_tryon_body_photo');
+    expect(sql).toContain("status = 'approved'");
+    expect(sql).toContain('before insert or update of body_photo_id, user_id');
+  });
 });

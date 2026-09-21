@@ -97,7 +97,12 @@ export function createBodyPhotoRepository(
         throw insertError;
       }
 
-      return withSignedUrl(data, storagePath);
+      const row = bodyPhotoRowSchema.parse(data);
+      await client.functions.invoke('validate-body-photo', {
+        body: { photoId: row.id },
+      }).catch(() => undefined);
+
+      return withSignedUrl(row, storagePath);
     },
 
     async remove(photoId) {

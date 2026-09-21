@@ -39,6 +39,7 @@ describe('validateBodyPhoto', () => {
     expect(deps.complete).toHaveBeenCalledWith({
       photoId: 'photo-1',
       userId: 'user-1',
+      attempt: 1,
       decision: 'approved',
       rejectReason: null,
       provider: 'gemini',
@@ -84,6 +85,7 @@ describe('validateBodyPhoto', () => {
     expect(deps.fail).toHaveBeenCalledWith({
       photoId: 'photo-1',
       userId: 'user-1',
+      attempt: 1,
       message: 'Photo validation is temporarily unavailable. Try again.',
     });
   });
