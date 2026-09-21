@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(32);
+select plan(37);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -46,6 +46,74 @@ values
   ('00000000-0000-4000-8000-000000000001', 'tryon', 'test-provider', 0.01),
   ('00000000-0000-4000-8000-000000000002', 'tryon', 'test-provider', 0.02);
 
+update public.profiles
+set tier = 'pro'
+where id = '00000000-0000-4000-8000-000000000001';
+
+insert into public.body_photos (id, user_id, storage_path, status)
+values (
+  '10000000-0000-4000-8000-000000000003',
+  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000001/body-pending.jpg',
+  'pending'
+);
+
+select throws_ok(
+  $$insert into public.tryon_jobs (id, user_id, body_photo_id, garment_id, cache_key, status)
+    values (
+      '30000000-0000-4000-8000-000000000003',
+      '00000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000003',
+      '20000000-0000-4000-8000-000000000001',
+      'pending-photo-cache',
+      'queued'
+    )$$,
+  '23514',
+  'Body photo must be approved.',
+  'try-on jobs reject pending body photos'
+);
+select is(
+  (public.claim_body_photo_validation(
+    '10000000-0000-4000-8000-000000000003',
+    '00000000-0000-4000-8000-000000000001'
+  ) ->> 'state'),
+  'claimed',
+  'service validation claims an owner pending photo'
+);
+select is(
+  (public.claim_body_photo_validation(
+    '10000000-0000-4000-8000-000000000003',
+    '00000000-0000-4000-8000-000000000001'
+  ) ->> 'state'),
+  'busy',
+  'a concurrent validation cannot double-claim the photo'
+);
+select lives_ok(
+  $$select public.complete_body_photo_validation(
+    '10000000-0000-4000-8000-000000000003',
+    '00000000-0000-4000-8000-000000000001',
+    1,
+    'approved',
+    null,
+    'gemini-test',
+    0.001
+  )$$,
+  'validation completion updates status and ledger atomically'
+);
+select results_eq(
+  $$select status, reject_reason, (
+      select count(*)
+      from public.ai_cost_ledger
+      where user_id = '00000000-0000-4000-8000-000000000001'
+        and kind = 'moderation'
+        and provider = 'gemini-test'
+    )
+    from public.body_photos
+    where id = '10000000-0000-4000-8000-000000000003'$$,
+  $$values ('approved'::text, null::text, 1::bigint)$$,
+  'approved status has no rejection detail and one moderation cost entry'
+);
+
 insert into storage.objects (id, bucket_id, name)
 values
   ('40000000-0000-4000-8000-000000000001', 'body', '00000000-0000-4000-8000-000000000001/body-one.jpg'),
@@ -55,7 +123,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 
 select results_eq('select count(*) from public.profiles', array[1::bigint], 'member sees only their profile');
-select results_eq('select count(*) from public.body_photos', array[1::bigint], 'member sees only their body photos');
+select results_eq('select count(*) from public.body_photos', array[2::bigint], 'member sees only their body photos');
 select results_eq('select count(*) from public.garments', array[1::bigint], 'member sees only their garments');
 select results_eq('select count(*) from public.usage_daily', array[1::bigint], 'member sees only their usage');
 select results_eq('select count(*) from public.tryon_jobs', array[1::bigint], 'member sees only their try-on jobs');
