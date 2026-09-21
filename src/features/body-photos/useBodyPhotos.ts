@@ -30,3 +30,15 @@ export function useUploadBodyPhoto(
     onSuccess: () => queryClient.invalidateQueries({ queryKey: bodyPhotoKeys.list(userId) }),
   });
 }
+
+export function useDeleteBodyPhoto(
+  userId: string,
+  repository: BodyPhotoRepository = supabaseBodyPhotoRepository,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (photoId: string) => repository.remove(photoId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: bodyPhotoKeys.list(userId) }),
+  });
+}

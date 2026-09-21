@@ -29,7 +29,10 @@ export type BodyPhotoRepository = {
     userId: string;
     asset: ValidatedBodyPhotoAsset;
   }) => Promise<BodyPhoto>;
+  remove: (photoId: string) => Promise<void>;
 };
+
+const safeDeletionError = 'Could not delete that photo. Try again.';
 
 function randomPathSegment() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
@@ -96,6 +99,21 @@ export function createBodyPhotoRepository(
 
       return withSignedUrl(data, storagePath);
     },
+
+    async remove(photoId) {
+      const { data, error } = await client.functions.invoke('delete-body-photo', {
+        body: { photoId },
+      });
+      if (
+        error
+        || typeof data !== 'object'
+        || data === null
+        || !('deleted' in data)
+        || data.deleted !== true
+      ) {
+        throw new Error(safeDeletionError);
+      }
+    },
   };
 }
 
@@ -113,5 +131,8 @@ export const supabaseBodyPhotoRepository: BodyPhotoRepository = {
   },
   async upload(input) {
     return requireRepository().upload(input);
+  },
+  async remove(photoId) {
+    return requireRepository().remove(photoId);
   },
 };
