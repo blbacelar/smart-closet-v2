@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, account deletion, private body photos, private garment uploads, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with undoable per-photo removal, private garment uploads, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -68,6 +68,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and stateless direct Gemini adapter.
 - `supabase/functions/delete-account/` — authenticated Storage purge followed by permanent Auth-user deletion.
+- `supabase/functions/delete-body-photo/` — authenticated owner-only cleanup of one body photo and its generated result objects.
 
 ## Current Data Flow
 
@@ -109,6 +110,7 @@ The intended live flow is:
 - Jest/React Native Testing Library setup with an enforced 80% global coverage floor.
 - Camera/library body-photo capture with local size, resolution, and orientation validation.
 - Private body-photo Storage uploads, database metadata, signed URLs, and TanStack Query caching.
+- Undoable per-photo body-photo deletion with accessible privacy guidance, safe failure recovery, and authenticated source/result cleanup.
 - Private garment Storage uploads, normalized metadata, signed URLs, TanStack Query caching, and live Closet/Studio rendering.
 - Database-enforced one-photo Free and three-photo Pro limits.
 - Database-enforced 50-garment Free limit, with unlimited Pro garment inserts.
