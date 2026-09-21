@@ -5,7 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitlyStore } from '../../src/store';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { BodyPhotoGallery } from '../../src/features/body-photos/BodyPhotoGallery';
-import { useBodyPhotos, useDeleteBodyPhoto } from '../../src/features/body-photos/useBodyPhotos';
+import {
+  useBodyPhotos,
+  useDeleteBodyPhoto,
+  useValidateBodyPhoto,
+} from '../../src/features/body-photos/useBodyPhotos';
 import { colors, fonts } from '../../src/theme';
 
 const settings = [
@@ -22,6 +26,7 @@ export default function ProfileScreen() {
   const { identity, signOut } = useAuth();
   const bodyPhotos = useBodyPhotos(identity?.id);
   const deleteBodyPhoto = useDeleteBodyPhoto(identity?.id ?? 'signed-out');
+  const validateBodyPhoto = useValidateBodyPhoto(identity?.id ?? 'signed-out');
 
   const handleSettingPress = async (label: string) => {
     if (label === 'Delete account') {
@@ -50,6 +55,7 @@ export default function ProfileScreen() {
         hasError={bodyPhotos.isError}
         onAdd={() => router.push('/add-body-photo')}
         onDelete={(photo) => deleteBodyPhoto.mutateAsync(photo.id)}
+        onRetryValidation={(photo) => validateBodyPhoto.mutateAsync(photo.id).then(() => undefined)}
         onRetry={() => bodyPhotos.refetch()}
       />
 

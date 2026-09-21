@@ -8,7 +8,15 @@ const bodyPhotoRowSchema = z.object({
   id: z.string().uuid().or(z.string().min(1)),
   storage_path: z.string().min(1),
   status: z.enum(['pending', 'approved', 'rejected']),
-  reject_reason: z.string().nullable(),
+  reject_reason: z.enum([
+    'adult_content',
+    'age_not_confirmed',
+    'no_single_person',
+    'not_full_body',
+    'poor_quality',
+  ]).nullable(),
+  validation_attempts: z.number().int().min(0).max(3),
+  validation_error: z.string().nullable(),
   created_at: z.string().min(1),
 });
 
@@ -18,10 +26,21 @@ export type BodyPhoto = {
   id: string;
   storagePath: string;
   status: 'pending' | 'approved' | 'rejected';
-  rejectReason: string | null;
+  rejectReason: BodyPhotoRejectReason | null;
+  validationAttempts: number;
+  validationError: string | null;
   createdAt: string;
   signedUrl: string;
 };
+
+export type BodyPhotoRejectReason = NonNullable<BodyPhotoRow['reject_reason']>;
+
+export type BodyPhotoValidationState =
+  | 'approved'
+  | 'rejected'
+  | 'busy'
+  | 'exhausted'
+  | 'not-found';
 
 export type BodyPhotoRepository = {
   list: (userId: string) => Promise<BodyPhoto[]>;
@@ -29,10 +48,24 @@ export type BodyPhotoRepository = {
     userId: string;
     asset: ValidatedBodyPhotoAsset;
   }) => Promise<BodyPhoto>;
+  validate: (photoId: string) => Promise<{ state: BodyPhotoValidationState }>;
   remove: (photoId: string) => Promise<void>;
 };
 
 const safeDeletionError = 'Could not delete that photo. Try again.';
+const safeValidationError = 'Could not check that photo. Try again.';
+const validationResponseSchema = z.object({
+  state: z.enum(['approved', 'rejected', 'busy', 'exhausted', 'not-found']),
+});
+const selectedColumns = [
+  'id',
+  'storage_path',
+  'status',
+  'reject_reason',
+  'validation_attempts',
+  'validation_error',
+  'created_at',
+].join(', ');
 
 function randomPathSegment() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
@@ -61,6 +94,8 @@ export function createBodyPhotoRepository(
       storagePath,
       status: row.status,
       rejectReason: row.reject_reason,
+      validationAttempts: row.validation_attempts,
+      validationError: row.validation_error,
       createdAt: row.created_at,
       signedUrl: data.signedUrl,
     };
@@ -70,7 +105,7 @@ export function createBodyPhotoRepository(
     async list(userId) {
       const { data, error } = await client
         .from('body_photos')
-        .select('id, storage_path, status, reject_reason, created_at')
+        .select(selectedColumns)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       throwIfError(error);
@@ -89,7 +124,7 @@ export function createBodyPhotoRepository(
       const { data, error: insertError } = await client
         .from('body_photos')
         .insert({ user_id: userId, storage_path: storagePath, status: 'pending' })
-        .select('id, storage_path, status, reject_reason, created_at')
+        .select(selectedColumns)
         .single();
 
       if (insertError) {
@@ -103,6 +138,15 @@ export function createBodyPhotoRepository(
       }).catch(() => undefined);
 
       return withSignedUrl(row, storagePath);
+    },
+
+    async validate(photoId) {
+      const { data, error } = await client.functions.invoke('validate-body-photo', {
+        body: { photoId },
+      });
+      const parsed = validationResponseSchema.safeParse(data);
+      if (error || !parsed.success) throw new Error(safeValidationError);
+      return parsed.data;
     },
 
     async remove(photoId) {
@@ -136,6 +180,9 @@ export const supabaseBodyPhotoRepository: BodyPhotoRepository = {
   },
   async upload(input) {
     return requireRepository().upload(input);
+  },
+  async validate(photoId) {
+    return requireRepository().validate(photoId);
   },
   async remove(photoId) {
     return requireRepository().remove(photoId);

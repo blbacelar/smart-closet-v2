@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { colors, fonts } from '../../src/theme';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
+import { approvedBodyPhotos } from '../../src/features/body-photos/bodyPhotoPresentation';
 import { useGarments } from '../../src/features/garments/useGarments';
 import { TryOnFeedback } from '../../src/features/tryon/TryOnFeedback';
 import { useEnqueueTryOn, useSetTryOnFeedback, useTryOnJobs, useTryOnQuota, useTryOnRealtime } from '../../src/features/tryon/useTryOns';
@@ -39,7 +40,7 @@ export default function TryOnScreen() {
     [readyGarments, selectedGarmentId],
   );
   const bodyPhotos = useMemo(
-    () => (bodyPhotoQuery.data ?? []).filter((photo) => photo.status !== 'rejected'),
+    () => approvedBodyPhotos(bodyPhotoQuery.data ?? []),
     [bodyPhotoQuery.data],
   );
   const selectedBodyPhoto = bodyPhotos[bodyIndex] ?? bodyPhotos[0];
