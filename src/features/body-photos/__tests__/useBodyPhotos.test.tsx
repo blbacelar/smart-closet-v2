@@ -2,13 +2,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import React, { PropsWithChildren } from 'react';
 import { BodyPhotoRepository } from '../bodyPhotoRepository';
-import { useBodyPhotos, useDeleteBodyPhoto, useUploadBodyPhoto } from '../useBodyPhotos';
+import {
+  shouldPollBodyPhotos,
+  useBodyPhotos,
+  useDeleteBodyPhoto,
+  useUploadBodyPhoto,
+  useValidateBodyPhoto,
+} from '../useBodyPhotos';
 
 const photo = {
   id: 'photo-1',
   storagePath: 'user-1/photo-1.jpg',
   status: 'pending' as const,
   rejectReason: null,
+  validationAttempts: 1,
+  validationError: null,
   createdAt: '2026-09-02T20:00:00Z',
   signedUrl: 'https://signed.example/photo-1',
 };
@@ -33,6 +41,7 @@ function setup() {
     list: jest.fn().mockResolvedValue([photo]),
     upload: jest.fn().mockResolvedValue(photo),
     remove: jest.fn().mockResolvedValue(undefined),
+    validate: jest.fn().mockResolvedValue({ state: 'approved' }),
   };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -92,5 +101,29 @@ describe('body photo query hooks', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['body-photos', 'user-1'] });
     await unmount();
     queryClient.clear();
+  });
+
+  it('retries validation and invalidates the owner-scoped list', async () => {
+    const { queryClient, repository, wrapper } = setup();
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+    const { result, unmount } = await renderHook(
+      () => useValidateBodyPhoto('user-1', repository),
+      { wrapper },
+    );
+
+    await act(() => result.current.mutateAsync('photo-1'));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(repository.validate).toHaveBeenCalledWith('photo-1');
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['body-photos', 'user-1'] });
+    await unmount();
+    queryClient.clear();
+  });
+
+  it('polls only while a pending photo is actively being checked', () => {
+    expect(shouldPollBodyPhotos([photo])).toBe(true);
+    expect(shouldPollBodyPhotos([{ ...photo, validationError: 'private provider detail' }])).toBe(false);
+    expect(shouldPollBodyPhotos([{ ...photo, status: 'approved' }])).toBe(false);
+    expect(shouldPollBodyPhotos(undefined)).toBe(false);
   });
 });

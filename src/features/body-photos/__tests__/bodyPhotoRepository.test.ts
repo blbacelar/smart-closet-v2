@@ -13,6 +13,8 @@ const row = {
   storage_path: 'user-1/photo-1.jpg',
   status: 'pending',
   reject_reason: null,
+  validation_attempts: 1,
+  validation_error: null,
   created_at: '2026-09-02T20:00:00Z',
 };
 
@@ -65,6 +67,8 @@ describe('bodyPhotoRepository', () => {
         storagePath: 'user-1/photo-1.jpg',
         status: 'pending',
         rejectReason: null,
+        validationAttempts: 1,
+        validationError: null,
         createdAt: '2026-09-02T20:00:00Z',
         signedUrl: 'https://signed.example/photo-1',
       },
@@ -193,6 +197,26 @@ describe('bodyPhotoRepository', () => {
     expect(mocks.invoke).toHaveBeenCalledWith('delete-body-photo', {
       body: { photoId: 'photo-1' },
     });
+  });
+
+  it('retries validation through the authenticated validation boundary', async () => {
+    const mocks = createClient();
+    const repository = createBodyPhotoRepository(mocks.client as never, () => 'generated-id');
+
+    await expect(repository.validate('photo-1')).resolves.toEqual({ state: 'approved' });
+    expect(mocks.invoke).toHaveBeenCalledWith('validate-body-photo', {
+      body: { photoId: 'photo-1' },
+    });
+  });
+
+  it('returns safe retry feedback when validation cannot start', async () => {
+    const mocks = createClient();
+    mocks.invoke.mockResolvedValue({ data: null, error: new Error('provider internals') });
+    const repository = createBodyPhotoRepository(mocks.client as never, () => 'generated-id');
+
+    await expect(repository.validate('photo-1')).rejects.toThrow(
+      'Could not check that photo. Try again.',
+    );
   });
 
   it('returns a safe retry error when server cleanup fails', async () => {
