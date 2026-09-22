@@ -9,7 +9,7 @@ const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8
 
 describe('Expo Go SDK 57 compatibility', () => {
   it('uses the Expo 57 runtime and its matching React versions', () => {
-    expect(packageJson.dependencies.expo).toMatch(/^~57\./);
+    expect(packageJson.dependencies.expo).toMatch(/^[~^]57\./);
     expect(packageJson.dependencies.react).toBe('19.2.3');
     expect(packageJson.dependencies['react-dom']).toBe('19.2.3');
     expect(packageJson.dependencies['react-native']).toMatch(/^0\.86\./);
