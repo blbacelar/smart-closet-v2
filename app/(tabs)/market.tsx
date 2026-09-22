@@ -34,7 +34,17 @@ export default function MarketScreen() {
         <Text style={styles.title}>Nearby</Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filters}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical={false}
+        directionalLockEnabled
+        bounces={false}
+        overScrollMode="never"
+        style={styles.filterScroll}
+        contentContainerStyle={styles.filters}
+      >
         {filterData.map(({ label, Icon, active }) => (
           <Pressable key={label} style={[styles.filter, active && styles.filterActive]}>
             <Icon size={13} color={active ? colors.white : colors.muted} />
@@ -74,8 +84,8 @@ const styles = StyleSheet.create({
   heading: { paddingHorizontal: 22 },
   eyebrow: { fontFamily: fonts.body, fontSize: 10, color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 6 },
   title: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, fontWeight: '600', letterSpacing: -0.7, color: colors.ink },
-  filterScroll: { flexGrow: 0, height: 34, marginTop: 18, marginBottom: 18 },
-  filters: { height: 34, paddingHorizontal: 22, gap: 8 },
+  filterScroll: { flexGrow: 0, height: 44, marginTop: 18, marginBottom: 18 },
+  filters: { minHeight: 44, paddingHorizontal: 22, gap: 8, alignItems: 'center' },
   filter: { height: 34, borderRadius: 14, paddingHorizontal: 13, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 6 },
   filterActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   filterText: { fontFamily: fonts.body, color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.1 },
