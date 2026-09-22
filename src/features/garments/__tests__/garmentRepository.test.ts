@@ -32,7 +32,10 @@ function createClient() {
   const single = jest.fn().mockResolvedValue({ data: row, error: null });
   const selectInsert = jest.fn(() => ({ single }));
   const insert = jest.fn(() => ({ select: selectInsert }));
-  const fromTable = jest.fn(() => ({ select: selectList, insert }));
+  const selectUpdate = jest.fn(() => ({ single }));
+  const eqUpdate = jest.fn(() => ({ select: selectUpdate }));
+  const update = jest.fn(() => ({ eq: eqUpdate }));
+  const fromTable = jest.fn(() => ({ select: selectList, insert, update }));
   const upload = jest.fn().mockResolvedValue({ error: null });
   const createSignedUrl = jest.fn().mockResolvedValue({
     data: { signedUrl: 'https://signed.example/garment-1' },
@@ -48,6 +51,8 @@ function createClient() {
     eq,
     order,
     insert,
+    update,
+    eqUpdate,
     single,
     upload,
     createSignedUrl,
@@ -162,6 +167,34 @@ describe('garmentRepository', () => {
     expect(mocks.invoke).toHaveBeenCalledWith('process-garment', {
       body: { garmentId: 'garment-1' },
     });
+  });
+
+  it('updates only editable garment details and returns the refreshed garment', async () => {
+    const mocks = createClient();
+    mocks.single.mockResolvedValue({
+      data: { ...row, name: 'Rain jacket', color: 'Green', season: 'Fall' },
+      error: null,
+    });
+    const repository = createGarmentRepository(mocks.client as never);
+    const updatedDetails = {
+      name: 'Rain jacket',
+      category: 'outerwear' as const,
+      color: 'Green',
+      size: 'M',
+      season: 'Fall',
+    };
+
+    await expect(repository.updateDetails({
+      garmentId: 'garment-1',
+      details: updatedDetails,
+    })).resolves.toMatchObject({
+      id: 'garment-1',
+      name: 'Rain jacket',
+      color: 'Green',
+      season: 'Fall',
+    });
+    expect(mocks.update).toHaveBeenCalledWith(updatedDetails);
+    expect(mocks.eqUpdate).toHaveBeenCalledWith('id', 'garment-1');
   });
 
   it('propagates processing invocation failures', async () => {

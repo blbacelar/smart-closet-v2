@@ -2,7 +2,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import React, { PropsWithChildren } from 'react';
 import { GarmentRepository } from '../garmentRepository';
-import { garmentKeys, useGarments, useProcessGarment, useUploadGarment } from '../useGarments';
+import {
+  garmentKeys,
+  useGarments,
+  useProcessGarment,
+  useUpdateGarment,
+  useUploadGarment,
+} from '../useGarments';
 
 function setup() {
   const client = new QueryClient({
@@ -15,6 +21,7 @@ function setup() {
     list: jest.fn().mockResolvedValue([]),
     upload: jest.fn().mockResolvedValue({ id: 'garment-1' }),
     process: jest.fn().mockResolvedValue({ state: 'ready' }),
+    updateDetails: jest.fn().mockResolvedValue({ id: 'garment-1' }),
   } as never;
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -72,6 +79,31 @@ describe('useGarments', () => {
 
     await expect(act(() => result.current.mutateAsync('garment-1'))).rejects.toThrow('Still unavailable');
     expect(repository.process).toHaveBeenCalledWith('garment-1');
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: garmentKeys.list('user-1') }),
+    );
+    await unmount();
+    client.clear();
+  });
+
+  it('updates garment details and refreshes the owner wardrobe', async () => {
+    const { client, repository, wrapper } = setup();
+    const invalidate = jest.spyOn(client, 'invalidateQueries');
+    const { result, unmount } = await renderHook(
+      () => useUpdateGarment('user-1', repository),
+      { wrapper },
+    );
+    const details = {
+      name: 'Rain jacket',
+      category: 'outerwear' as const,
+      color: 'Green',
+      size: 'M',
+      season: 'Fall',
+    };
+
+    await act(() => result.current.mutateAsync({ garmentId: 'garment-1', details }));
+
+    expect(repository.updateDetails).toHaveBeenCalledWith({ garmentId: 'garment-1', details });
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: garmentKeys.list('user-1') }),
     );
