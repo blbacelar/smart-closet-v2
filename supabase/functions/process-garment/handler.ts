@@ -60,7 +60,10 @@ export async function handleProcessGarmentRequest(
   } catch {
     return {
       status: 502,
-      body: { code: 'processing_failed', message: 'Background removal failed. Try again.' },
+      body: {
+        code: 'processing_failed',
+        message: 'Garment processing failed. Choose a category or try again.',
+      },
     };
   }
 }

@@ -29,12 +29,13 @@ type GarmentCaptureScreenProps = {
   onClose: () => void;
 };
 
-const categoryOptions: { value: GarmentCategory; label: string }[] = [
-  { value: 'top', label: 'Tops' },
-  { value: 'bottom', label: 'Bottoms' },
-  { value: 'dress', label: 'Dresses' },
-  { value: 'outerwear', label: 'Outerwear' },
-  { value: 'shoes', label: 'Shoes' },
+const categoryOptions: { value: GarmentCategory | null; label: string; accessibilityLabel: string }[] = [
+  { value: null, label: 'Auto', accessibilityLabel: 'Auto-detect category' },
+  { value: 'top', label: 'Tops', accessibilityLabel: 'Tops category' },
+  { value: 'bottom', label: 'Bottoms', accessibilityLabel: 'Bottoms category' },
+  { value: 'dress', label: 'Dresses', accessibilityLabel: 'Dresses category' },
+  { value: 'outerwear', label: 'Outerwear', accessibilityLabel: 'Outerwear category' },
+  { value: 'shoes', label: 'Shoes', accessibilityLabel: 'Shoes category' },
 ];
 const colorOptions = ['Cream', 'Black', 'Blue', 'Green', 'Red'];
 
@@ -49,7 +50,7 @@ export function GarmentCaptureScreen({
 }: GarmentCaptureScreenProps) {
   const [asset, setAsset] = useState<ValidatedGarmentAsset | null>(null);
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<GarmentCategory>('top');
+  const [category, setCategory] = useState<GarmentCategory | null>(null);
   const [color, setColor] = useState('Cream');
   const [size, setSize] = useState('M');
   const [message, setMessage] = useState('');
@@ -218,9 +219,10 @@ export function GarmentCaptureScreen({
         <View style={styles.options}>
           {categoryOptions.map((item) => (
             <Pressable
-              accessibilityLabel={`${item.label} category`}
+              accessibilityLabel={item.accessibilityLabel}
               accessibilityRole="button"
-              key={item.value}
+              accessibilityState={{ selected: category === item.value }}
+              key={item.value ?? 'auto'}
               onPress={() => setCategory(item.value)}
               style={[styles.option, category === item.value && styles.optionActive]}
             >
@@ -230,6 +232,9 @@ export function GarmentCaptureScreen({
             </Pressable>
           ))}
         </View>
+        <Text style={styles.categoryHint}>
+          Fitly will suggest a category after processing. You can edit it anytime.
+        </Text>
 
         <Text style={styles.label}>COLOR</Text>
         <View style={styles.options}>
@@ -311,6 +316,7 @@ const styles = StyleSheet.create({
   optionActive: { backgroundColor: colors.forest, borderColor: colors.forest },
   optionText: { fontFamily: fonts.body, color: colors.muted, fontSize: 11.5, fontWeight: '600' },
   optionTextActive: { color: colors.white },
+  categoryHint: { marginTop: 8, marginHorizontal: 2, fontFamily: fonts.body, color: colors.muted, fontSize: 10.5, lineHeight: 15 },
   footer: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20, backgroundColor: 'rgba(247,244,238,0.98)' },
   save: { height: 56, borderRadius: 18, backgroundColor: colors.forest, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, ...shadow },
   saveDisabled: { opacity: 0.7 },

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(37);
+select plan(42);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -160,6 +160,67 @@ select is_empty(
   $$update public.tryon_jobs set feedback = 1 where id = '30000000-0000-4000-8000-000000000002' returning id$$,
   'member cannot rate another fitting'
 );
+
+select lives_ok(
+  $$insert into public.garments (id, user_id, original_path, name, category)
+    values (
+      '20000000-0000-4000-8000-000000000003',
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000001/auto-category.jpg',
+      'Auto category garment',
+      null
+    )$$,
+  'member can upload a garment for automatic category detection'
+);
+
+reset role;
+select results_eq(
+  $$select result ->> 'state', result -> 'garment' ->> 'category'
+    from (select public.claim_garment_processing(
+      '20000000-0000-4000-8000-000000000003',
+      '00000000-0000-4000-8000-000000000001'
+    ) as result) claimed$$,
+  $$values ('claimed'::text, null::text)$$,
+  'worker claims an auto-category garment without inventing a category'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
+select lives_ok(
+  $$update public.garments
+    set category = 'dress'
+    where id = '20000000-0000-4000-8000-000000000003'$$,
+  'member can choose a category while processing is in progress'
+);
+
+reset role;
+select lives_ok(
+  $$select public.complete_garment_processing(
+    '20000000-0000-4000-8000-000000000003',
+    '00000000-0000-4000-8000-000000000001',
+    '00000000-0000-4000-8000-000000000001/auto-category-clean.jpg',
+    '0123456789abcdef',
+    'original-image',
+    0,
+    'top',
+    'gemini',
+    0.001
+  )$$,
+  'worker completion preserves a member edit and records both processing costs'
+);
+select results_eq(
+  $$select category, status, count(*) filter (where kind = 'bg_removal'),
+      count(*) filter (where kind = 'garment_tagging')
+    from public.garments
+    join public.ai_cost_ledger on ai_cost_ledger.user_id = garments.user_id
+    where garments.id = '20000000-0000-4000-8000-000000000003'
+    group by category, status$$,
+  $$values ('dress'::text, 'ready'::text, 1::bigint, 1::bigint)$$,
+  'completion keeps the manual category and writes one cost entry per provider operation'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 
 select results_eq('select count(*) from storage.objects', array[1::bigint], 'member sees only their private objects');
 select is(

@@ -1,4 +1,5 @@
 import type { GarmentImageContentType } from './removeBgProvider.ts';
+import type { GarmentCategory } from './geminiTaggingProvider.ts';
 
 export type ProcessingState = 'ready' | 'busy' | 'exhausted' | 'not-found';
 
@@ -11,6 +12,7 @@ export type ClaimedGarment = {
   userId: string;
   originalPath: string;
   attempt: number;
+  category: GarmentCategory | null;
 };
 
 export type ProcessingDependencies = {
@@ -19,6 +21,11 @@ export type ProcessingDependencies = {
     | { state: ProcessingState }
   >;
   downloadOriginal: (storagePath: string) => Promise<ArrayBuffer>;
+  detectCategory: (input: { bytes: ArrayBuffer; contentType: 'image/jpeg' }) => Promise<{
+    category: GarmentCategory;
+    provider: string;
+    costUsd: number;
+  }>;
   removeBackground: (bytes: ArrayBuffer) => Promise<{
     bytes: ArrayBuffer;
     provider: string;
@@ -38,6 +45,9 @@ export type ProcessingDependencies = {
     imageHash: string;
     provider: string;
     costUsd: number;
+    category: GarmentCategory;
+    categoryProvider: string | null;
+    categoryCostUsd: number | null;
   }) => Promise<void>;
   fail: (input: { garmentId: string; userId: string; message: string }) => Promise<void>;
   removeClean: (storagePath: string) => Promise<void>;
@@ -47,7 +57,7 @@ export class ProcessingFailure extends Error {
   readonly code = 'processing_failed';
 
   constructor() {
-    super('Background removal failed. Try again.');
+    super('Garment processing failed. Choose a category or try again.');
     this.name = 'ProcessingFailure';
   }
 }
@@ -67,6 +77,9 @@ export async function processGarment(
 
   try {
     const original = await dependencies.downloadOriginal(garment.originalPath);
+    const detected = garment.category
+      ? { category: garment.category, provider: null, costUsd: null }
+      : await dependencies.detectCategory({ bytes: original, contentType: 'image/jpeg' });
     const cleaned = await dependencies.removeBackground(original);
     const extension = cleaned.contentType === 'image/png' ? 'png' : 'jpg';
     cleanPath = `${garment.userId}/${garment.id}-clean.${extension}`;
@@ -80,6 +93,9 @@ export async function processGarment(
       imageHash,
       provider: cleaned.provider,
       costUsd: cleaned.costUsd,
+      category: detected.category,
+      categoryProvider: detected.provider,
+      categoryCostUsd: detected.costUsd,
     });
 
     return { state: 'ready', garmentId: garment.id, cleanPath };
@@ -91,7 +107,7 @@ export async function processGarment(
       .fail({
         garmentId: garment.id,
         userId: garment.userId,
-        message: 'Background removal failed. Try again.',
+        message: 'Garment processing failed. Choose a category or try again.',
       })
       .catch(() => undefined);
     throw new ProcessingFailure();

@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { handleProcessGarmentRequest } from './handler.ts';
 import { processGarment, type ProcessingDependencies } from './processor.ts';
 import { createGarmentImageProvider } from './removeBgProvider.ts';
+import { createGeminiTaggingProvider } from './geminiTaggingProvider.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,6 +49,17 @@ function processingDependencies(): ProcessingDependencies {
       throwIfError(error);
       return data.arrayBuffer();
     },
+    async detectCategory(input) {
+      const provider = createGeminiTaggingProvider({
+        apiKey: Deno.env.get('GOOGLE_GEMINI_API_KEY') ?? '',
+        model: Deno.env.get('GOOGLE_GEMINI_TAGGING_MODEL') ?? 'gemini-3.8-flash',
+        fallbackCostUsd: Number(
+          Deno.env.get('GOOGLE_GEMINI_TAGGING_COST_USD_FALLBACK') ?? '0.001',
+        ),
+        fetch: (url, init) => fetch(url, init as RequestInit),
+      });
+      return provider.detect(input);
+    },
     async removeBackground(bytes) {
       const provider = createGarmentImageProvider({
         apiKey: Deno.env.get('REMOVE_BG_API_KEY'),
@@ -78,6 +90,9 @@ function processingDependencies(): ProcessingDependencies {
         p_image_hash: input.imageHash,
         p_provider: input.provider,
         p_cost_usd: input.costUsd,
+        p_category: input.category,
+        p_category_provider: input.categoryProvider,
+        p_category_cost_usd: input.categoryCostUsd,
       });
       throwIfError(error);
     },

@@ -75,7 +75,7 @@
       "src/components/PrivacyVisibilityLine.tsx",
       "src/providers/AuthProvider.tsx",
       "src/providers/MotionPreferenceProvider.tsx",
-      "supabase/functions/process-garment/{handler,processor,removeBgProvider}.ts",
+      "supabase/functions/process-garment/{handler,processor,removeBgProvider,geminiTaggingProvider}.ts",
       "supabase/functions/tryon-enqueue/{handler,processor,geminiProvider}.ts",
       "supabase/functions/validate-body-photo/{handler,processor,geminiModerationProvider}.ts",
       "supabase/functions/delete-account/{handler,deleteAccount}.ts",

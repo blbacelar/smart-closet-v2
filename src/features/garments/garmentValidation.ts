@@ -17,7 +17,7 @@ export type ValidatedGarmentAsset = GarmentAsset & {
 
 export type GarmentDetailsInput = {
   name: string;
-  category: GarmentCategory;
+  category: GarmentCategory | null;
   color: string;
   size: string;
   season: string;
@@ -75,7 +75,7 @@ export function validateGarmentDetails(input: GarmentDetailsInput): DetailsValid
   if (details.name.length > 80) {
     return { ok: false, message: 'Keep the garment name under 80 characters.' };
   }
-  if (!garmentCategories.includes(details.category)) {
+  if (details.category !== null && !garmentCategories.includes(details.category)) {
     return { ok: false, message: 'Choose a valid garment category.' };
   }
   if ([details.color, details.size, details.season].some((value) => value.length > 40)) {
