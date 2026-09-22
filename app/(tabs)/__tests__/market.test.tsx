@@ -26,12 +26,15 @@ describe('MarketScreen', () => {
     expect(filterScroll).toHaveProp('alwaysBounceVertical', false);
     expect(filterScroll).toHaveProp('directionalLockEnabled', true);
     expect(filterScroll).toHaveProp('bounces', false);
+    expect(filterScroll).toHaveProp('automaticallyAdjustContentInsets', false);
+    expect(filterScroll).toHaveProp('contentInsetAdjustmentBehavior', 'never');
+    expect(filterScroll).toHaveProp('automaticallyAdjustsScrollIndicatorInsets', false);
 
     const railStyle = StyleSheet.flatten(filterScroll?.props.style);
     const contentStyle = StyleSheet.flatten(filterScroll?.props.contentContainerStyle);
 
-    expect(railStyle.height).toBeGreaterThanOrEqual(44);
-    expect(contentStyle.minHeight).toBeGreaterThanOrEqual(44);
+    expect(railStyle.height).toBeGreaterThanOrEqual(48);
+    expect(contentStyle.height).toBe(railStyle.height);
     expect(contentStyle.alignItems).toBe('center');
   });
 });
