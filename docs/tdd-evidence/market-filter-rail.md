@@ -2,7 +2,7 @@
 
 ## User journey
 
-As a member browsing the Market, I can swipe filters horizontally without exposing a draggable vertical indicator or bouncing the rail off-axis.
+As a member browsing the Market, I can see each filter chip's complete border and swipe filters horizontally without exposing a draggable vertical indicator or bouncing the rail off-axis.
 
 ## RED checkpoint
 
@@ -12,23 +12,28 @@ As a member browsing the Market, I can swipe filters horizontally without exposi
 - Physical-device follow-up showed a small remaining cross-axis movement after the first fix.
 - Commit: `046450e test: reproduce market filter cross-axis movement`.
 - Result: the expanded test failed because iOS automatic content-inset adjustment remained enabled and the content height was not pinned to the viewport height.
+- A physical-device screenshot then showed the chip's bottom border touching the 48 px viewport clipping boundary.
+- Commit: `634074c test: reproduce clipped market filter border`.
+- Result: the expanded test failed because the rail left only 14 px of total vertical clearance around the 34 px chip, below the required 20 px minimum.
 
 ## GREEN checkpoint
 
 - Commit: `e27d2fd fix: lock market filters to horizontal scrolling`.
 - Both native indicators are disabled, vertical bounce is disabled, directional locking is enabled, and Android overscroll is suppressed.
 - Commit: `579a7dc fix: pin market filter cross-axis height`.
-- The rail and its content container are both fixed at 48 px, with the existing 34 px filter pills vertically centered. iOS automatic content and indicator inset adjustment is disabled. Horizontal filter navigation remains available.
+- Commit: `723ccea fix: add clearance around market filter chips`.
+- The rail and its content container are both fixed at 56 px, with the existing 34 px filter pills vertically centered and 11 px of clearance on each side. iOS automatic content and indicator inset adjustment remains disabled. Horizontal filter navigation remains available.
 
 ## Test specification
 
 | # | What is guaranteed | Test target | Type | Result |
 | --- | --- | --- | --- | --- |
-| 1 | The Market filter rail reserves 48 px of vertical space and pins its content to the same height | `market.test.tsx` | component/layout | PASS |
+| 1 | The Market filter rail reserves at least 56 px of vertical space and pins its content to the same height | `market.test.tsx` | component/layout | PASS |
 | 2 | Filter pills are vertically centered within the rail | `market.test.tsx` | component/layout | PASS |
-| 3 | Native horizontal and vertical scroll indicators stay hidden | `market.test.tsx` | component | PASS |
-| 4 | The rail does not bounce or accept off-axis movement | `market.test.tsx` | component/interaction | PASS |
-| 5 | iOS does not inject automatic content or indicator insets | `market.test.tsx` | component/interaction | PASS |
+| 3 | A 34 px chip has at least 20 px of total vertical clearance, keeping its border away from the clipping boundary | `market.test.tsx` | component/layout | PASS |
+| 4 | Native horizontal and vertical scroll indicators stay hidden | `market.test.tsx` | component | PASS |
+| 5 | The rail does not bounce or accept off-axis movement | `market.test.tsx` | component/interaction | PASS |
+| 6 | iOS does not inject automatic content or indicator insets | `market.test.tsx` | component/interaction | PASS |
 
 ## Verification
 
