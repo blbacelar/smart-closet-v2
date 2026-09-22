@@ -36,6 +36,7 @@ describe('MarketScreen', () => {
     const chipStyle = StyleSheet.flatten(screen.getByText('25 km').parent?.props.style);
 
     expect(railStyle.height).toBeGreaterThanOrEqual(56);
+    expect(railStyle.flexShrink).toBe(0);
     expect(contentStyle.height).toBe(railStyle.height);
     expect(contentStyle.alignItems).toBe('center');
     expect(railStyle.height - chipStyle.height).toBeGreaterThanOrEqual(20);
