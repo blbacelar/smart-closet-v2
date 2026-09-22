@@ -67,7 +67,7 @@ Final command: `npm run test:coverage`
 
 `REMOVE_BG_API_KEY` and `REMOVE_BG_COST_USD` remain optional and absent from source control. When they are not configured, the worker uses the original private JPEG, records an `original-image` provider entry at zero cost, and marks the garment ready for OpenRouter. When both are configured, the existing bounded remove.bg adapter produces a PNG. No paid remove.bg request is required for local or linked-project development.
 
-`npm audit --omit=dev --audit-level=high` currently reports 25 transitive advisories (16 moderate and 9 high) in the existing Expo/Metro dependency chain. The automated remediation requires a breaking Expo SDK upgrade, so it was not forced while this development build intentionally remains on SDK 54 for App Store Expo Go compatibility.
+Historical note: this slice originally shipped on SDK 54 with 25 transitive advisories. The project upgraded to SDK 57 on 2026-09-21; the current dependency audit and SDK verification are recorded in `expo-sdk-57-upgrade.md`.
 
 ## Merge Evidence
 

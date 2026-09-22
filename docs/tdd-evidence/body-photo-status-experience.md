@@ -47,5 +47,5 @@ This slice implements GitHub issue #12 from the Fitly product backlog.
 ## Known gaps
 
 - Native visual behavior was not exercised on a physical device in this automated run; component behavior and the web export are verified.
-- The app remains on Expo SDK 54 for Expo Go compatibility during development, while implementation choices were checked against the required Expo 57 reference.
+- Historical note: this slice was first verified on SDK 54. The app upgraded to SDK 57 on 2026-09-21 for current Expo Go compatibility.
 - `npm run test:db` could not connect because the local Supabase/Docker service was stopped. This client-only slice does not change the database; the existing database suite last passed with 37 assertions during issue #11.

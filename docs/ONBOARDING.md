@@ -10,11 +10,11 @@ The codebase is currently between prototype and MVP: authentication, account del
 
 | Layer | Technology | Current version |
 | --- | --- | --- |
-| Language | TypeScript | 5.9 |
-| Mobile framework | Expo / React Native | SDK 54 / RN 0.81 |
-| UI runtime | React | 19.1 |
-| Navigation | Expo Router | 6.0 |
-| Localization | Expo Localization | 17.x |
+| Language | TypeScript | 6.0 |
+| Mobile framework | Expo / React Native | SDK 57 / RN 0.86 |
+| UI runtime | React | 19.2 |
+| Navigation | Expo Router | 57.x |
+| Localization | Expo Localization | 57.x |
 | Server state | TanStack Query | 5.x |
 | Local UI state | Zustand | 5.x |
 | Backend | Supabase | Postgres, Auth, Storage, Edge Functions |
@@ -105,7 +105,7 @@ The intended live flow is:
 - Camera/library garment selection and editable garment metadata.
 - Persisted try-on selection, progress, private result display, server-authoritative quota UI, and owner-only fit feedback.
 - Marketplace preview, Pro paywall, and privacy/account settings UI.
-- Expo SDK 54 compatibility for App Store Expo Go.
+- Expo SDK 57 compatibility for the current App Store Expo Go release.
 - Supabase client with persisted mobile sessions and app-state token refresh.
 - Email/password sign-in and account creation with user profile metadata.
 - Session-gated Expo Router routes, launch-time session restoration, and current-device sign-out.

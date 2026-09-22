@@ -53,4 +53,4 @@ The next numbered backlog item, issue #27 (RevenueCat and Pro entitlement), rema
 
 - The destructive path was not invoked against a real member photo because that would permanently remove user content. Ownership, cleanup order, error behavior, deployment, and gateway authentication are covered independently.
 - Undo is intentionally available only before server deletion starts. Once the five-second window ends, the operation is permanent.
-- The remaining transitive npm advisories require breaking Expo dependency changes. The project stays on SDK 54 during Expo Go development and must move to the required supported SDK before production release.
+- Historical note: this slice was first verified on SDK 54. The required SDK 57 upgrade was completed on 2026-09-21; remaining transitive advisories are tracked separately.

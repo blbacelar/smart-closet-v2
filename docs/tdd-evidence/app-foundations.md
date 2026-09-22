@@ -45,4 +45,4 @@ Focused verification: 5 suites and 22 tests passed.
 - Connect Sentry/GlitchTip and PostHog only after projects, server-side configuration, a consent policy, and credentials are available.
 - Migrate existing screen copy into the localization catalogs and add a language selector.
 - Adopt the motion-duration helper as animated interactions are introduced or revised.
-- The SDK 54 dependency tree still reports 16 moderate and 9 high transitive advisories. A forced audit fix would jump to Expo SDK 57 and break the deliberate Expo Go compatibility decision, so that upgrade remains a release-planning task.
+- Historical note: this slice originally shipped on SDK 54. The project upgraded to SDK 57 on 2026-09-21; the current dependency audit and SDK verification are recorded in `expo-sdk-57-upgrade.md`.

@@ -30,7 +30,7 @@ This slice implements the repository-controlled portion of GitHub issue #4.
 | 4 | EAS builds can only be started manually and default to an Android preview | `ciConfiguration.test.ts` | configuration/cost control | PASS |
 | 5 | Only the manual EAS boundary reads `EXPO_TOKEN`, and builds are queued non-interactively without waiting | `ciConfiguration.test.ts` | configuration/security | PASS |
 | 6 | npm and GitHub Actions dependencies are checked weekly | `ciConfiguration.test.ts` | configuration | PASS |
-| 7 | CI uses Node 22.13, the minimum baseline documented for the planned Expo SDK 57 upgrade | `ciConfiguration.test.ts` | configuration | PASS |
+| 7 | CI uses Node 22.13, the minimum baseline required by the Expo SDK 57 runtime | `ciConfiguration.test.ts` | configuration | PASS |
 
 ## Full verification
 
@@ -52,4 +52,4 @@ completed successfully: both the app-quality job and the fresh-database RLS job 
 
 - The manual EAS job requires an `EXPO_TOKEN` GitHub Actions secret. No Actions secrets are currently configured, so no native build was queued.
 - iOS remains an explicit manual choice because the owner does not yet have Apple signing credentials.
-- The critical-only audit gate intentionally does not hide the 16 moderate and 9 high transitive advisories in Expo SDK 54. Dependabot will surface updates, and the breaking SDK 57 upgrade remains required before production release.
+- Historical note: CI was introduced on SDK 54. The SDK 57 upgrade was completed on 2026-09-21; Dependabot continues to surface remaining transitive advisories while the critical-severity gate protects merges.

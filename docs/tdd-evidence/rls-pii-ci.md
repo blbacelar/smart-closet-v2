@@ -53,4 +53,4 @@ Roadmap item: GitHub issue #32, â€œRLS test suite (pgTAP) + PII scrubbing in CIâ
 
 - Hosted schema lint could not authenticate because `SUPABASE_DB_PASSWORD` is not available to the CLI session. The migration push and hosted migration-history verification both succeeded; only the linked lint remains unverified.
 - Storage's statement-level deletion guard prevents direct SQL execution of delete-policy branches. The suite verifies owner visibility plus the exact delete-policy presence and owner/live-profile predicates; Storage API deletion remains covered by the application account-deletion tests.
-- The SDK 54 dependency tree retains 16 moderate and 9 high transitive advisories. The critical-severity gate passes, and the breaking SDK 57 upgrade remains deferred to preserve current Expo Go compatibility.
+- Historical note: this slice was first verified on SDK 54. The SDK 57 upgrade was completed on 2026-09-21; the critical-severity audit gate continues to pass.

@@ -59,4 +59,4 @@ The completed implementation is preserved in commit `4da516a`.
 
 The initial worker uses a Supabase Edge Function background task and bounded provider polling. A scheduled reconciler is still needed to recover a job if an Edge Function instance is interrupted. Realtime delivery and persisted thumbs feedback are also deferred to the next milestone.
 
-The existing Expo/Metro dependency chain continues to report 25 transitive advisories (16 moderate and 9 high). Its automated remediation requires a breaking Expo SDK upgrade, so it remains deferred while the development build intentionally stays on SDK 54 for App Store Expo Go compatibility.
+Historical note: this slice originally shipped on SDK 54 with 25 transitive advisories. The project upgraded to SDK 57 on 2026-09-21; the current dependency audit and SDK verification are recorded in `expo-sdk-57-upgrade.md`.

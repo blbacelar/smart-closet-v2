@@ -47,5 +47,5 @@ This slice implements GitHub issue #30 and the Phase 1 privacy requirement in th
 ## Known gaps
 
 - The permanent action was not smoke-tested against a real user because that would destroy user data. The handler, cleanup order, client flow, policy replacement, remote migration, and deployed function bundle are covered independently.
-- `npm audit --omit=dev --audit-level=high` reports transitive Expo SDK 54 issues whose suggested remediation is a breaking upgrade to SDK 57. The project remains on SDK 54 by prior product decision for App Store Expo Go compatibility; this must be resolved before production release.
+- Historical note: this slice originally shipped on SDK 54. The project upgraded to SDK 57 on 2026-09-21; the remaining npm advisories are tracked separately and the critical-severity gate passes.
 - This Phase 1 purge intentionally has no marketplace tax or transaction records. Issue #48 requires a new retention/deletion ADR before marketplace launch.

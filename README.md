@@ -5,11 +5,13 @@ Fitly is a privacy-first Expo app for building a digital closet and previewing y
 ## Run locally
 
 ```bash
+nvm use
 npm install
-npm start
+npx expo login
+npx expo start --clear
 ```
 
-Open the app with Expo Go, an iOS/Android simulator, or press `w` for the web preview.
+Fitly uses Expo SDK 57 and Node 22.13.0. Sign in to the same Expo account in the CLI and Expo Go, then scan the QR code. An Apple Developer account is not required for this Expo Go workflow. You can also use an iOS/Android simulator or press `w` for the web preview.
 
 The interface includes realistic development data so the complete Phase 1 flow can be reviewed without service credentials. To connect a Supabase project, copy `.env.example` to `.env` and provide the project URL and publishable key. Apply the migration in `supabase/migrations` before using live data.
 

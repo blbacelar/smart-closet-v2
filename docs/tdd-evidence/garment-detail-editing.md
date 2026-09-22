@@ -9,7 +9,7 @@ This slice implements GitHub issue #17 from the Fitly product backlog and the Ph
 - As a member, invalid details remain local and explain how to correct them.
 - As a member, a failed save keeps the editor open and never exposes database/provider details.
 
-The implementation was checked against the required [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/) while retaining SDK 54 for current Expo Go development compatibility.
+The implementation was checked against the required [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/). The project now runs on SDK 57 for current Expo Go compatibility.
 
 ## RED checkpoint
 
@@ -43,7 +43,7 @@ The implementation was checked against the required [Expo SDK 57 reference](http
 - `npm run check:pii`: passed.
 - `npx expo-doctor`: 18/18 checks passed.
 - `npm run build:web`: Expo web export completed.
-- `npm audit --omit=dev --audit-level=critical`: passed with no critical advisories; known high/moderate Expo transitive advisories require the intentionally deferred SDK upgrade.
+- `npm audit --omit=dev --audit-level=critical`: passed with no critical advisories. The previously deferred SDK upgrade was completed on 2026-09-21.
 
 ## Known gaps
 
