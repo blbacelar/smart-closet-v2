@@ -18,7 +18,7 @@ Live Studio generation calls Google Gemini directly from the `tryon-enqueue` Sup
 ## Included
 
 - Expo Router navigation and mobile-first UI
-- Closet browsing, search, category filters, and garment capture
+- Closet browsing, category filters, garment capture, and keyboard-safe metadata editing
 - Body-photo selection, stateless Gemini quality/safety validation, clear approval/rejection states, bounded retries, privacy guidance, and undoable per-photo deletion
 - Interactive try-on flow, quota state, results, and feedback
 - Realtime fitting completion with scheduled stale-job recovery
