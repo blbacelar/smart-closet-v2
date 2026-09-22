@@ -16,6 +16,24 @@ function createPicker(): jest.Mocked<GarmentPicker> {
 }
 
 describe('GarmentCaptureScreen', () => {
+  it('defaults new pieces to private automatic category detection', async () => {
+    const onUpload = jest.fn().mockResolvedValue(undefined);
+    const screen = await render(
+      <GarmentCaptureScreen picker={createPicker()} onUpload={onUpload} onClose={jest.fn()} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Auto-detect category' })).toBeTruthy();
+    expect(screen.getByText('Fitly will suggest a category after processing. You can edit it anytime.')).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Take garment photo' }));
+    await fireEvent.changeText(screen.getByLabelText('Garment name'), 'Linen shirt');
+    await fireEvent.press(screen.getByRole('button', { name: 'Add to my closet' }));
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ category: null }),
+    })));
+  });
+
   it('keeps the form and save action usable while the keyboard is open', async () => {
     const screen = await render(
       <GarmentCaptureScreen picker={createPicker()} onUpload={jest.fn()} onClose={jest.fn()} />,

@@ -51,6 +51,27 @@ describe('garmentValidation', () => {
     });
   });
 
+  it('allows category detection to be requested during capture', () => {
+    expect(
+      validateGarmentDetails({
+        name: 'Linen shirt',
+        category: null,
+        color: 'Cream',
+        size: 'M',
+        season: 'All year',
+      }),
+    ).toEqual({
+      ok: true,
+      details: {
+        name: 'Linen shirt',
+        category: null,
+        color: 'Cream',
+        size: 'M',
+        season: 'All year',
+      },
+    });
+  });
+
   it('requires a name and a supported category', () => {
     expect(
       validateGarmentDetails({ name: '  ', category: 'top', color: '', size: '', season: '' }),

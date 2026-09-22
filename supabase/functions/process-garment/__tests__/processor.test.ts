@@ -9,9 +9,15 @@ function createDependencies() {
         userId: 'user-1',
         originalPath: 'user-1/original.jpg',
         attempt: 1,
+        category: null,
       },
     }),
     downloadOriginal: jest.fn().mockResolvedValue(new ArrayBuffer(4)),
+    detectCategory: jest.fn().mockResolvedValue({
+      category: 'outerwear' as const,
+      provider: 'gemini',
+      costUsd: 0.001,
+    }),
     removeBackground: jest.fn().mockResolvedValue({
       bytes: new ArrayBuffer(8),
       provider: 'remove-bg',
@@ -36,6 +42,10 @@ describe('processGarment', () => {
       cleanPath: 'user-1/garment-1-clean.png',
     });
     expect(dependencies.downloadOriginal).toHaveBeenCalledWith('user-1/original.jpg');
+    expect(dependencies.detectCategory).toHaveBeenCalledWith({
+      bytes: expect.any(ArrayBuffer),
+      contentType: 'image/jpeg',
+    });
     expect(dependencies.uploadClean).toHaveBeenCalledWith(
       'user-1/garment-1-clean.png',
       expect.any(ArrayBuffer),
@@ -48,6 +58,9 @@ describe('processGarment', () => {
       imageHash: 'clean-sha256',
       provider: 'remove-bg',
       costUsd: 0.08,
+      category: 'outerwear',
+      categoryProvider: 'gemini',
+      categoryCostUsd: 0.001,
     });
     expect(dependencies.fail).not.toHaveBeenCalled();
   });
@@ -75,6 +88,30 @@ describe('processGarment', () => {
       cleanPath: 'user-1/garment-1-clean.jpg',
       provider: 'original-image',
       costUsd: 0,
+      category: 'outerwear',
+    }));
+  });
+
+  it('preserves a member-selected category without spending on detection', async () => {
+    const dependencies = createDependencies();
+    dependencies.claim.mockResolvedValue({
+      state: 'claimed',
+      garment: {
+        id: 'garment-1',
+        userId: 'user-1',
+        originalPath: 'user-1/original.jpg',
+        attempt: 1,
+        category: 'dress',
+      },
+    });
+
+    await processGarment({ garmentId: 'garment-1', userId: 'user-1' }, dependencies);
+
+    expect(dependencies.detectCategory).not.toHaveBeenCalled();
+    expect(dependencies.complete).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'dress',
+      categoryProvider: null,
+      categoryCostUsd: null,
     }));
   });
 
@@ -96,7 +133,7 @@ describe('processGarment', () => {
     expect(dependencies.fail).toHaveBeenCalledWith({
       garmentId: 'garment-1',
       userId: 'user-1',
-      message: 'Background removal failed. Try again.',
+      message: 'Garment processing failed. Choose a category or try again.',
     });
   });
 
