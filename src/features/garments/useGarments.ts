@@ -48,3 +48,16 @@ export function useProcessGarment(
     onSettled: () => queryClient.invalidateQueries({ queryKey: garmentKeys.list(userId) }),
   });
 }
+
+export function useUpdateGarment(
+  userId: string,
+  repository: GarmentRepository = supabaseGarmentRepository,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { garmentId: string; details: GarmentDetails }) =>
+      repository.updateDetails(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: garmentKeys.list(userId) }),
+  });
+}

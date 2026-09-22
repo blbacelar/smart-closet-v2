@@ -39,6 +39,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="add-body-photo" options={{ presentation: 'modal' }} />
         <Stack.Screen name="add-garment" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="garment/[id]" />
         <Stack.Screen name="pro" options={{ presentation: 'modal' }} />
         <Stack.Screen name="delete-account" options={{ presentation: 'modal' }} />
       </Stack.Protected>

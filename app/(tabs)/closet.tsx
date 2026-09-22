@@ -75,11 +75,17 @@ export default function ClosetScreen() {
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <View style={styles.item}>
-            <Image source={{ uri: item.imageUrl }} style={styles.itemImage} contentFit="cover" transition={180} />
-            {item.status === 'processing' && <Text style={styles.processing}>Cleanup pending</Text>}
-            {item.status === 'failed' && <Text style={[styles.processing, styles.failed]}>Cleanup failed</Text>}
-            <Text numberOfLines={1} style={styles.itemName}>{item.name ?? 'Untitled piece'}</Text>
-            <Text style={styles.itemMeta}>{item.category ? categoryLabels[item.category] : 'Uncategorized'}</Text>
+            <Pressable
+              accessibilityLabel={`Open ${item.name ?? 'untitled garment'}`}
+              accessibilityRole="button"
+              onPress={() => router.push(`/garment/${item.id}`)}
+            >
+              <Image source={{ uri: item.imageUrl }} style={styles.itemImage} contentFit="cover" transition={180} />
+              {item.status === 'processing' && <Text style={styles.processing}>Cleanup pending</Text>}
+              {item.status === 'failed' && <Text style={[styles.processing, styles.failed]}>Cleanup failed</Text>}
+              <Text numberOfLines={1} style={styles.itemName}>{item.name ?? 'Untitled piece'}</Text>
+              <Text style={styles.itemMeta}>{item.category ? categoryLabels[item.category] : 'Uncategorized'}</Text>
+            </Pressable>
             {item.status === 'failed' && item.processingAttempts < 3 && (
               <Pressable
                 accessibilityLabel={`Retry cleanup for ${item.name ?? 'garment'}`}

@@ -35,7 +35,7 @@ describe('GarmentDetailScreen', () => {
     expect(screen.getByText('All year')).toBeTruthy();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Edit garment details' }));
-    expect(screen.getByText('Edit details')).toBeTruthy();
+    expect(screen.getByText('GARMENT TAGS')).toBeTruthy();
     expect(screen.getByTestId('garment-detail-keyboard-avoider')).toBeTruthy();
     expect(screen.getByTestId('garment-detail-form-scroll')).toHaveProp(
       'keyboardShouldPersistTaps',
@@ -68,7 +68,7 @@ describe('GarmentDetailScreen', () => {
       size: 'L',
       season: 'Fall',
     }));
-    expect(screen.queryByText('Edit details')).toBeNull();
+    expect(screen.queryByText('GARMENT TAGS')).toBeNull();
   });
 
   it('keeps invalid edits local and explains how to fix them', async () => {
@@ -97,7 +97,7 @@ describe('GarmentDetailScreen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Could not save those details. Try again.',
     );
-    expect(screen.getByText('Edit details')).toBeTruthy();
+    expect(screen.getByText('GARMENT TAGS')).toBeTruthy();
     expect(screen.queryByText('database policy internals')).toBeNull();
   });
 
@@ -112,6 +112,6 @@ describe('GarmentDetailScreen', () => {
 
     await fireEvent.press(screen.getByRole('button', { name: 'Edit garment details' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Close garment editor' }));
-    expect(screen.queryByText('Edit details')).toBeNull();
+    expect(screen.queryByText('GARMENT TAGS')).toBeNull();
   });
 });
