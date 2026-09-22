@@ -57,6 +57,11 @@ export default function ClosetScreen() {
         data={filters}
         keyExtractor={(item) => item.value}
         showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical={false}
+        directionalLockEnabled
+        bounces={false}
+        overScrollMode="never"
         style={styles.filterList}
         contentContainerStyle={styles.filters}
         renderItem={({ item }) => (
