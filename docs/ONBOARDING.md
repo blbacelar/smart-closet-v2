@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with Gemini moderation and undoable per-photo removal, private garment uploads with automatic Gemini category suggestions, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with Gemini moderation and undoable per-photo removal, garment processing, and the persisted try-on pipeline are live. Automatic Gemini garment-category suggestions are implemented and verified on `main`, with the linked Supabase migration/function deployment pending CLI re-authentication. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -145,6 +145,7 @@ The intended live flow is:
 
 ## Not Implemented Yet
 
+- Deployment of migration `20260922030000_garment_category_detection.sql` and the matching `process-garment` revision to the linked Supabase project; local verification is complete, but the CLI login must be restored first.
 - User-facing body-photo validation guidance, rejection details, and manual retry controls.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment color tagging; category detection is implemented, while color remains member-selected.

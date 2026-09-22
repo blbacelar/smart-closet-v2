@@ -60,6 +60,8 @@ Result: the migration applied cleanly, database lint reported no findings, and a
 
 A successful paid real-image request still depends on the configured Google project having available credits. The automated suite uses deterministic provider responses and does not spend API credits.
 
+The linked Supabase migration and Edge Function deployment are pending because this development shell has no saved Supabase CLI access token. No remote schema change was attempted without an authenticated preflight.
+
 ## Merge Evidence
 
 - RED checkpoint: `8f69989 test: define automatic garment category detection`
