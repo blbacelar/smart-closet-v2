@@ -33,8 +33,11 @@ describe('MarketScreen', () => {
     const railStyle = StyleSheet.flatten(filterScroll?.props.style);
     const contentStyle = StyleSheet.flatten(filterScroll?.props.contentContainerStyle);
 
-    expect(railStyle.height).toBeGreaterThanOrEqual(48);
+    const chipStyle = StyleSheet.flatten(screen.getByText('25 km').parent?.props.style);
+
+    expect(railStyle.height).toBeGreaterThanOrEqual(56);
     expect(contentStyle.height).toBe(railStyle.height);
     expect(contentStyle.alignItems).toBe('center');
+    expect(railStyle.height - chipStyle.height).toBeGreaterThanOrEqual(20);
   });
 });
