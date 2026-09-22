@@ -4,7 +4,7 @@
 
 Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
 
-The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with Gemini moderation and undoable per-photo removal, private garment uploads, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with Gemini moderation and undoable per-photo removal, private garment uploads with automatic Gemini category suggestions, garment processing, and the persisted try-on pipeline are live. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
 
 ## Tech Stack
 
@@ -39,7 +39,7 @@ Supabase client
           ▼
 Third-party providers
   ├─ remove.bg garment adapter (deployed; credentials pending)
-  ├─ Google Gemini body-photo moderation adapter (deployed; credential configured)
+  ├─ Google Gemini garment-category and body-photo moderation adapters
   └─ Google Gemini image try-on adapter (deployed; credential configured)
 ```
 
@@ -65,7 +65,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `src/features/body-photos/` — capture, validation, private persistence, queries, UI, and tests.
 - `src/features/garments/` — garment capture, validation, private persistence, queries, UI, and tests.
 - `src/features/tryon/` — persisted jobs, quota queries, enqueue boundary, UI state, and tests.
-- `supabase/functions/process-garment/` — authenticated, retryable garment preparation with a zero-cost original-image fallback and optional remove.bg cleanup.
+- `supabase/functions/process-garment/` — authenticated, retryable garment preparation with Gemini category detection, a zero-cost original-image fallback, and optional remove.bg cleanup.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and stateless direct Gemini adapter.
 - `supabase/functions/delete-account/` — authenticated Storage purge followed by permanent Auth-user deletion.
@@ -74,7 +74,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 
 ## Current Data Flow
 
-Today, authentication, body photos, garments, try-on jobs, and quota use Supabase. Images are validated locally, saved under authenticated private Storage paths, and displayed through short-lived signed URLs. New body photos invoke stateless Gemini moderation with safe reason codes; only approved photos can enter a try-on job, and moderation status plus cost commit atomically. Garment cleanup and try-on generation are isolated behind authenticated Edge Functions. Try-on cache keys are computed on the server, quota is reserved atomically, duplicate combinations reuse an existing job, results are copied from base64 provider output into private Storage, and failures refund quota once. Without provider secrets, the functions fail before spend; no simulated result is shown.
+Today, authentication, body photos, garments, try-on jobs, and quota use Supabase. Images are validated locally, saved under authenticated private Storage paths, and displayed through short-lived signed URLs. New body photos invoke stateless Gemini moderation with safe reason codes; only approved photos can enter a try-on job, and moderation status plus cost commit atomically. Garment processing uses Gemini structured output to fill a missing category while preserving any category the member selected before completion. Cleanup and try-on generation are isolated behind authenticated Edge Functions. Try-on cache keys are computed on the server, quota is reserved atomically, duplicate combinations reuse an existing job, results are copied from base64 provider output into private Storage, and failures refund quota once. Without provider secrets, the functions fail before spend; no simulated result is shown.
 
 The intended live flow is:
 
@@ -103,6 +103,7 @@ The intended live flow is:
 - Mobile-first Fitly visual system and four-tab navigation.
 - Closet browsing and category filtering.
 - Camera/library garment selection and editable garment metadata.
+- Default automatic garment category detection with a manual category override that always wins.
 - Persisted try-on selection, progress, private result display, server-authoritative quota UI, and owner-only fit feedback.
 - Marketplace preview, Pro paywall, and privacy/account settings UI.
 - Expo SDK 57 compatibility for the current App Store Expo Go release.
@@ -138,7 +139,7 @@ The intended live flow is:
 - Manual EAS build workflow defaulting to an Android preview, plus weekly npm and GitHub Actions dependency monitoring.
 - Privacy-safe analytics/error hooks that allowlist event data, strip sensitive fields, and never forward raw error messages or image references.
 - Accessible global render-error recovery, system reduced-motion detection, and English/Brazilian Portuguese localization scaffolding.
-- A 32-assertion pgTAP suite covering RLS, anonymous access, owner isolation, private Storage boundaries, and allowed member mutations.
+- A 42-assertion pgTAP suite covering RLS, anonymous access, owner isolation, private Storage boundaries, allowed member mutations, and atomic garment-category completion.
 - A CI PII-leak gate that blocks runtime console logging, committed secrets, private signed Storage URLs, personal contact details, and developer home-directory paths without echoing detected values.
 - Explicit least-privilege Data API grants and source-only private Storage writes, deployed through migration `20260904120000_explicit_authenticated_grants.sql`.
 
@@ -146,7 +147,7 @@ The intended live flow is:
 
 - User-facing body-photo validation guidance, rejection details, and manual retry controls.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
-- Automatic garment category and color tagging.
+- Automatic garment color tagging; category detection is implemented, while color remains member-selected.
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Sentry/GlitchTip and PostHog projects, adapters, credentials, consent policy, and broader event instrumentation; the current observability adapter intentionally sends nothing.
@@ -170,6 +171,7 @@ The intended live flow is:
 - Add server data: create a typed function under `src/api/` and consume it through TanStack Query.
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
 - Optional garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets to enable background removal. Without them, the worker securely prepares the original garment JPEG at zero provider cost. Never put provider credentials in the app or committed files.
+- Garment category detection: `GOOGLE_GEMINI_API_KEY` stays in Supabase Edge Function secrets. The default model is `gemini-3.8-flash`, called through Google's Interactions API with structured JSON output and `store: false`. Optional server-only overrides are `GOOGLE_GEMINI_TAGGING_MODEL` and `GOOGLE_GEMINI_TAGGING_COST_USD_FALLBACK`.
 - Try-on configuration: `GOOGLE_GEMINI_API_KEY` is set in Supabase Edge Function secrets. The default model is `gemini-3.1-flash-image`, called through Google's Interactions API with `store: false`. Optional server-only overrides are `GOOGLE_GEMINI_IMAGE_MODEL` and `GOOGLE_GEMINI_TRYON_COST_USD_FALLBACK`. Never put the key in an `EXPO_PUBLIC_` variable or committed file.
 
 ## Recommended Build Order
