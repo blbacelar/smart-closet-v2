@@ -30,7 +30,7 @@ jest.mock('../../../src/features/garments/useGarments', () => ({
 }));
 
 describe('ClosetScreen', () => {
-  it('gives the horizontal filter rail enough height to hide its scroll indicator', async () => {
+  it('keeps the filter rail horizontal without a draggable vertical indicator', async () => {
     const screen = await render(<ClosetScreen />);
     let filterList = screen.getByText('All').parent;
 
@@ -40,6 +40,10 @@ describe('ClosetScreen', () => {
 
     expect(filterList).toBeTruthy();
     expect(filterList).toHaveProp('showsHorizontalScrollIndicator', false);
+    expect(filterList).toHaveProp('showsVerticalScrollIndicator', false);
+    expect(filterList).toHaveProp('alwaysBounceVertical', false);
+    expect(filterList).toHaveProp('directionalLockEnabled', true);
+    expect(filterList).toHaveProp('bounces', false);
 
     const railStyle = StyleSheet.flatten(filterList?.props.style);
     const contentStyle = StyleSheet.flatten(filterList?.props.contentContainerStyle);
