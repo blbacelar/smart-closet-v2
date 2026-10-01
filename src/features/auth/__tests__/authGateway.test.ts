@@ -1,5 +1,14 @@
 let mockSupabase: any;
 
+const mockCreateURL = jest.fn(() => 'fitly://auth/callback');
+const mockOpenAuthSessionAsync = jest.fn();
+
+jest.mock('expo-linking', () => ({ createURL: (...args: unknown[]) => mockCreateURL(...args) }));
+jest.mock('expo-web-browser', () => ({
+  maybeCompleteAuthSession: jest.fn(),
+  openAuthSessionAsync: (...args: unknown[]) => mockOpenAuthSessionAsync(...args),
+}));
+
 jest.mock('../../../lib/supabase', () => ({
   get supabase() {
     return mockSupabase;
@@ -14,6 +23,11 @@ function createClient() {
       getSession: jest.fn().mockResolvedValue({ data: { session: null }, error: null }),
       onAuthStateChange: jest.fn(),
       signInWithPassword: jest.fn().mockResolvedValue({ error: null }),
+      signInWithOAuth: jest.fn().mockResolvedValue({
+        data: { url: 'https://auth.example.test/google' },
+        error: null,
+      }),
+      setSession: jest.fn().mockResolvedValue({ error: null }),
       signUp: jest.fn().mockResolvedValue({ data: { session: null }, error: null }),
       signOut: jest.fn().mockResolvedValue({ error: null }),
     },
@@ -32,6 +46,12 @@ const user = {
 describe('supabaseAuthGateway', () => {
   beforeEach(() => {
     mockSupabase = createClient();
+    mockCreateURL.mockClear();
+    mockOpenAuthSessionAsync.mockReset();
+    mockOpenAuthSessionAsync.mockResolvedValue({
+      type: 'success',
+      url: 'fitly://auth/callback#access_token=access-1&refresh_token=refresh-1',
+    });
   });
 
   it('maps the persisted Supabase user into an app identity', async () => {
@@ -126,6 +146,45 @@ describe('supabaseAuthGateway', () => {
     const error = new Error('Invalid login credentials');
     mockSupabase.auth.signInWithPassword.mockResolvedValue({ error });
     await expect(supabaseAuthGateway.signIn(input)).rejects.toBe(error);
+  });
+
+  it.each(['google', 'apple'] as const)('completes %s OAuth in a private auth session', async (provider) => {
+    await supabaseAuthGateway.signInWithProvider(provider);
+
+    expect(mockSupabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider,
+      options: {
+        redirectTo: 'fitly://auth/callback',
+        skipBrowserRedirect: true,
+      },
+    });
+    expect(mockOpenAuthSessionAsync).toHaveBeenCalledWith(
+      `https://auth.example.test/google`,
+      'fitly://auth/callback',
+      { preferEphemeralSession: true },
+    );
+    expect(mockSupabase.auth.setSession).toHaveBeenCalledWith({
+      access_token: 'access-1',
+      refresh_token: 'refresh-1',
+    });
+  });
+
+  it('does not create a session when social sign-in is cancelled', async () => {
+    mockOpenAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
+
+    await expect(supabaseAuthGateway.signInWithProvider('google')).resolves.toBeUndefined();
+    expect(mockSupabase.auth.setSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects an incomplete social-auth callback', async () => {
+    mockOpenAuthSessionAsync.mockResolvedValue({
+      type: 'success',
+      url: 'fitly://auth/callback#error=access_denied',
+    });
+
+    await expect(supabaseAuthGateway.signInWithProvider('apple')).rejects.toThrow(
+      'Could not complete social sign-in. Try again.',
+    );
   });
 
   it('creates an account with profile metadata and reports confirmation state', async () => {

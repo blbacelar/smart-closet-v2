@@ -8,6 +8,7 @@ function createGateway(): jest.Mocked<AuthGateway> {
     getCurrentIdentity: jest.fn(),
     subscribe: jest.fn(),
     signIn: jest.fn().mockResolvedValue(undefined),
+    signInWithProvider: jest.fn().mockResolvedValue(undefined),
     signUp: jest.fn().mockResolvedValue({ requiresEmailConfirmation: false }),
     signOut: jest.fn(),
     deleteAccount: jest.fn(),
@@ -40,6 +41,19 @@ describe('AuthScreen', () => {
         password: 'password123',
       }),
     );
+  });
+
+  it.each([
+    ['Google', 'google'],
+    ['Apple', 'apple'],
+  ] as const)('starts %s sign-in without requiring email fields', async (label, provider) => {
+    const gateway = createGateway();
+    const screen = await render(<AuthScreen gateway={gateway} />);
+
+    await fireEvent.press(screen.getByRole('button', { name: `Continue with ${label}` }));
+
+    await waitFor(() => expect(gateway.signInWithProvider).toHaveBeenCalledWith(provider));
+    expect(gateway.signIn).not.toHaveBeenCalled();
   });
 
   it('creates an account and explains when email confirmation is required', async () => {
