@@ -1,4 +1,4 @@
-import { colors, fonts, motion, radii, spacing } from '../theme';
+import { colors, createShadow, fonts, motion, radii, spacing } from '../theme';
 
 describe('Fitly design tokens', () => {
   it('provides semantic color and typography tokens', () => {
@@ -35,5 +35,12 @@ describe('Fitly design tokens', () => {
       standard: 250,
       slow: 400,
     });
+  });
+
+  it('uses the supported box shadow API on web', () => {
+    expect(createShadow('web')).toEqual({
+      boxShadow: '0 8px 12px rgba(27,33,29,0.06)',
+    });
+    expect(createShadow('web')).not.toHaveProperty('shadowColor');
   });
 });
