@@ -1,5 +1,17 @@
 # Fitly Maestro smoke test
 
+`expo-go-auth-smoke.yaml` is a no-credential simulator check for the authentication shell. Start Fitly in Expo Go first, then run:
+
+```bash
+maestro --device=<simulator-udid> test \
+  -e EXPO_URL="exp://127.0.0.1:8088" \
+  .maestro/expo-go-auth-smoke.yaml
+```
+
+It verifies the SDK 57 Expo Go launch, both social-auth entry points, and the email sign-in/sign-up mode transition without creating an account or transmitting test data.
+
+## Full activation journey
+
 `signup-to-tryon.yaml` exercises a real isolated account from signup through onboarding, private body-photo upload, garment upload, and a completed AI fitting. It targets an installed Android/iOS preview build with application ID `app.fitly.mobile`; it is not a simulated UI test.
 
 Prerequisites:

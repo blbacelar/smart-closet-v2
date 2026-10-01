@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 const root = resolve(__dirname, '../..');
 const flowPath = resolve(root, '.maestro/signup-to-tryon.yaml');
+const expoGoFlowPath = resolve(root, '.maestro/expo-go-auth-smoke.yaml');
 const guidePath = resolve(root, '.maestro/README.md');
 
 describe('Maestro activation journey', () => {
@@ -29,5 +30,17 @@ describe('Maestro activation journey', () => {
     expect(guide).toContain('E2E_GARMENT_PHOTO');
     expect(guide).toContain('funded Gemini');
     expect(guide).not.toMatch(/sb_(?:secret|publishable)_[A-Za-z0-9_-]+/);
+  });
+
+  it('provides a no-credential Expo Go authentication smoke flow', () => {
+    expect(existsSync(expoGoFlowPath)).toBe(true);
+    const flow = readFileSync(expoGoFlowPath, 'utf8');
+
+    expect(flow).toContain('appId: host.exp.Exponent');
+    expect(flow).toContain('openLink: ${EXPO_URL}');
+    expect(flow).toContain('Continue with Google');
+    expect(flow).toContain('Continue with Apple');
+    expect(flow).toContain('Create an account');
+    expect(flow).not.toContain('inputText:');
   });
 });

@@ -1,0 +1,22 @@
+appId: host.exp.Exponent
+name: Expo Go authentication smoke
+tags:
+  - phase-one
+  - expo-go
+---
+- launchApp
+- openLink: ${EXPO_URL}
+- tapOn:
+    text: "Continue"
+    optional: true
+- tapOn:
+    text: "Close"
+    optional: true
+- assertVisible: "Welcome back."
+- assertVisible: "Continue with Google"
+- assertVisible: "Continue with Apple"
+- tapOn: "Create an account"
+- assertVisible: "Start your closet."
+- assertVisible: "Create account"
+- tapOn: "Sign in instead"
+- assertVisible: "Welcome back."
