@@ -2,10 +2,13 @@ export type AnalyticsEvent =
   | 'app_opened'
   | 'auth_signed_in'
   | 'auth_signed_up'
+  | 'onboarding_completed'
+  | 'body_photo_uploaded'
   | 'garment_uploaded'
   | 'tryon_requested'
   | 'tryon_completed'
   | 'paywall_viewed'
+  | 'subscription_purchase_started'
   | 'account_deleted';
 
 export type ObservabilityErrorContext = {

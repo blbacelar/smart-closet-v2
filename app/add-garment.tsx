@@ -3,6 +3,7 @@ import { GarmentCaptureScreen } from '../src/features/garments/GarmentCaptureScr
 import { GarmentDetails, ValidatedGarmentAsset } from '../src/features/garments/garmentValidation';
 import { useUploadGarment } from '../src/features/garments/useGarments';
 import { useAuth } from '../src/providers/AuthProvider';
+import { observability } from '../src/lib/observability';
 
 export default function AddGarmentRoute() {
   const { identity } = useAuth();
@@ -17,6 +18,9 @@ export default function AddGarmentRoute() {
     details: GarmentDetails;
   }) => {
     await upload.mutateAsync(input);
+    observability.track('garment_uploaded', {
+      categoryMode: input.details.category ? 'manual' : 'automatic',
+    });
   };
 
   return <GarmentCaptureScreen onClose={() => router.back()} onUpload={handleUpload} />;

@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { Bell, ChevronRight, Globe2, LogOut, Shield, Trash2 } from 'lucide-react-native';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFitlyStore } from '../../src/store';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { BodyPhotoGallery } from '../../src/features/body-photos/BodyPhotoGallery';
 import {
@@ -11,6 +10,7 @@ import {
   useValidateBodyPhoto,
 } from '../../src/features/body-photos/useBodyPhotos';
 import { colors, fonts } from '../../src/theme';
+import { useTryOnQuota } from '../../src/features/tryon/useTryOns';
 
 const settings = [
   { Icon: Shield, label: 'Privacy & visibility' },
@@ -22,8 +22,9 @@ const settings = [
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const isPro = useFitlyStore((state) => state.isPro);
   const { identity, signOut } = useAuth();
+  const quota = useTryOnQuota(identity?.id);
+  const isPro = quota.data?.tier === 'pro';
   const bodyPhotos = useBodyPhotos(identity?.id);
   const deleteBodyPhoto = useDeleteBodyPhoto(identity?.id ?? 'signed-out');
   const validateBodyPhoto = useValidateBodyPhoto(identity?.id ?? 'signed-out');
@@ -59,11 +60,11 @@ export default function ProfileScreen() {
         onRetry={() => bodyPhotos.refetch()}
       />
 
-      <Pressable onPress={() => !isPro && router.push('/pro')} style={styles.proCard}>
+      <Pressable onPress={() => !isPro && router.push({ pathname: '/pro', params: { source: 'profile' } })} style={styles.proCard}>
         <View style={styles.proBadge}><Text style={styles.proBadgeText}>FITLY PRO</Text></View>
         <Text style={styles.proTitle}>{isPro ? 'Your fitting room, unlocked.' : 'Unlimited fittings.'}</Text>
         <Text style={styles.proCopy}>60 try-ons a day · 3 body photos · no watermark</Text>
-        {!isPro && <View style={styles.proButton}><Text style={styles.proButtonText}>Go Pro — $7.99/mo</Text></View>}
+        {!isPro && <View style={styles.proButton}><Text style={styles.proButtonText}>Explore Fitly Pro</Text></View>}
       </Pressable>
 
       <View style={styles.settings}>

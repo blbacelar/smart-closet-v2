@@ -17,6 +17,7 @@ import { shareTryOnResult } from '../../src/features/tryon/shareTryOnResult';
 import { useEnqueueTryOn, useSetTryOnFeedback, useTryOnJobs, useTryOnQuota, useTryOnRealtime } from '../../src/features/tryon/useTryOns';
 import { getTryOnAction, tryOnErrorMessage } from '../../src/features/tryon/tryonState';
 import { useMotionPreference } from '../../src/providers/MotionPreferenceProvider';
+import { observability } from '../../src/lib/observability';
 
 const captions = ['Fitting the shoulders…', 'Matching the light…', 'Draping the fabric…', 'Almost there…'];
 
@@ -83,6 +84,9 @@ export default function TryOnScreen() {
   useEffect(() => {
     if (resultJob && notifiedJobId.current !== resultJob.id) {
       notifiedJobId.current = resultJob.id;
+      observability.track('tryon_completed', {
+        provider: resultJob.provider ?? 'unknown',
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     }
     if (activeJob?.status === 'failed') {
@@ -102,8 +106,14 @@ export default function TryOnScreen() {
         bodyPhotoId: selectedBodyPhoto.id,
         garmentId: selected.id,
       });
+      observability.track('tryon_requested', { cached: result.state === 'cached' });
       setActiveJobId(result.jobId);
     } catch (error) {
+      observability.captureError(error, {
+        operation: 'tryon_enqueue',
+        code: 'request_failed',
+        fatal: false,
+      });
       setMessage(tryOnErrorMessage(error));
     }
   };
@@ -249,7 +259,7 @@ export default function TryOnScreen() {
             if (action === 'body-photo') router.push('/add-body-photo');
             else if (action === 'garment') router.push('/add-garment');
             else if (action === 'closet') router.push('/(tabs)/closet');
-            else if (action === 'upgrade') router.push('/pro');
+            else if (action === 'upgrade') router.push({ pathname: '/pro', params: { source: 'quota' } });
             else startTryOn();
           }}
           style={styles.tryButton}

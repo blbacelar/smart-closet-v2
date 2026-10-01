@@ -9,7 +9,7 @@ function createGateway(): jest.Mocked<AuthGateway> {
     getCurrentIdentity: jest.fn(),
     subscribe: jest.fn(),
     signIn: jest.fn().mockResolvedValue(undefined),
-    signInWithProvider: jest.fn().mockResolvedValue(undefined),
+    signInWithProvider: jest.fn().mockResolvedValue({ completed: true }),
     signUp: jest.fn().mockResolvedValue({ requiresEmailConfirmation: false }),
     signOut: jest.fn(),
     deleteAccount: jest.fn(),

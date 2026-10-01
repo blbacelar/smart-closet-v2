@@ -1,16 +1,29 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, Crown, Sparkles, X, Zap } from 'lucide-react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFitlyStore } from '../src/store';
 import { colors, fonts, shadow } from '../src/theme';
+import { observability } from '../src/lib/observability';
 
 const benefits = ['Up to 60 try-ons every day', 'Unlimited pieces in your closet', '3 private body photos', 'Outfit builder & priority generation'];
 
 export default function ProScreen() {
-  const upgrade = useFitlyStore((s) => s.upgrade);
-  const choose = () => { upgrade(); router.back(); };
+  const { source } = useLocalSearchParams<{ source?: string }>();
+  const safeSource = source === 'quota' || source === 'profile' ? source : 'unknown';
+
+  useEffect(() => {
+    observability.track('paywall_viewed', { source: safeSource });
+  }, [safeSource]);
+
+  const choose = () => {
+    observability.track('subscription_purchase_started', { plan: 'yearly' });
+    Alert.alert(
+      'Fitly Pro is coming soon',
+      'Purchases will open after the subscription and marketplace membership plans are finalized.',
+    );
+  };
   return (
     <LinearGradient colors={[colors.forestDark, colors.ink, colors.canvas]} locations={[0, 0.63, 1]} style={styles.background}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -27,7 +40,7 @@ export default function ProScreen() {
             <Pressable style={styles.plan}><View><Text style={styles.planTitle}>Monthly</Text><Text style={styles.planSub}>Cancel anytime</Text></View><View><Text style={styles.price}>$7.99</Text><Text style={styles.period}>CAD / month</Text></View></Pressable>
             <Pressable style={[styles.plan, styles.planActive]}><View style={styles.best}><Sparkles size={11} color={colors.forestDark} /><Text style={styles.bestText}>BEST VALUE</Text></View><View><Text style={styles.planTitle}>Yearly</Text><Text style={styles.planSub}>Save 38%</Text></View><View><Text style={styles.price}>$59</Text><Text style={styles.period}>CAD / year</Text></View></Pressable>
           </View>
-          <Pressable onPress={choose} style={styles.continue}><Zap size={18} color={colors.white} fill={colors.white} /><Text style={styles.continueText}>Start Fitly Pro</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={choose} style={styles.continue}><Zap size={18} color={colors.white} fill={colors.white} /><Text style={styles.continueText}>Notify me about Fitly Pro</Text></Pressable>
           <Text style={styles.legal}>7-day free trial, then $59/year. Cancel anytime in your App Store settings. Your wardrobe stays yours.</Text>
         </View>
       </SafeAreaView>

@@ -13,11 +13,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts } from '../../theme';
+import { observability, ObservabilityClient } from '../../lib/observability';
 import { AuthGateway, SocialAuthProvider, supabaseAuthGateway } from './authGateway';
 import { AuthFieldErrors, AuthFields, AuthMode, validateAuthForm } from './credentials';
 
 type AuthScreenProps = {
   gateway?: AuthGateway;
+  observabilityClient?: ObservabilityClient;
 };
 
 const initialFields: AuthFields = { displayName: '', email: '', password: '' };
@@ -26,7 +28,10 @@ function messageFrom(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Try again.';
 }
 
-export function AuthScreen({ gateway = supabaseAuthGateway }: AuthScreenProps) {
+export function AuthScreen({
+  gateway = supabaseAuthGateway,
+  observabilityClient = observability,
+}: AuthScreenProps) {
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [fields, setFields] = useState(initialFields);
@@ -62,8 +67,10 @@ export function AuthScreen({ gateway = supabaseAuthGateway }: AuthScreenProps) {
     try {
       if (isSignIn) {
         await gateway.signIn({ email: result.values.email, password: result.values.password });
+        observabilityClient.track('auth_signed_in', { method: 'email' });
       } else {
         const outcome = await gateway.signUp(result.values);
+        observabilityClient.track('auth_signed_up', { method: 'email' });
         if (outcome.requiresEmailConfirmation) {
           setStatusMessage('Check your email to confirm your account.');
         }
@@ -79,7 +86,10 @@ export function AuthScreen({ gateway = supabaseAuthGateway }: AuthScreenProps) {
     setStatusMessage('');
     setIsSubmitting(true);
     try {
-      await gateway.signInWithProvider(provider);
+      const outcome = await gateway.signInWithProvider(provider);
+      if (outcome.completed) {
+        observabilityClient.track('auth_signed_in', { method: provider });
+      }
     } catch (error) {
       setStatusMessage(messageFrom(error));
     } finally {

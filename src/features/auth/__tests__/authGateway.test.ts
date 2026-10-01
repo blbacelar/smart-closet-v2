@@ -149,7 +149,7 @@ describe('supabaseAuthGateway', () => {
   });
 
   it.each(['google', 'apple'] as const)('completes %s OAuth in a private auth session', async (provider) => {
-    await supabaseAuthGateway.signInWithProvider(provider);
+    await expect(supabaseAuthGateway.signInWithProvider(provider)).resolves.toEqual({ completed: true });
 
     expect(mockSupabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider,
@@ -172,7 +172,7 @@ describe('supabaseAuthGateway', () => {
   it('does not create a session when social sign-in is cancelled', async () => {
     mockOpenAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
 
-    await expect(supabaseAuthGateway.signInWithProvider('google')).resolves.toBeUndefined();
+    await expect(supabaseAuthGateway.signInWithProvider('google')).resolves.toEqual({ completed: false });
     expect(mockSupabase.auth.setSession).not.toHaveBeenCalled();
   });
 

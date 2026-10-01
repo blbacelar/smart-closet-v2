@@ -3,6 +3,7 @@ import { BodyPhotoCaptureScreen } from '../src/features/body-photos/BodyPhotoCap
 import { ValidatedBodyPhotoAsset } from '../src/features/body-photos/bodyPhotoValidation';
 import { useUploadBodyPhoto } from '../src/features/body-photos/useBodyPhotos';
 import { useAuth } from '../src/providers/AuthProvider';
+import { observability } from '../src/lib/observability';
 
 export default function AddBodyPhotoRoute() {
   const { identity } = useAuth();
@@ -14,6 +15,7 @@ export default function AddBodyPhotoRoute() {
 
   const handleUpload = async (asset: ValidatedBodyPhotoAsset) => {
     await upload.mutateAsync(asset);
+    observability.track('body_photo_uploaded', { source: 'capture_flow' });
   };
 
   return <BodyPhotoCaptureScreen onClose={() => router.back()} onUpload={handleUpload} />;

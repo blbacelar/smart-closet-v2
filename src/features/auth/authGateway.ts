@@ -26,7 +26,7 @@ export type AuthGateway = {
   getCurrentIdentity: () => Promise<AuthIdentity | null>;
   subscribe: (listener: (identity: AuthIdentity | null) => void) => () => void;
   signIn: (input: SignInInput) => Promise<void>;
-  signInWithProvider: (provider: SocialAuthProvider) => Promise<void>;
+  signInWithProvider: (provider: SocialAuthProvider) => Promise<{ completed: boolean }>;
   signUp: (input: SignUpInput) => Promise<{ requiresEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -125,13 +125,14 @@ export const supabaseAuthGateway: AuthGateway = {
       preferEphemeralSession: true,
     });
     if (browserResult.type !== 'success') {
-      return;
+      return { completed: false };
     }
 
     const { error: sessionError } = await client.auth.setSession(readOAuthTokens(browserResult.url));
     if (sessionError) {
       throw new Error(socialAuthFailureMessage);
     }
+    return { completed: true };
   },
 
   async signUp({ displayName, email, password }) {
