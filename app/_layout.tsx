@@ -36,6 +36,7 @@ function RootNavigator() {
       </Stack.Protected>
       <Stack.Protected guard={isSignedIn}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="add-body-photo" options={{ presentation: 'modal' }} />
         <Stack.Screen name="add-garment" options={{ presentation: 'modal' }} />
