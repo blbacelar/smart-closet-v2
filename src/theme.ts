@@ -22,6 +22,31 @@ export const fonts = {
   body: Platform.select({ ios: 'Helvetica Neue', android: 'sans-serif', web: 'Helvetica Neue' }),
 };
 
+export const spacing = {
+  xxs: 4,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+} as const;
+
+export const radii = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  pill: 999,
+} as const;
+
+export const motion = {
+  instant: 0,
+  fast: 150,
+  standard: 250,
+  slow: 400,
+} as const;
+
 export const shadow = {
   shadowColor: '#1B211D',
   shadowOffset: { width: 0, height: 8 },
