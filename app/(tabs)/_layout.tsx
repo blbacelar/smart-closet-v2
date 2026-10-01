@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Shirt, Sparkles, Store, UserRound } from 'lucide-react-native';
-import { ColorValue, StyleSheet } from 'react-native';
+import { ColorValue, Platform, StyleSheet } from 'react-native';
 import { colors, fonts } from '../../src/theme';
 
 const icon = (Icon: typeof Shirt) => ({ color }: { color: ColorValue }) => (
@@ -30,8 +30,10 @@ export default function TabsLayout() {
           borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: colors.line,
           backgroundColor: 'rgba(244,244,242,0.98)',
-          elevation: 0,
-          shadowOpacity: 0,
+          ...Platform.select({
+            web: {},
+            default: { elevation: 0, shadowOpacity: 0 },
+          }),
         },
       }}
     >

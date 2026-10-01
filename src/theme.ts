@@ -47,10 +47,18 @@ export const motion = {
   slow: 400,
 } as const;
 
-export const shadow = {
-  shadowColor: '#1B211D',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.06,
-  shadowRadius: 12,
-  elevation: 2,
-};
+export function createShadow(platform = Platform.OS) {
+  if (platform === 'web') {
+    return { boxShadow: '0 8px 12px rgba(27,33,29,0.06)' as const };
+  }
+
+  return {
+    shadowColor: '#1B211D',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  };
+}
+
+export const shadow = createShadow();
