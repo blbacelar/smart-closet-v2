@@ -47,7 +47,12 @@ export default function ClosetScreen() {
           <Text style={styles.eyebrow}>{garments.length} pieces</Text>
           <Text style={styles.title}>Your Closet</Text>
         </View>
-        <Pressable accessibilityLabel="Add garment" onPress={() => router.push('/add-garment')} style={styles.addButton}>
+        <Pressable
+          accessibilityLabel="Add garment"
+          accessibilityRole="button"
+          onPress={() => router.push('/add-garment')}
+          style={styles.addButton}
+        >
           <Plus size={20} color={colors.white} />
         </Pressable>
       </View>
@@ -65,7 +70,12 @@ export default function ClosetScreen() {
         style={styles.filterList}
         contentContainerStyle={styles.filters}
         renderItem={({ item }) => (
-          <Pressable onPress={() => setActive(item.value)} style={[styles.filter, active === item.value && styles.filterActive]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: active === item.value }}
+            onPress={() => setActive(item.value)}
+            style={[styles.filter, active === item.value && styles.filterActive]}
+          >
             <Text style={[styles.filterText, active === item.value && styles.filterTextActive]}>{item.label}</Text>
           </Pressable>
         )}

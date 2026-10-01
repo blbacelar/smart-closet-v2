@@ -103,7 +103,7 @@ describe('ClosetScreen', () => {
     expect(screen.getByText('Linen shirt')).toBeTruthy();
     expect(screen.getByText('Sunday dress')).toBeTruthy();
 
-    fireEvent.press(screen.getByRole('button', { name: 'Open Linen shirt' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Open Linen shirt' }));
     expect(mockPush).toHaveBeenCalledWith('/garment/garment-1');
   });
 
@@ -115,7 +115,7 @@ describe('ClosetScreen', () => {
     const screen = await render(<ClosetScreen />);
 
     const dresses = screen.getByRole('button', { name: 'Dresses' });
-    fireEvent.press(dresses);
+    await fireEvent.press(dresses);
 
     expect(screen.queryByText('Linen shirt')).toBeNull();
     expect(screen.getByText('Sunday dress')).toBeTruthy();
@@ -129,7 +129,7 @@ describe('ClosetScreen', () => {
     const screen = await render(<ClosetScreen />);
 
     expect(screen.getByText('Your closet is ready for its first piece.')).toBeTruthy();
-    fireEvent.press(screen.getByRole('button', { name: 'Add a garment' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a garment' }));
 
     expect(mockPush).toHaveBeenCalledWith('/add-garment');
   });
@@ -139,7 +139,7 @@ describe('ClosetScreen', () => {
     const screen = await render(<ClosetScreen />);
 
     expect(screen.getByText('Could not load your closet.')).toBeTruthy();
-    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
 
     expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
