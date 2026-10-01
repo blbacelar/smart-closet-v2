@@ -28,13 +28,17 @@ function RootNavigator() {
   }
 
   const isSignedIn = Boolean(identity);
+  const isAdultConfirmed = identity?.adultConfirmed === true;
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
       <Stack.Protected guard={!isSignedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
-      <Stack.Protected guard={isSignedIn}>
+      <Stack.Protected guard={isSignedIn && !isAdultConfirmed}>
+        <Stack.Screen name="age-requirement" />
+      </Stack.Protected>
+      <Stack.Protected guard={isSignedIn && isAdultConfirmed}>
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
@@ -43,6 +47,7 @@ function RootNavigator() {
         <Stack.Screen name="garment/[id]" />
         <Stack.Screen name="pro" options={{ presentation: 'modal' }} />
         <Stack.Screen name="delete-account" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="copyright-report" options={{ presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
   );

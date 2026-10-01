@@ -7,6 +7,7 @@ const bruno: AuthIdentity = {
   id: 'user-1',
   email: 'bruno@example.com',
   displayName: 'Bruno',
+  adultConfirmed: true,
 };
 
 function createGateway(initialIdentity: AuthIdentity | null = bruno) {
@@ -21,6 +22,7 @@ function createGateway(initialIdentity: AuthIdentity | null = bruno) {
     signIn: jest.fn(),
     signInWithProvider: jest.fn().mockResolvedValue({ completed: true }),
     signUp: jest.fn(),
+    confirmAdultStatus: jest.fn().mockResolvedValue(undefined),
     signOut: jest.fn().mockResolvedValue(undefined),
     deleteAccount: jest.fn().mockResolvedValue(undefined),
   };
@@ -155,5 +157,20 @@ describe('AuthProvider', () => {
 
     await act(() => result.current.signOut());
     expect(observabilityClient.setUser).toHaveBeenLastCalledWith(null);
+  });
+
+  it('confirms an existing beta member and updates the local route guard', async () => {
+    const unconfirmed = { ...bruno, adultConfirmed: false };
+    const { gateway } = createGateway(unconfirmed);
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AuthProvider gateway={gateway}>{children}</AuthProvider>
+    );
+    const { result } = await renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.identity).toEqual(unconfirmed));
+
+    await act(() => result.current.confirmAdultStatus());
+
+    expect(gateway.confirmAdultStatus).toHaveBeenCalledTimes(1);
+    expect(result.current.identity?.adultConfirmed).toBe(true);
   });
 });

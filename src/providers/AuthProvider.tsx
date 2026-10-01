@@ -9,6 +9,7 @@ import { observability, ObservabilityClient } from '../lib/observability';
 type AuthContextValue = {
   identity: AuthIdentity | null;
   isLoading: boolean;
+  confirmAdultStatus: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 };
@@ -76,6 +77,10 @@ export function AuthProvider({
     () => ({
       identity,
       isLoading,
+      confirmAdultStatus: async () => {
+        await gateway.confirmAdultStatus();
+        setIdentity((current) => current ? { ...current, adultConfirmed: true } : current);
+      },
       signOut: async () => {
         await gateway.signOut();
         setIdentity(null);

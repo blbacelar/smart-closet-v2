@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts } from '../../theme';
 import { observability, ObservabilityClient } from '../../lib/observability';
 import { AuthGateway, SocialAuthProvider, supabaseAuthGateway } from './authGateway';
+import { ageEligibilityMessage, checkAgeEligibility } from './ageEligibility';
 import { AuthFieldErrors, AuthFields, AuthMode, validateAuthForm } from './credentials';
 
 type AuthScreenProps = {
@@ -35,6 +36,8 @@ export function AuthScreen({
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [fields, setFields] = useState(initialFields);
+  const [birthDate, setBirthDate] = useState('');
+  const [ageError, setAgeError] = useState('');
   const [errors, setErrors] = useState<AuthFieldErrors>({});
   const [statusMessage, setStatusMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,7 +58,14 @@ export function AuthScreen({
     setStatusMessage('');
   };
 
+  const confirmEligibility = () => {
+    const eligibility = checkAgeEligibility(birthDate);
+    setAgeError(ageEligibilityMessage(eligibility));
+    return eligibility.eligible;
+  };
+
   const submit = async () => {
+    if (!confirmEligibility()) return;
     const result = validateAuthForm(fields, mode);
     setFields(result.values);
     setErrors(result.errors);
@@ -68,10 +78,14 @@ export function AuthScreen({
     setIsSubmitting(true);
     try {
       if (isSignIn) {
-        await gateway.signIn({ email: result.values.email, password: result.values.password });
+        await gateway.signIn({
+          email: result.values.email,
+          password: result.values.password,
+          adultConfirmed: true,
+        });
         observabilityClient.track('auth_signed_in', { method: 'email' });
       } else {
-        const outcome = await gateway.signUp(result.values);
+        const outcome = await gateway.signUp({ ...result.values, adultConfirmed: true });
         observabilityClient.track('auth_signed_up', { method: 'email' });
         if (outcome.requiresEmailConfirmation) {
           setStatusMessage('Check your email to confirm your account.');
@@ -85,10 +99,11 @@ export function AuthScreen({
   };
 
   const submitProvider = async (provider: SocialAuthProvider) => {
+    if (!confirmEligibility()) return;
     setStatusMessage('');
     setIsSubmitting(true);
     try {
-      const outcome = await gateway.signInWithProvider(provider);
+      const outcome = await gateway.signInWithProvider(provider, { adultConfirmed: true });
       if (outcome.completed) {
         observabilityClient.track('auth_signed_in', { method: provider });
       }
@@ -131,6 +146,30 @@ export function AuthScreen({
         </View>
 
         <View style={styles.form}>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Date of birth</Text>
+            <TextInput
+              accessibilityHint="Use four-digit year, two-digit month, and two-digit day"
+              accessibilityLabel="Date of birth"
+              autoComplete="birthdate-full"
+              inputMode="numeric"
+              onChangeText={(value) => {
+                setBirthDate(value);
+                setAgeError('');
+                setStatusMessage('');
+              }}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.muted}
+              style={[styles.input, ageError && styles.inputError]}
+              testID="auth-birth-date-input"
+              value={birthDate}
+            />
+            <Text style={styles.ageNote}>
+              Fitly is for adults 18 and older. Your birth date is checked on this device and is not stored.
+            </Text>
+            {!!ageError && <Text style={styles.error}>{ageError}</Text>}
+          </View>
+
           <View style={styles.socialButtons}>
             <Pressable
               accessibilityLabel="Continue with Google"
@@ -287,6 +326,7 @@ const styles = StyleSheet.create({
   input: { height: 54, paddingHorizontal: 16, borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.surface, fontFamily: fonts.body, fontSize: 16, color: colors.ink },
   inputError: { borderColor: '#B54A4A' },
   error: { marginTop: 6, fontFamily: fonts.body, fontSize: 11, color: '#A13F3F' },
+  ageNote: { marginTop: 6, fontFamily: fonts.body, fontSize: 10, lineHeight: 14, color: colors.muted },
   status: { marginBottom: 14, padding: 12, borderRadius: 10, overflow: 'hidden', backgroundColor: colors.sage, fontFamily: fonts.body, fontSize: 12, lineHeight: 17, color: colors.ink },
   primaryButton: { height: 54, paddingHorizontal: 18, borderRadius: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.ink },
   primaryButtonText: { fontFamily: fonts.body, fontSize: 11, fontWeight: '800', letterSpacing: 1.3, textTransform: 'uppercase', color: colors.white },

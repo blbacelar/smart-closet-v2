@@ -35,6 +35,10 @@ export type ObservabilityClient = {
   captureError: (error: unknown, context: ObservabilityErrorContext) => void;
 };
 
+export type ObservabilityOptions = {
+  analyticsConsent: 'granted' | 'denied' | 'unknown';
+};
+
 const noopAdapter: ObservabilityAdapter = {
   setUser: () => undefined,
   track: () => undefined,
@@ -76,20 +80,28 @@ function safeErrorName(error: unknown): SafeErrorReport['name'] {
     : 'Error';
 }
 
-export function createObservability(adapter: ObservabilityAdapter = noopAdapter): ObservabilityClient {
+export function createObservability(
+  adapter: ObservabilityAdapter = noopAdapter,
+  options: ObservabilityOptions = { analyticsConsent: 'unknown' },
+): ObservabilityClient {
+  const isAllowed = () => options.analyticsConsent === 'granted';
+
   return {
     setUser(userId) {
+      if (!isAllowed()) return;
       callSafely(() => adapter.setUser(userId ? { id: userId } : null));
     },
     track(event, properties = {}) {
+      if (!isAllowed()) return;
       callSafely(() => adapter.track(event, sanitizeProperties(properties)));
     },
     captureError(error, context) {
+      if (!isAllowed()) return;
       callSafely(() => adapter.captureError({ name: safeErrorName(error), ...context }));
     },
   };
 }
 
-// Sentry/PostHog adapters are attached here once their projects and consent
-// policy exist. Until then this boundary is deliberately private and no-op.
+// No analytics or session-replay vendor is installed. An adapter may only be
+// attached after an explicit consent control passes analyticsConsent: granted.
 export const observability = createObservability();

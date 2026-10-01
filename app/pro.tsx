@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, fonts, shadow } from '../src/theme';
 import { observability } from '../src/lib/observability';
+import { betaSubscriptionDisclosure } from '../src/features/subscriptions/subscriptionDisclosure';
 
 const benefits = ['Up to 60 try-ons every day', 'Unlimited pieces in your closet', '3 private body photos', 'Outfit builder & priority generation'];
 
@@ -17,11 +18,10 @@ export default function ProScreen() {
     observability.track('paywall_viewed', { source: safeSource });
   }, [safeSource]);
 
-  const choose = () => {
-    observability.track('subscription_purchase_started', { plan: 'yearly' });
+  const showBetaNotice = () => {
     Alert.alert(
-      'Fitly Pro is coming soon',
-      'Purchases will open after the subscription and marketplace membership plans are finalized.',
+      'Purchases are unavailable in beta',
+      'Nothing was purchased. Store-approved pricing and renewal terms will appear before checkout opens.',
     );
   };
   return (
@@ -40,8 +40,8 @@ export default function ProScreen() {
             <View style={styles.plan}><View><Text style={styles.planTitle}>Monthly</Text><Text style={styles.planSub}>Planned option</Text></View><View><Text style={styles.price}>$7.99</Text><Text style={styles.period}>CAD / month</Text></View></View>
             <View style={[styles.plan, styles.planActive]}><View style={styles.best}><Sparkles size={11} color={colors.forestDark} /><Text style={styles.bestText}>PLANNED VALUE</Text></View><View><Text style={styles.planTitle}>Yearly</Text><Text style={styles.planSub}>Pricing under review</Text></View><View><Text style={styles.price}>$59</Text><Text style={styles.period}>CAD / year</Text></View></View>
           </View>
-          <Pressable accessibilityRole="button" onPress={choose} style={styles.continue}><Zap size={18} color={colors.white} fill={colors.white} /><Text style={styles.continueText}>Notify me about Fitly Pro</Text></Pressable>
-          <Text style={styles.legal}>Purchases are unavailable during beta. Final pricing, trial terms, and store availability are still under review.</Text>
+          <Pressable accessibilityLabel="Purchases unavailable in beta" accessibilityRole="button" onPress={showBetaNotice} style={styles.continue}><Zap size={18} color={colors.white} fill={colors.white} /><Text style={styles.continueText}>Purchases unavailable in beta</Text></Pressable>
+          <Text style={styles.legal}>{betaSubscriptionDisclosure}</Text>
         </View>
       </SafeAreaView>
     </LinearGradient>

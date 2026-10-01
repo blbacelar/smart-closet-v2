@@ -11,6 +11,7 @@ function createGateway(): jest.Mocked<AuthGateway> {
     signIn: jest.fn().mockResolvedValue(undefined),
     signInWithProvider: jest.fn().mockResolvedValue({ completed: true }),
     signUp: jest.fn().mockResolvedValue({ requiresEmailConfirmation: false }),
+    confirmAdultStatus: jest.fn(),
     signOut: jest.fn(),
     deleteAccount: jest.fn(),
   };
@@ -24,10 +25,16 @@ function createTelemetry(): jest.Mocked<ObservabilityClient> {
   };
 }
 
+async function confirmAdult(screen: Awaited<ReturnType<typeof render>>) {
+  await fireEvent.changeText(screen.getByLabelText('Date of birth'), '1990-01-01');
+}
+
 describe('AuthScreen', () => {
   it('validates before sending sign-in credentials', async () => {
     const gateway = createGateway();
     const screen = await render(<AuthScreen gateway={gateway} />);
+
+    await confirmAdult(screen);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
 
@@ -40,6 +47,8 @@ describe('AuthScreen', () => {
     const gateway = createGateway();
     const screen = await render(<AuthScreen gateway={gateway} />);
 
+    await confirmAdult(screen);
+
     await fireEvent.changeText(screen.getByLabelText('Email'), ' BRUNO@Example.com ');
     await fireEvent.changeText(screen.getByLabelText('Password'), 'password123');
     await fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
@@ -48,6 +57,7 @@ describe('AuthScreen', () => {
       expect(gateway.signIn).toHaveBeenCalledWith({
         email: 'bruno@example.com',
         password: 'password123',
+        adultConfirmed: true,
       }),
     );
   });
@@ -58,6 +68,8 @@ describe('AuthScreen', () => {
     const screen = await render(
       <AuthScreen gateway={gateway} observabilityClient={telemetry} />,
     );
+
+    await confirmAdult(screen);
 
     await fireEvent.changeText(screen.getByLabelText('Email'), 'bruno@example.com');
     await fireEvent.changeText(screen.getByLabelText('Password'), 'password123');
@@ -79,9 +91,14 @@ describe('AuthScreen', () => {
     const gateway = createGateway();
     const screen = await render(<AuthScreen gateway={gateway} />);
 
+    await confirmAdult(screen);
+
     await fireEvent.press(screen.getByRole('button', { name: `Continue with ${label}` }));
 
-    await waitFor(() => expect(gateway.signInWithProvider).toHaveBeenCalledWith(provider));
+    await waitFor(() => expect(gateway.signInWithProvider).toHaveBeenCalledWith(
+      provider,
+      { adultConfirmed: true },
+    ));
     expect(gateway.signIn).not.toHaveBeenCalled();
   });
 
@@ -89,6 +106,8 @@ describe('AuthScreen', () => {
     const gateway = createGateway();
     gateway.signUp.mockResolvedValue({ requiresEmailConfirmation: true });
     const screen = await render(<AuthScreen gateway={gateway} />);
+
+    await confirmAdult(screen);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Create an account' }));
     await fireEvent.changeText(screen.getByLabelText('Name'), ' Bruno ');
@@ -101,6 +120,7 @@ describe('AuthScreen', () => {
         displayName: 'Bruno',
         email: 'bruno@example.com',
         password: 'password123',
+        adultConfirmed: true,
       }),
     );
     expect(screen.getByText('Check your email to confirm your account.')).toBeTruthy();
@@ -121,6 +141,8 @@ describe('AuthScreen', () => {
     const gateway = createGateway();
     const screen = await render(<AuthScreen gateway={gateway} />);
 
+    await confirmAdult(screen);
+
     await fireEvent.changeText(screen.getByTestId('auth-email-input'), 'bruno@example.com');
     await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'password123');
     await fireEvent(screen.getByTestId('auth-password-input'), 'submitEditing');
@@ -133,11 +155,26 @@ describe('AuthScreen', () => {
     gateway.signIn.mockRejectedValue(new Error('Invalid login credentials'));
     const screen = await render(<AuthScreen gateway={gateway} />);
 
+    await confirmAdult(screen);
+
     await fireEvent.changeText(screen.getByLabelText('Email'), 'bruno@example.com');
     await fireEvent.changeText(screen.getByLabelText('Password'), 'password123');
     await fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByText('Invalid login credentials')).toBeTruthy();
     expect(screen.getByDisplayValue('bruno@example.com')).toBeTruthy();
+  });
+
+  it('blocks every authentication method until the member is 18', async () => {
+    const gateway = createGateway();
+    const screen = await render(<AuthScreen gateway={gateway} />);
+
+    await fireEvent.changeText(screen.getByLabelText('Date of birth'), '2012-01-01');
+    await fireEvent.press(screen.getByRole('button', { name: 'Continue with Google' }));
+
+    expect(screen.getByText('Fitly is available only to people aged 18 or older.')).toBeTruthy();
+    expect(gateway.signInWithProvider).not.toHaveBeenCalled();
+    expect(gateway.signIn).not.toHaveBeenCalled();
+    expect(gateway.signUp).not.toHaveBeenCalled();
   });
 });

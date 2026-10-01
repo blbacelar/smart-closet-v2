@@ -9,11 +9,13 @@ export type AuthIdentity = {
   id: string;
   email: string;
   displayName: string;
+  adultConfirmed: boolean;
 };
 
 type SignInInput = {
   email: string;
   password: string;
+  adultConfirmed: true;
 };
 
 type SignUpInput = SignInInput & {
@@ -26,14 +28,19 @@ export type AuthGateway = {
   getCurrentIdentity: () => Promise<AuthIdentity | null>;
   subscribe: (listener: (identity: AuthIdentity | null) => void) => () => void;
   signIn: (input: SignInInput) => Promise<void>;
-  signInWithProvider: (provider: SocialAuthProvider) => Promise<{ completed: boolean }>;
+  signInWithProvider: (
+    provider: SocialAuthProvider,
+    input: { adultConfirmed: true },
+  ) => Promise<{ completed: boolean }>;
   signUp: (input: SignUpInput) => Promise<{ requiresEmailConfirmation: boolean }>;
+  confirmAdultStatus: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 };
 
 const deletionFailureMessage = "We couldn't delete your account. Please try again.";
 const socialAuthFailureMessage = 'Could not complete social sign-in. Try again.';
+const adultConfirmationFailureMessage = 'Could not confirm account eligibility. Try again.';
 
 function requireClient() {
   if (!supabase) {
@@ -58,6 +65,7 @@ function toIdentity(user: User | null): AuthIdentity | null {
       typeof metadataName === 'string' && metadataName.trim()
         ? metadataName.trim()
         : email.split('@')[0] || 'Fitly member',
+    adultConfirmed: user.user_metadata?.adult_confirmed === true,
   };
 }
 
@@ -73,6 +81,21 @@ function readOAuthTokens(callbackUrl: string) {
   }
 
   return { access_token: accessToken, refresh_token: refreshToken };
+}
+
+async function confirmAdultStatus(client: ReturnType<typeof requireClient>) {
+  const { error } = await client.rpc('confirm_adult_status');
+  if (error) {
+    await client.auth.signOut({ scope: 'local' });
+    throw new Error(adultConfirmationFailureMessage);
+  }
+
+  const { error: metadataError } = await client.auth.updateUser({
+    data: { adult_confirmed: true },
+  });
+  if (metadataError) {
+    throw new Error(adultConfirmationFailureMessage);
+  }
 }
 
 export const supabaseAuthGateway: AuthGateway = {
@@ -101,15 +124,18 @@ export const supabaseAuthGateway: AuthGateway = {
     return () => data.subscription.unsubscribe();
   },
 
-  async signIn(input) {
+  async signIn({ email, password, adultConfirmed }) {
     const client = requireClient();
-    const { error } = await client.auth.signInWithPassword(input);
+    const { error } = await client.auth.signInWithPassword({ email, password });
     if (error) {
       throw error;
     }
+    if (adultConfirmed) {
+      await confirmAdultStatus(client);
+    }
   },
 
-  async signInWithProvider(provider) {
+  async signInWithProvider(provider, { adultConfirmed }) {
     const client = requireClient();
     const redirectTo = Linking.createURL('auth/callback');
     const { data, error } = await client.auth.signInWithOAuth({
@@ -132,21 +158,28 @@ export const supabaseAuthGateway: AuthGateway = {
     if (sessionError) {
       throw new Error(socialAuthFailureMessage);
     }
+    if (adultConfirmed) {
+      await confirmAdultStatus(client);
+    }
     return { completed: true };
   },
 
-  async signUp({ displayName, email, password }) {
+  async signUp({ displayName, email, password, adultConfirmed }) {
     const client = requireClient();
     const { data, error } = await client.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName } },
+      options: { data: { display_name: displayName, adult_confirmed: adultConfirmed } },
     });
     if (error) {
       throw error;
     }
 
     return { requiresEmailConfirmation: !data.session };
+  },
+
+  async confirmAdultStatus() {
+    await confirmAdultStatus(requireClient());
   },
 
   async signOut() {

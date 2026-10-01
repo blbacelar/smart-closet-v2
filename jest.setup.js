@@ -10,8 +10,11 @@ jest.mock('lucide-react-native', () => {
 
   return {
     ArrowRight: Icon,
+    ArrowLeft: Icon,
     Camera: Icon,
     Check: Icon,
+    Copyright: Icon,
+    ExternalLink: Icon,
     Eye: Icon,
     Gift: Icon,
     ImagePlus: Icon,
@@ -24,6 +27,7 @@ jest.mock('lucide-react-native', () => {
     Ruler: Icon,
     Sparkles: Icon,
     Shirt: Icon,
+    Shield: Icon,
     Tag: Icon,
     ThumbsDown: Icon,
     ThumbsUp: Icon,

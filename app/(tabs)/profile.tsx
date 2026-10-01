@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Bell, ChevronRight, Globe2, LogOut, Shield, Trash2 } from 'lucide-react-native';
+import { Bell, ChevronRight, Copyright, Globe2, LogOut, Shield, Trash2 } from 'lucide-react-native';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/providers/AuthProvider';
@@ -17,6 +17,7 @@ const settings = [
   { Icon: Shield, label: 'Privacy & visibility' },
   { Icon: Bell, label: 'Notifications' },
   { Icon: Globe2, label: 'Language' },
+  { Icon: Copyright, label: 'Copyright report' },
   { Icon: LogOut, label: 'Sign out' },
   { Icon: Trash2, label: 'Delete account' },
 ];
@@ -33,6 +34,10 @@ export default function ProfileScreen() {
   const handleSettingPress = async (label: string) => {
     if (label === 'Delete account') {
       router.push('/delete-account');
+      return;
+    }
+    if (label === 'Copyright report') {
+      router.push('/copyright-report');
       return;
     }
     const notice = getProfileSettingNotice(label);

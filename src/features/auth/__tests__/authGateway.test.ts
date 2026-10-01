@@ -29,11 +29,13 @@ function createClient() {
       }),
       setSession: jest.fn().mockResolvedValue({ error: null }),
       signUp: jest.fn().mockResolvedValue({ data: { session: null }, error: null }),
+      updateUser: jest.fn().mockResolvedValue({ data: { user: null }, error: null }),
       signOut: jest.fn().mockResolvedValue({ error: null }),
     },
     functions: {
       invoke: jest.fn().mockResolvedValue({ data: { deleted: true }, error: null }),
     },
+    rpc: jest.fn().mockResolvedValue({ data: null, error: null }),
   };
 }
 
@@ -64,6 +66,7 @@ describe('supabaseAuthGateway', () => {
       id: 'user-1',
       email: 'bruno@example.com',
       displayName: 'Bruno Bacelar',
+      adultConfirmed: false,
     });
   });
 
@@ -124,6 +127,7 @@ describe('supabaseAuthGateway', () => {
       id: 'user-1',
       email: 'bruno@example.com',
       displayName: 'Bruno Bacelar',
+      adultConfirmed: false,
     });
     expect(listener).toHaveBeenNthCalledWith(2, null);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
@@ -138,10 +142,21 @@ describe('supabaseAuthGateway', () => {
   });
 
   it('signs in with a password and propagates provider errors', async () => {
-    const input = { email: 'bruno@example.com', password: 'password123' };
+    const input = {
+      email: 'bruno@example.com',
+      password: 'password123',
+      adultConfirmed: true as const,
+    };
 
     await supabaseAuthGateway.signIn(input);
-    expect(mockSupabase.auth.signInWithPassword).toHaveBeenCalledWith(input);
+    expect(mockSupabase.auth.signInWithPassword).toHaveBeenCalledWith({
+      email: input.email,
+      password: input.password,
+    });
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('confirm_adult_status');
+    expect(mockSupabase.auth.updateUser).toHaveBeenCalledWith({
+      data: { adult_confirmed: true },
+    });
 
     const error = new Error('Invalid login credentials');
     mockSupabase.auth.signInWithPassword.mockResolvedValue({ error });
@@ -149,7 +164,10 @@ describe('supabaseAuthGateway', () => {
   });
 
   it.each(['google', 'apple'] as const)('completes %s OAuth in a private auth session', async (provider) => {
-    await expect(supabaseAuthGateway.signInWithProvider(provider)).resolves.toEqual({ completed: true });
+    await expect(supabaseAuthGateway.signInWithProvider(
+      provider,
+      { adultConfirmed: true },
+    )).resolves.toEqual({ completed: true });
 
     expect(mockSupabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider,
@@ -167,12 +185,19 @@ describe('supabaseAuthGateway', () => {
       access_token: 'access-1',
       refresh_token: 'refresh-1',
     });
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('confirm_adult_status');
+    expect(mockSupabase.auth.updateUser).toHaveBeenCalledWith({
+      data: { adult_confirmed: true },
+    });
   });
 
   it('does not create a session when social sign-in is cancelled', async () => {
     mockOpenAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
 
-    await expect(supabaseAuthGateway.signInWithProvider('google')).resolves.toEqual({ completed: false });
+    await expect(supabaseAuthGateway.signInWithProvider(
+      'google',
+      { adultConfirmed: true },
+    )).resolves.toEqual({ completed: false });
     expect(mockSupabase.auth.setSession).not.toHaveBeenCalled();
   });
 
@@ -182,7 +207,10 @@ describe('supabaseAuthGateway', () => {
       url: 'fitly://auth/callback#error=access_denied',
     });
 
-    await expect(supabaseAuthGateway.signInWithProvider('apple')).rejects.toThrow(
+    await expect(supabaseAuthGateway.signInWithProvider(
+      'apple',
+      { adultConfirmed: true },
+    )).rejects.toThrow(
       'Could not complete social sign-in. Try again.',
     );
   });
@@ -192,6 +220,7 @@ describe('supabaseAuthGateway', () => {
       displayName: 'Bruno',
       email: 'bruno@example.com',
       password: 'password123',
+      adultConfirmed: true as const,
     };
 
     await expect(supabaseAuthGateway.signUp(input)).resolves.toEqual({
@@ -200,7 +229,7 @@ describe('supabaseAuthGateway', () => {
     expect(mockSupabase.auth.signUp).toHaveBeenCalledWith({
       email: input.email,
       password: input.password,
-      options: { data: { display_name: input.displayName } },
+      options: { data: { display_name: input.displayName, adult_confirmed: true } },
     });
 
     mockSupabase.auth.signUp.mockResolvedValue({ data: { session: { user } }, error: null });
@@ -218,6 +247,7 @@ describe('supabaseAuthGateway', () => {
         displayName: 'Bruno',
         email: 'bruno@example.com',
         password: 'password123',
+        adultConfirmed: true,
       }),
     ).rejects.toBe(error);
   });
@@ -262,7 +292,31 @@ describe('supabaseAuthGateway', () => {
     mockSupabase = null;
 
     await expect(
-      supabaseAuthGateway.signIn({ email: 'bruno@example.com', password: 'password123' }),
+      supabaseAuthGateway.signIn({
+        email: 'bruno@example.com',
+        password: 'password123',
+        adultConfirmed: true,
+      }),
     ).rejects.toThrow('Supabase is not configured');
+  });
+
+  it('clears the session when the server cannot record adult eligibility', async () => {
+    mockSupabase.rpc.mockResolvedValue({ data: null, error: new Error('missing migration') });
+
+    await expect(supabaseAuthGateway.signIn({
+      email: 'bruno@example.com',
+      password: 'password123',
+      adultConfirmed: true,
+    })).rejects.toThrow('Could not confirm account eligibility. Try again.');
+    expect(mockSupabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  it('confirms an existing signed-in beta account', async () => {
+    await supabaseAuthGateway.confirmAdultStatus();
+
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('confirm_adult_status');
+    expect(mockSupabase.auth.updateUser).toHaveBeenCalledWith({
+      data: { adult_confirmed: true },
+    });
   });
 });

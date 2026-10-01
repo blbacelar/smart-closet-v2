@@ -9,9 +9,28 @@ function adapter() {
 }
 
 describe('privacy-safe observability', () => {
-  it('identifies a member using only the opaque user id', () => {
+  const consent = { analyticsConsent: 'granted' as const };
+
+  it('does not initialize or call telemetry before explicit consent', () => {
     const target = adapter();
     const client = createObservability(target);
+
+    client.setUser('user-1');
+    client.track('app_opened', { source: 'launch' });
+    client.captureError(new Error('failure'), {
+      operation: 'render',
+      code: 'unexpected',
+      fatal: false,
+    });
+
+    expect(target.setUser).not.toHaveBeenCalled();
+    expect(target.track).not.toHaveBeenCalled();
+    expect(target.captureError).not.toHaveBeenCalled();
+  });
+
+  it('identifies a member using only the opaque user id', () => {
+    const target = adapter();
+    const client = createObservability(target, consent);
 
     client.setUser('user-1');
     client.setUser(null);
@@ -22,7 +41,7 @@ describe('privacy-safe observability', () => {
 
   it('removes identifiers, image details, URLs, secrets, and non-primitive values from events', () => {
     const target = adapter();
-    const client = createObservability(target);
+    const client = createObservability(target, consent);
 
     client.track('tryon_requested', {
       category: 'top',
@@ -45,7 +64,7 @@ describe('privacy-safe observability', () => {
 
   it('captures only a safe error descriptor, never the original message or object', () => {
     const target = adapter();
-    const client = createObservability(target);
+    const client = createObservability(target, consent);
     const error = new Error('Failed for member@example.com at user-1/body.jpg using secret-token');
 
     client.captureError(error, {
@@ -76,7 +95,7 @@ describe('privacy-safe observability', () => {
     target.captureError.mockImplementation(() => {
       throw new Error('vendor unavailable');
     });
-    const client = createObservability(target);
+    const client = createObservability(target, consent);
 
     expect(() => client.setUser('user-1')).not.toThrow();
     expect(() => client.track('app_opened', { source: 'launch' })).not.toThrow();
@@ -89,7 +108,7 @@ describe('privacy-safe observability', () => {
 
   it('supports the complete activation, fitting, and paywall funnel taxonomy', () => {
     const target = adapter();
-    const client = createObservability(target);
+    const client = createObservability(target, consent);
     const funnelEvents = [
       'onboarding_completed',
       'body_photo_uploaded',
