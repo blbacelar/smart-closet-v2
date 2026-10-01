@@ -20,7 +20,7 @@ describe('garmentPicker', () => {
 
     await expect(createGarmentPicker(imagePicker).pick('camera')).resolves.toEqual({
       status: 'selected',
-      asset: selectedResult.assets[0],
+      assets: selectedResult.assets,
     });
     expect(imagePicker.requestCameraPermissionsAsync).toHaveBeenCalledTimes(1);
     expect(imagePicker.launchCameraAsync).toHaveBeenCalledWith({
@@ -41,14 +41,31 @@ describe('garmentPicker', () => {
     expect(imagePicker.launchCameraAsync).not.toHaveBeenCalled();
   });
 
-  it('opens the library without requesting camera permission', async () => {
+  it('opens the library for an ordered batch of up to five photos', async () => {
     const imagePicker = createImagePicker();
-    imagePicker.launchImageLibraryAsync.mockResolvedValue(selectedResult);
+    const batchResult = {
+      canceled: false as const,
+      assets: [
+        selectedResult.assets[0],
+        { uri: 'file:///pants.jpg', base64: 'encoded-two', width: 1400, height: 1800 },
+      ],
+    };
+    imagePicker.launchImageLibraryAsync.mockResolvedValue(batchResult);
 
-    await expect(createGarmentPicker(imagePicker).pick('library')).resolves.toMatchObject({
+    await expect(createGarmentPicker(imagePicker).pick('library')).resolves.toEqual({
       status: 'selected',
+      assets: batchResult.assets,
     });
     expect(imagePicker.requestCameraPermissionsAsync).not.toHaveBeenCalled();
+    expect(imagePicker.launchImageLibraryAsync).toHaveBeenCalledWith({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      allowsMultipleSelection: true,
+      orderedSelection: true,
+      selectionLimit: 5,
+      base64: true,
+      quality: 0.8,
+    });
   });
 
   it('preserves cancellation', async () => {
