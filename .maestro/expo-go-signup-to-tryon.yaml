@@ -1,8 +1,9 @@
-appId: app.fitly.mobile
-name: Signup to private AI fitting
+appId: host.exp.Exponent
+name: Expo Go signup to private AI fitting
 tags:
   - phase-one
-  - smoke
+  - expo-go
+  - provider
 ---
 - addMedia:
     - fixtures/synthetic-adult-body.jpg
@@ -10,6 +11,15 @@ tags:
 - launchApp:
     clearState: true
     clearKeychain: true
+- openLink: ${EXPO_URL}
+- waitForAnimationToEnd
+- tapOn:
+    text: "Continue"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Close"
+    optional: true
 - assertVisible: "Welcome back."
 - tapOn: "Create an account"
 - tapOn:
@@ -31,7 +41,6 @@ tags:
 - assertVisible: "Your closet, on you."
 - tapOn: "Start my closet"
 
-# Add the first gallery image as the approved body-photo fixture.
 - tapOn: "Add body photo"
 - tapOn: "Choose from library"
 - waitForAnimationToEnd
@@ -44,23 +53,16 @@ tags:
     visible: "The Studio"
     timeout: 30000
 
-# Select the second gallery image and save it with a manual category so the
-# garment path does not depend on automatic tagging.
 - tapOn: "Add piece"
 - tapOn: "Choose garment photos"
 - waitForAnimationToEnd
 - tapOn:
     id: "PXGGridLayout-Info"
     index: 0
-- tapOn:
-    text: "Add"
-    optional: true
-- tapOn:
-    text: "Done"
-    optional: true
+- tapOn: "Done"
 - assertVisible: "Selected garment photo"
 - tapOn: "Garment name"
-- inputText: "E2E linen shirt"
+- inputText: "E2E green overshirt"
 - pressKey: Enter
 - tapOn: "Tops category"
 - tapOn: "Add to my closet"

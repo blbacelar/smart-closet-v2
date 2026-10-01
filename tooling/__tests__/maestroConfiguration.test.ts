@@ -4,6 +4,9 @@ import { resolve } from 'node:path';
 const root = resolve(__dirname, '../..');
 const flowPath = resolve(root, '.maestro/signup-to-tryon.yaml');
 const expoGoFlowPath = resolve(root, '.maestro/expo-go-auth-smoke.yaml');
+const expoGoActivationFlowPath = resolve(root, '.maestro/expo-go-signup-to-tryon.yaml');
+const bodyFixturePath = resolve(root, '.maestro/fixtures/synthetic-adult-body.jpg');
+const garmentFixturePath = resolve(root, '.maestro/fixtures/synthetic-green-overshirt.jpg');
 const guidePath = resolve(root, '.maestro/README.md');
 
 describe('Maestro activation journey', () => {
@@ -13,6 +16,11 @@ describe('Maestro activation journey', () => {
 
     expect(flow).toContain('appId: app.fitly.mobile');
     expect(flow).toContain('Create an account');
+    expect(flow).toContain('auth-name-input');
+    expect(flow).toContain('auth-password-input');
+    expect(flow.match(/pressKey: Enter/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(flow).not.toContain('hideKeyboard');
+    expect(flow).toContain('PXGGridLayout-Info');
     expect(flow).toContain('Start my closet');
     expect(flow).toContain('Save private photo');
     expect(flow).toContain('Add to my closet');
@@ -26,9 +34,9 @@ describe('Maestro activation journey', () => {
     const guide = readFileSync(guidePath, 'utf8');
 
     expect(guide).toContain('E2E_EMAIL');
-    expect(guide).toContain('E2E_BODY_PHOTO');
-    expect(guide).toContain('E2E_GARMENT_PHOTO');
-    expect(guide).toContain('funded Gemini');
+    expect(guide).toContain('synthetic-adult-body.jpg');
+    expect(guide).toContain('synthetic-green-overshirt.jpg');
+    expect(guide).toContain('available prepaid credits');
     expect(guide).not.toMatch(/sb_(?:secret|publishable)_[A-Za-z0-9_-]+/);
   });
 
@@ -42,5 +50,18 @@ describe('Maestro activation journey', () => {
     expect(flow).toContain('Continue with Apple');
     expect(flow).toContain('Create an account');
     expect(flow).not.toContain('inputText:');
+  });
+
+  it('provides synthetic fixtures and a real Expo Go provider journey', () => {
+    expect(existsSync(expoGoActivationFlowPath)).toBe(true);
+    expect(existsSync(bodyFixturePath)).toBe(true);
+    expect(existsSync(garmentFixturePath)).toBe(true);
+
+    const flow = readFileSync(expoGoActivationFlowPath, 'utf8');
+    expect(flow).toContain('appId: host.exp.Exponent');
+    expect(flow).toContain('addMedia:');
+    expect(flow).toContain('Save private photo');
+    expect(flow).toContain('Add to my closet');
+    expect(flow).toContain('Your Fitly fitting is ready');
   });
 });
