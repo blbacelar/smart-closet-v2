@@ -33,6 +33,7 @@ Prerequisites:
 
 - Install Maestro and a Fitly preview build on a simulator/emulator.
 - Use a fresh `E2E_EMAIL` on every run and an `E2E_PASSWORD` of at least eight characters. Development email confirmation must remain disabled for this test project.
+- The flow enters a synthetic adult date solely to exercise the 18+ eligibility gate. Fitly stores only the resulting confirmation timestamp, not the date.
 - The committed synthetic fixtures are used automatically. Replace them only with non-personal test media that satisfy the app's size/orientation rules; never commit personal photos.
 - The linked Supabase project must have deployed migrations/functions and a Gemini project with available prepaid credits. A successful fitting intentionally spends one real provider request; Google returns HTTP 402 when those credits are depleted.
 

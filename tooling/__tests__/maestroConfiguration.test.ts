@@ -16,6 +16,8 @@ describe('Maestro activation journey', () => {
 
     expect(flow).toContain('appId: app.fitly.mobile');
     expect(flow).toContain('Create an account');
+    expect(flow).toContain('auth-birth-date-input');
+    expect(flow).toContain('inputText: "1990-01-01"');
     expect(flow).toContain('auth-name-input');
     expect(flow).toContain('auth-password-input');
     expect(flow.match(/pressKey: Enter/g)?.length).toBeGreaterThanOrEqual(3);
@@ -27,6 +29,7 @@ describe('Maestro activation journey', () => {
     expect(flow).toContain('Try it on');
     expect(flow).toContain('Your Fitly fitting is ready');
     expect(flow).toContain('addMedia:');
+    expect(flow).toContain('auth-birth-date-input');
   });
 
   it('documents its isolated test-account and provider prerequisites', () => {

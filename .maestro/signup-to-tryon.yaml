@@ -11,7 +11,13 @@ tags:
     clearState: true
     clearKeychain: true
 - assertVisible: "Welcome back."
+- scrollUntilVisible:
+    element: "Create an account"
+    direction: DOWN
 - tapOn: "Create an account"
+- tapOn:
+    id: "auth-birth-date-input"
+- inputText: "1990-01-01"
 - tapOn:
     id: "auth-name-input"
 - inputText: "Fitly Test Member"

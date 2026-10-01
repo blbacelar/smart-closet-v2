@@ -15,8 +15,14 @@ tags:
 - assertVisible: "Welcome back."
 - assertVisible: "Continue with Google"
 - assertVisible: "Continue with Apple"
+- scrollUntilVisible:
+    element: "Create an account"
+    direction: DOWN
 - tapOn: "Create an account"
 - assertVisible: "Start your closet."
 - assertVisible: "Create account"
+- scrollUntilVisible:
+    element: "Sign in instead"
+    direction: DOWN
 - tapOn: "Sign in instead"
 - assertVisible: "Welcome back."
