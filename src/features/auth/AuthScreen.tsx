@@ -107,7 +107,9 @@ export function AuthScreen({
           styles.content,
           { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 24 },
         ]}
+        keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
+        testID="auth-scroll"
       >
         <View>
           <View style={styles.wordmarkRow}>
@@ -167,6 +169,7 @@ export function AuthScreen({
                 placeholder="Your name"
                 placeholderTextColor={colors.muted}
                 style={[styles.input, errors.displayName && styles.inputError]}
+                testID="auth-name-input"
                 value={fields.displayName}
               />
               {errors.displayName && <Text style={styles.error}>{errors.displayName}</Text>}
@@ -184,6 +187,7 @@ export function AuthScreen({
               placeholder="you@example.com"
               placeholderTextColor={colors.muted}
               style={[styles.input, errors.email && styles.inputError]}
+              testID="auth-email-input"
               value={fields.email}
             />
             {errors.email && <Text style={styles.error}>{errors.email}</Text>}
@@ -200,6 +204,7 @@ export function AuthScreen({
               placeholderTextColor={colors.muted}
               secureTextEntry
               style={[styles.input, errors.password && styles.inputError]}
+              testID="auth-password-input"
               value={fields.password}
             />
             {errors.password && <Text style={styles.error}>{errors.password}</Text>}
