@@ -1,5 +1,5 @@
 import { ArrowRight, Lock, Sparkles } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -38,6 +38,8 @@ export function AuthScreen({
   const [errors, setErrors] = useState<AuthFieldErrors>({});
   const [statusMessage, setStatusMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const emailInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
 
   const isSignIn = mode === 'sign-in';
 
@@ -166,8 +168,10 @@ export function AuthScreen({
                 autoCapitalize="words"
                 autoComplete="name"
                 onChangeText={(value) => updateField('displayName', value)}
+                onSubmitEditing={() => emailInputRef.current?.focus()}
                 placeholder="Your name"
                 placeholderTextColor={colors.muted}
+                returnKeyType="next"
                 style={[styles.input, errors.displayName && styles.inputError]}
                 testID="auth-name-input"
                 value={fields.displayName}
@@ -184,8 +188,11 @@ export function AuthScreen({
               autoComplete="email"
               inputMode="email"
               onChangeText={(value) => updateField('email', value)}
+              onSubmitEditing={() => passwordInputRef.current?.focus()}
               placeholder="you@example.com"
               placeholderTextColor={colors.muted}
+              ref={emailInputRef}
+              returnKeyType="next"
               style={[styles.input, errors.email && styles.inputError]}
               testID="auth-email-input"
               value={fields.email}
@@ -200,8 +207,11 @@ export function AuthScreen({
               autoCapitalize="none"
               autoComplete={isSignIn ? 'current-password' : 'new-password'}
               onChangeText={(value) => updateField('password', value)}
+              onSubmitEditing={() => void submit()}
               placeholder="At least 8 characters"
               placeholderTextColor={colors.muted}
+              ref={passwordInputRef}
+              returnKeyType="done"
               secureTextEntry
               style={[styles.input, errors.password && styles.inputError]}
               testID="auth-password-input"
