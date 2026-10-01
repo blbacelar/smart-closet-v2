@@ -106,6 +106,16 @@ describe('AuthScreen', () => {
     expect(screen.getByText('Check your email to confirm your account.')).toBeTruthy();
   });
 
+  it('exposes stable native identifiers for keyboard-driven authentication', async () => {
+    const screen = await render(<AuthScreen gateway={createGateway()} />);
+
+    expect(screen.getByTestId('auth-email-input')).toBeTruthy();
+    expect(screen.getByTestId('auth-password-input')).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Create an account' }));
+    expect(screen.getByTestId('auth-name-input')).toBeTruthy();
+  });
+
   it('shows authentication errors without losing the form', async () => {
     const gateway = createGateway();
     gateway.signIn.mockRejectedValue(new Error('Invalid login credentials'));
