@@ -110,11 +110,22 @@ describe('AuthScreen', () => {
     const screen = await render(<AuthScreen gateway={createGateway()} />);
 
     expect(screen.getByTestId('auth-scroll')).toHaveProp('keyboardDismissMode', 'on-drag');
-    expect(screen.getByTestId('auth-email-input')).toBeTruthy();
-    expect(screen.getByTestId('auth-password-input')).toBeTruthy();
+    expect(screen.getByTestId('auth-email-input')).toHaveProp('returnKeyType', 'next');
+    expect(screen.getByTestId('auth-password-input')).toHaveProp('returnKeyType', 'done');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Create an account' }));
-    expect(screen.getByTestId('auth-name-input')).toBeTruthy();
+    expect(screen.getByTestId('auth-name-input')).toHaveProp('returnKeyType', 'next');
+  });
+
+  it('submits sign-in from the password keyboard action', async () => {
+    const gateway = createGateway();
+    const screen = await render(<AuthScreen gateway={gateway} />);
+
+    await fireEvent.changeText(screen.getByTestId('auth-email-input'), 'bruno@example.com');
+    await fireEvent.changeText(screen.getByTestId('auth-password-input'), 'password123');
+    await fireEvent(screen.getByTestId('auth-password-input'), 'submitEditing');
+
+    await waitFor(() => expect(gateway.signIn).toHaveBeenCalled());
   });
 
   it('shows authentication errors without losing the form', async () => {
