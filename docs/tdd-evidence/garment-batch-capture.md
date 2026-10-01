@@ -53,7 +53,7 @@ Result: all 14 focused assertions passed. The minimal implementation is preserve
 ## Known Gaps
 
 - The native system picker interaction still needs a short physical-device smoke test because Jest verifies the Expo adapter contract rather than rendering iOS or Android system UI.
-- Live background processing remains dependent on the pending linked Supabase deployment recorded in issue #14; batch capture itself requires no new database schema.
+- Live background processing and automatic category detection are deployed. A paid real-image Gemini result still depends on provider credits, and optional background cleanup still depends on its provider credential.
 
 ## Merge Evidence
 

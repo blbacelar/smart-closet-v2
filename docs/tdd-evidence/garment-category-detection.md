@@ -60,7 +60,14 @@ Result: the migration applied cleanly, database lint reported no findings, and a
 
 A successful paid real-image request still depends on the configured Google project having available credits. The automated suite uses deterministic provider responses and does not spend API credits.
 
-The linked Supabase migration and Edge Function deployment are pending because this development shell has no saved Supabase CLI access token. No remote schema change was attempted without an authenticated preflight.
+## Deployment Evidence
+
+- Deployed to the linked SmartCloset project on 2026-09-30 after an authenticated project preflight.
+- Migration `20260922030000_garment_category_detection` completed successfully and is recorded in `supabase_migrations.schema_migrations`.
+- Live read-only verification confirmed the garment insert policy accepts Auto (`category is null`), the nine-argument completion function exists, and the AI ledger constraint accepts `garment_tagging`.
+- `process-garment` is active as deployed version 6.
+- The server-side `GOOGLE_GEMINI_API_KEY` secret is present; no secret values were read or printed.
+- The 20 focused migration, handler, and processor tests passed again after deployment.
 
 ## Merge Evidence
 
