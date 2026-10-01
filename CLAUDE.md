@@ -8,24 +8,24 @@ Fitly is a privacy-first Expo mobile app for building a digital closet and gener
 
 ## Stack
 
-- Expo SDK 54, React Native 0.81, React 19, TypeScript strict mode
+- Expo SDK 57, React Native 0.86, React 19.2, TypeScript strict mode
 - Expo Router for file-based navigation
 - Supabase for Auth, Postgres, private Storage, RLS, and Edge Functions
 - TanStack Query for server state and Zustand for transient client state
-- StyleSheet and shared tokens in `src/theme.ts`
+- StyleSheet and shared color, type, spacing, radius, shadow, and motion tokens in `src/theme.ts`
 
 ## Current State
 
 - The marketplace and some secondary screens remain a polished prototype backed by seeded data in `src/data.ts` and `src/store.ts`.
 - Supabase is configured in `src/lib/supabase.ts` and the initial Phase 1 schema is deployed.
-- Email/password authentication, persisted sessions, protected routing, and local-device sign-out are implemented.
+- Email/password authentication, Apple/Google OAuth client flows, persisted sessions, protected routing, first-run onboarding, and local-device sign-out are implemented. Social providers still require their external Supabase credentials.
 - Body-photo camera/library capture, local validation, private Storage persistence, signed display URLs, and plan limits are implemented.
 - Garment camera/library capture, validation, private Storage persistence, signed display URLs, live Closet/Studio queries, and Free-plan limits are implemented.
 - The privileged garment background-removal worker, state machine, cost ledger, and Closet retry behavior are implemented and deployed.
 - The cleanup provider still requires `REMOVE_BG_API_KEY` and `REMOVE_BG_COST_USD` as server-side secrets before a live image can complete.
-- The Studio uses persisted private try-on jobs, server-authoritative quota, deterministic caching, one-time refunds, and a deployed OpenRouter image adapter instead of a simulated timer.
-- OpenRouter is pinned to the ZDR-capable Google Vertex endpoint for `google/gemini-3.1-flash-image`; `OPENROUTER_API_KEY` is configured as a server-side secret and a real-image smoke test remains.
-- After provider smoke testing, the next implementation boundary is persisted feedback plus stuck-job reconciliation and Realtime delivery.
+- The Studio uses persisted private try-on jobs, server-authoritative quota, deterministic caching, one-time refunds, and a deployed direct Google Gemini image adapter instead of a simulated timer.
+- `GOOGLE_GEMINI_API_KEY` is configured as a server-side secret; the Google project still needs available prepaid credits for a successful real-image smoke test.
+- Persisted feedback, owner-filtered Realtime delivery, polling fallback, and scheduled stuck-job reconciliation are implemented.
 - Do not present simulated timers or seeded records as working AI/backend behavior.
 
 ## Commands

@@ -109,7 +109,9 @@ The intended live flow is:
 - Expo SDK 57 compatibility for the current App Store Expo Go release.
 - Supabase client with persisted mobile sessions and app-state token refresh.
 - Email/password sign-in and account creation with user profile metadata.
+- Apple/Google OAuth client flows through private system auth sessions; provider dashboard credentials remain external setup.
 - Session-gated Expo Router routes, launch-time session restoration, and current-device sign-out.
+- Persisted first-run onboarding with least-privilege profile updates.
 - Jest/React Native Testing Library setup with an enforced 80% global coverage floor.
 - Camera/library body-photo capture with local size, resolution, and orientation validation.
 - Private body-photo Storage uploads, database metadata, signed URLs, and TanStack Query caching.
@@ -145,11 +147,11 @@ The intended live flow is:
 
 ## Not Implemented Yet
 
-- User-facing body-photo validation guidance, rejection details, and manual retry controls.
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment color tagging; category detection is implemented, while color remains member-selected.
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
 - RevenueCat subscriptions and real Pro entitlement checks.
+- Google and Apple social-provider credentials and redirect allowlists in Supabase; Apple production setup requires an Apple Developer account.
 - Sentry/GlitchTip and PostHog projects, adapters, credentials, consent policy, and broader event instrumentation; the current observability adapter intentionally sends nothing.
 - Migration of existing screen copy into the localization catalog and a user-facing language selector.
 - Broader feature/E2E tests and the `EXPO_TOKEN` needed for manual EAS builds.
