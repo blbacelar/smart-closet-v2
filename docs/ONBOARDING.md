@@ -102,7 +102,7 @@ The intended live flow is:
 
 - Mobile-first Fitly visual system and four-tab navigation.
 - Closet browsing and category filtering.
-- Camera/library garment selection and editable garment metadata.
+- Single-camera or ordered five-photo library garment capture with independent metadata, invalid-photo filtering, and duplicate-safe partial retry.
 - Default automatic garment category detection with a manual category override that always wins.
 - Persisted try-on selection, progress, private result display, server-authoritative quota UI, and owner-only fit feedback.
 - Marketplace preview, Pro paywall, and privacy/account settings UI.
