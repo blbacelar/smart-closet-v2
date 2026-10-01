@@ -28,6 +28,22 @@ describe('privacy-safe observability', () => {
     expect(target.captureError).not.toHaveBeenCalled();
   });
 
+  it('starts sending only after consent and forgets the adapter identity when revoked', () => {
+    const target = adapter();
+    const client = createObservability(target);
+
+    client.setUser('user-1');
+    client.setAnalyticsConsent('granted');
+    client.track('app_opened', { source: 'launch' });
+    client.setAnalyticsConsent('denied');
+    client.track('app_opened', { source: 'resume' });
+
+    expect(client.getAnalyticsConsent()).toBe('denied');
+    expect(target.setUser).toHaveBeenNthCalledWith(1, { id: 'user-1' });
+    expect(target.setUser).toHaveBeenNthCalledWith(2, null);
+    expect(target.track).toHaveBeenCalledTimes(1);
+  });
+
   it('identifies a member using only the opaque user id', () => {
     const target = adapter();
     const client = createObservability(target, consent);

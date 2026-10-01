@@ -56,7 +56,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `app/delete-account.tsx` — destructive-confirmation route for permanent Phase 1 account deletion.
 - `src/store.ts` — current in-memory prototype state.
 - `src/lib/supabase.ts` — shared authenticated Supabase client.
-- `src/lib/observability.ts` — allowlisted, privacy-safe analytics and error-reporting boundary; currently backed by a no-op adapter.
+- `src/lib/observability.ts` — allowlisted, privacy-safe analytics and error-reporting boundary backed by consent-gated first-party Supabase storage.
 - `src/i18n/i18n.tsx` — device-locale resolution, English/Brazilian Portuguese messages, and interpolation.
 - `src/providers/MotionPreferenceProvider.tsx` — system reduced-motion preference and duration helper.
 - `src/components/AppErrorBoundary.tsx` — accessible global render-error fallback and safe error capture.
@@ -140,12 +140,12 @@ The intended live flow is:
 - Supabase security advisor verified with zero errors and zero warnings.
 - GitHub Actions quality checks for locked install, typecheck, coverage, Expo Doctor, web export, and critical production advisories.
 - Manual EAS build workflow defaulting to an Android preview, plus weekly npm and GitHub Actions dependency monitoring.
-- Privacy-safe analytics/error hooks that allowlist event data, strip sensitive fields, and never forward raw error messages or image references.
+- Consent-gated first-party analytics/error hooks that allowlist event data, strip sensitive fields, never forward raw error messages or image references, and expire rows after 90 days.
 - Activation, authentication, garment, try-on, paywall, and account-deletion funnel events routed through that privacy-safe boundary.
 - Service-role AI cost aggregation with hourly warning/critical alert records.
 - A Maestro signup-to-private-fitting smoke flow ready for an isolated preview build and funded provider.
 - Accessible global render-error recovery, system reduced-motion detection, and English/Brazilian Portuguese localization scaffolding.
-- A 42-assertion pgTAP suite covering RLS, anonymous access, owner isolation, private Storage boundaries, allowed member mutations, and atomic garment-category completion.
+- A 47-assertion pgTAP suite covering RLS, anonymous access, owner isolation, private Storage boundaries, consent-gated event insertion, allowed member mutations, and atomic garment-category completion.
 - A CI PII-leak gate that blocks runtime console logging, committed secrets, private signed Storage URLs, personal contact details, and developer home-directory paths without echoing detected values.
 - Explicit least-privilege Data API grants and source-only private Storage writes, deployed through migration `20260904120000_explicit_authenticated_grants.sql`.
 
@@ -156,7 +156,7 @@ The intended live flow is:
 - A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Google and Apple social-provider credentials and redirect allowlists in Supabase; Apple production setup requires an Apple Developer account.
-- Sentry/GlitchTip and PostHog projects, adapters, credentials, consent policy, and broader event instrumentation; the current observability adapter intentionally sends nothing.
+- An external crash-reporting service. Product-funnel analytics now use the first-party Supabase adapter; no PostHog or session-replay dependency is required.
 - Migration of existing screen copy into the localization catalog and a user-facing language selector.
 - Broader feature/E2E tests and the `EXPO_TOKEN` needed for manual EAS builds.
 - Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.

@@ -11,9 +11,21 @@ describe('OnboardingIntro', () => {
     expect(screen.getByText('1. Add a private body photo')).toBeTruthy();
     expect(screen.getByText('2. Build your digital closet')).toBeTruthy();
     expect(screen.getByText('3. Try pieces on with AI')).toBeTruthy();
+    expect(screen.getByText(/never photos, names, email/i)).toBeTruthy();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Start my closet' }));
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a member explicitly opt in to product analytics', async () => {
+    const onAnalyticsChange = jest.fn();
+    const screen = await render(
+      <OnboardingIntro onAnalyticsChange={onAnalyticsChange} onComplete={jest.fn()} />,
+    );
+
+    await fireEvent(screen.getByLabelText('Share optional product analytics'), 'valueChange', true);
+
+    expect(onAnalyticsChange).toHaveBeenCalledWith(true);
   });
 
   it('disables duplicate completion while saving and reports a safe error', async () => {

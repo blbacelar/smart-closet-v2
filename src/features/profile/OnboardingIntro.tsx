@@ -1,11 +1,14 @@
 import { ArrowRight, Camera, Lock, Shirt, Sparkles } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { colors, fonts } from '../../theme';
 
 type OnboardingIntroProps = {
   error?: string;
   isCompleting?: boolean;
+  analyticsEnabled?: boolean;
+  analyticsSaving?: boolean;
+  onAnalyticsChange?: (enabled: boolean) => void;
   onComplete: () => void;
 };
 
@@ -18,6 +21,9 @@ const steps = [
 export function OnboardingIntro({
   error,
   isCompleting = false,
+  analyticsEnabled = false,
+  analyticsSaving = false,
+  onAnalyticsChange,
   onComplete,
 }: OnboardingIntroProps) {
   return (
@@ -42,6 +48,20 @@ export function OnboardingIntro({
       </View>
 
       <View>
+        <View style={styles.analyticsRow}>
+          <View style={styles.analyticsCopy}>
+            <Text style={styles.analyticsTitle}>Share optional product analytics</Text>
+            <Text style={styles.analyticsText}>Simple event counts only—never photos, names, email, messages, or exact location.</Text>
+          </View>
+          <Switch
+            accessibilityLabel="Share optional product analytics"
+            disabled={analyticsSaving}
+            onValueChange={onAnalyticsChange}
+            trackColor={{ false: colors.sageDeep, true: colors.ink }}
+            thumbColor={colors.white}
+            value={analyticsEnabled}
+          />
+        </View>
         {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         <Pressable
           accessibilityLabel={isCompleting ? 'Saving setup' : 'Start my closet'}
@@ -77,6 +97,10 @@ const styles = StyleSheet.create({
   stepTitle: { fontFamily: fonts.body, fontSize: 13, fontWeight: '700', color: colors.ink },
   stepText: { marginTop: 4, fontFamily: fonts.body, fontSize: 11, lineHeight: 16, color: colors.muted },
   error: { marginBottom: 12, padding: 12, borderRadius: 12, overflow: 'hidden', backgroundColor: '#F4E5E2', fontFamily: fonts.body, fontSize: 12, color: '#8C3C34' },
+  analyticsRow: { marginBottom: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, backgroundColor: colors.sage },
+  analyticsCopy: { flex: 1 },
+  analyticsTitle: { fontFamily: fonts.body, fontSize: 11, lineHeight: 15, fontWeight: '700', color: colors.ink },
+  analyticsText: { marginTop: 3, fontFamily: fonts.body, fontSize: 9.5, lineHeight: 14, color: colors.muted },
   button: { height: 56, borderRadius: 14, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   buttonText: { fontFamily: fonts.body, fontSize: 11, fontWeight: '800', letterSpacing: 1.3, textTransform: 'uppercase', color: colors.white },
   pressed: { opacity: 0.82 },

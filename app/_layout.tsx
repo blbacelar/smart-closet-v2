@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
 import { I18nProvider } from '../src/i18n/i18n';
+import { loadAnalyticsConsent } from '../src/lib/analyticsConsent';
 import { observability } from '../src/lib/observability';
 import { MotionPreferenceProvider } from '../src/providers/MotionPreferenceProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
@@ -16,8 +17,17 @@ function RootNavigator() {
   const { identity, isLoading } = useAuth();
 
   useEffect(() => {
-    observability.track('app_opened', { source: 'launch' });
-  }, []);
+    let active = true;
+    void loadAnalyticsConsent().then((consent) => {
+      if (!active) return;
+      observability.setAnalyticsConsent(consent);
+      observability.setUser(identity?.id ?? null);
+      observability.track('app_opened', { source: 'launch' });
+    });
+    return () => {
+      active = false;
+    };
+  }, [identity?.id]);
 
   if (isLoading) {
     return (
@@ -48,6 +58,7 @@ function RootNavigator() {
         <Stack.Screen name="pro" options={{ presentation: 'modal' }} />
         <Stack.Screen name="delete-account" options={{ presentation: 'modal' }} />
         <Stack.Screen name="copyright-report" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
   );

@@ -9,8 +9,9 @@ lawyer should approve the final policies, notices, and geographic launch scope.
   blocks people under 18 and stores only the confirmation timestamp.
 - New private image uploads require a profile with `adult_confirmed_at`.
 - The app uses platform fonts and contains no remote Google Fonts request.
-- No session-replay SDK is installed. Telemetry adapters receive nothing unless
-  the app is explicitly constructed with granted analytics consent.
+- No session-replay SDK is installed. First-party telemetry receives nothing
+  until the member explicitly opts in during onboarding or in Privacy settings;
+  consent is revocable and events expire after 90 days.
 - The shared marketing-email builder refuses messages without recorded consent,
   sender identity, a mailing address, and an HTTPS unsubscribe URL.
 - The beta Pro screen cannot purchase anything and states that price, duration,
@@ -38,9 +39,8 @@ lawyer should approve the final policies, notices, and geographic launch scope.
 - [ ] Replace preview subscription prices with live app-store product data.
   Render the generated renewal disclosure directly beside the purchase action,
   and link final Terms and Privacy Policy before enabling checkout.
-- [ ] Add a user-facing analytics consent control before attaching any analytics
-  adapter. Session replay needs a separate legal/privacy review and must remain
-  disabled by default; sensitive inputs and images must never be captured.
+- [x] Add a user-facing analytics consent control before attaching analytics.
+  Session replay remains disabled; sensitive inputs and images are excluded.
 
 ## Primary references reviewed
 

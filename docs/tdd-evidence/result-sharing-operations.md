@@ -12,6 +12,7 @@ Backlog: T-025, T-028, T-029, T-033, T-034, T-035
 - Removed the prototype local Pro toggle; the Profile now reads the server-authoritative tier and the paywall truthfully defers purchases until RevenueCat/store setup is approved.
 - Added service-role AI spend aggregation, RLS-protected warning/critical alert records, and hourly threshold evaluation.
 - Instrumented privacy-safe activation, authentication, garment, try-on, paywall, and account-deletion events through the vendor-neutral observability boundary.
+- Connected that boundary to a consent-gated first-party Supabase event store with aggregate service-role reporting and 90-day retention.
 - Added an executable Maestro signup-to-fitting flow plus isolated fixture/account guidance.
 
 ## RED checkpoints
@@ -31,11 +32,12 @@ Backlog: T-025, T-028, T-029, T-033, T-034, T-035
 ## Deployment
 
 - Migration `20260930110000_ai_cost_operations.sql` is deployed to the linked Supabase project.
+- Migration `20261001160000_analytics_events.sql` is deployed to the linked Supabase project.
 - Linked schema lint completed with no errors.
 - Hourly alert thresholds currently default to USD 10 warning / USD 25 critical and can be changed by a reviewed forward migration.
 
 ## Remaining external evidence
 
 - The Maestro flow requires a native preview build, fresh test account, non-personal fixtures, and funded Gemini image generation. It is committed and contract-tested but has not completed a real fitting while the configured Gemini project lacks prepaid credits.
-- Analytics currently terminates at the privacy-safe no-op adapter. Connecting PostHog/Sentry or another approved vendor requires a consent policy and credentials.
+- Product analytics are active only after explicit member consent. External crash reporting remains unconfigured and session replay remains disabled.
 - RevenueCat purchases remain intentionally unavailable pending the marketplace-membership/product decision and store credentials. No fake Pro entitlement is granted.

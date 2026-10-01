@@ -1,3 +1,6 @@
+import { createSupabaseObservabilityAdapter } from './supabaseObservabilityAdapter';
+import { supabase } from './supabase';
+
 export type AnalyticsEvent =
   | 'app_opened'
   | 'auth_signed_in'
@@ -31,12 +34,16 @@ export type ObservabilityAdapter = {
 
 export type ObservabilityClient = {
   setUser: (userId: string | null) => void;
+  setAnalyticsConsent: (consent: AnalyticsConsent) => void;
+  getAnalyticsConsent: () => AnalyticsConsent;
   track: (event: AnalyticsEvent, properties?: Record<string, unknown>) => void;
   captureError: (error: unknown, context: ObservabilityErrorContext) => void;
 };
 
+export type AnalyticsConsent = 'granted' | 'denied' | 'unknown';
+
 export type ObservabilityOptions = {
-  analyticsConsent: 'granted' | 'denied' | 'unknown';
+  analyticsConsent: AnalyticsConsent;
 };
 
 const noopAdapter: ObservabilityAdapter = {
@@ -84,12 +91,29 @@ export function createObservability(
   adapter: ObservabilityAdapter = noopAdapter,
   options: ObservabilityOptions = { analyticsConsent: 'unknown' },
 ): ObservabilityClient {
-  const isAllowed = () => options.analyticsConsent === 'granted';
+  let analyticsConsent = options.analyticsConsent;
+  let currentUserId: string | null = null;
+  const isAllowed = () => analyticsConsent === 'granted';
 
   return {
     setUser(userId) {
+      currentUserId = userId;
       if (!isAllowed()) return;
       callSafely(() => adapter.setUser(userId ? { id: userId } : null));
+    },
+    setAnalyticsConsent(consent) {
+      if (consent === analyticsConsent) return;
+      const wasAllowed = isAllowed();
+      analyticsConsent = consent;
+
+      if (isAllowed()) {
+        callSafely(() => adapter.setUser(currentUserId ? { id: currentUserId } : null));
+      } else if (wasAllowed) {
+        callSafely(() => adapter.setUser(null));
+      }
+    },
+    getAnalyticsConsent() {
+      return analyticsConsent;
     },
     track(event, properties = {}) {
       if (!isAllowed()) return;
@@ -102,6 +126,7 @@ export function createObservability(
   };
 }
 
-// No analytics or session-replay vendor is installed. An adapter may only be
-// attached after an explicit consent control passes analyticsConsent: granted.
-export const observability = createObservability();
+// First-party, consent-gated event storage only. No session-replay vendor is used.
+export const observability = createObservability(
+  createSupabaseObservabilityAdapter(supabase),
+);

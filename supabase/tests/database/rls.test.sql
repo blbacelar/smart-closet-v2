@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(42);
+select plan(47);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -10,6 +10,7 @@ select is((select relrowsecurity from pg_class where oid = 'public.garments'::re
 select is((select relrowsecurity from pg_class where oid = 'public.usage_daily'::regclass), true, 'usage_daily has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.tryon_jobs'::regclass), true, 'tryon_jobs has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.ai_cost_ledger'::regclass), true, 'ai_cost_ledger has RLS enabled');
+select is((select relrowsecurity from pg_class where oid = 'public.analytics_events'::regclass), true, 'analytics_events has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'storage.objects'::regclass), true, 'storage.objects has RLS enabled');
 
 select is((select public from storage.buckets where id = 'body'), false, 'body bucket is private');
@@ -128,6 +129,19 @@ select results_eq('select count(*) from public.garments', array[1::bigint], 'mem
 select results_eq('select count(*) from public.usage_daily', array[1::bigint], 'member sees only their usage');
 select results_eq('select count(*) from public.tryon_jobs', array[1::bigint], 'member sees only their try-on jobs');
 select is(has_table_privilege('authenticated', 'public.ai_cost_ledger', 'select'), false, 'member cannot read the cost ledger');
+select is(has_table_privilege('authenticated', 'public.analytics_events', 'select'), false, 'member cannot read analytics events');
+select lives_ok(
+  $$insert into public.analytics_events (user_id, event_name, properties)
+    values ('00000000-0000-4000-8000-000000000001', 'app_opened', '{"source":"test"}')$$,
+  'member can insert their own allowlisted analytics event'
+);
+select throws_ok(
+  $$insert into public.analytics_events (user_id, event_name, properties)
+    values ('00000000-0000-4000-8000-000000000002', 'app_opened', '{}')$$,
+  '42501',
+  'new row violates row-level security policy for table "analytics_events"',
+  'member cannot insert an analytics event for another member'
+);
 
 select results_eq(
   $$update public.profiles set display_name = 'Updated' where id = '00000000-0000-4000-8000-000000000001' returning id$$,
@@ -254,6 +268,7 @@ select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000009
 select is(has_table_privilege('anon', 'public.profiles', 'select'), false, 'anonymous users cannot read profiles');
 select is(has_table_privilege('anon', 'public.body_photos', 'select'), false, 'anonymous users cannot read body photos');
 select is(has_table_privilege('anon', 'public.garments', 'select'), false, 'anonymous users cannot read garments');
+select is(has_table_privilege('anon', 'public.analytics_events', 'insert'), false, 'anonymous users cannot insert analytics events');
 
 reset role;
 select * from finish();

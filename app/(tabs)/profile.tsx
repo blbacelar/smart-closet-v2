@@ -32,6 +32,10 @@ export default function ProfileScreen() {
   const validateBodyPhoto = useValidateBodyPhoto(identity?.id ?? 'signed-out');
 
   const handleSettingPress = async (label: string) => {
+    if (label === 'Privacy & visibility') {
+      router.push('/privacy');
+      return;
+    }
     if (label === 'Delete account') {
       router.push('/delete-account');
       return;

@@ -34,6 +34,8 @@ describe('AuthProvider', () => {
   function telemetry() {
     return {
       setUser: jest.fn(),
+      setAnalyticsConsent: jest.fn(),
+      getAnalyticsConsent: jest.fn().mockReturnValue('unknown'),
       track: jest.fn(),
       captureError: jest.fn(),
     };

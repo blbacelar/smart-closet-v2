@@ -7,6 +7,8 @@ import { ObservabilityClient } from '../../lib/observability';
 function observability(): jest.Mocked<ObservabilityClient> {
   return {
     setUser: jest.fn(),
+    setAnalyticsConsent: jest.fn(),
+    getAnalyticsConsent: jest.fn().mockReturnValue('unknown'),
     track: jest.fn(),
     captureError: jest.fn(),
   };
