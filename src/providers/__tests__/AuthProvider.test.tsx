@@ -19,6 +19,7 @@ function createGateway(initialIdentity: AuthIdentity | null = bruno) {
       return unsubscribe;
     }),
     signIn: jest.fn(),
+    signInWithProvider: jest.fn(),
     signUp: jest.fn(),
     signOut: jest.fn().mockResolvedValue(undefined),
     deleteAccount: jest.fn().mockResolvedValue(undefined),

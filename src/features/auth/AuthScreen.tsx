@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts } from '../../theme';
-import { AuthGateway, supabaseAuthGateway } from './authGateway';
+import { AuthGateway, SocialAuthProvider, supabaseAuthGateway } from './authGateway';
 import { AuthFieldErrors, AuthFields, AuthMode, validateAuthForm } from './credentials';
 
 type AuthScreenProps = {
@@ -75,6 +75,18 @@ export function AuthScreen({ gateway = supabaseAuthGateway }: AuthScreenProps) {
     }
   };
 
+  const submitProvider = async (provider: SocialAuthProvider) => {
+    setStatusMessage('');
+    setIsSubmitting(true);
+    try {
+      await gateway.signInWithProvider(provider);
+    } catch (error) {
+      setStatusMessage(messageFrom(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -105,6 +117,35 @@ export function AuthScreen({ gateway = supabaseAuthGateway }: AuthScreenProps) {
         </View>
 
         <View style={styles.form}>
+          <View style={styles.socialButtons}>
+            <Pressable
+              accessibilityLabel="Continue with Google"
+              accessibilityRole="button"
+              disabled={isSubmitting}
+              onPress={() => submitProvider('google')}
+              style={({ pressed }) => [styles.socialButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.socialMark}>G</Text>
+              <Text style={styles.socialButtonText}>Continue with Google</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Continue with Apple"
+              accessibilityRole="button"
+              disabled={isSubmitting}
+              onPress={() => submitProvider('apple')}
+              style={({ pressed }) => [styles.socialButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.socialMark}>A</Text>
+              <Text style={styles.socialButtonText}>Continue with Apple</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or use email</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           {!isSignIn && (
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Name</Text>
@@ -209,6 +250,13 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.display, fontSize: 38, lineHeight: 42, fontWeight: '600', letterSpacing: -1.1, color: colors.ink },
   subtitle: { maxWidth: 330, marginTop: 12, fontFamily: fonts.body, fontSize: 15, lineHeight: 22, color: colors.muted },
   form: { marginTop: 44 },
+  socialButtons: { gap: 10 },
+  socialButton: { height: 52, paddingHorizontal: 16, borderRadius: 13, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  socialMark: { position: 'absolute', left: 18, fontFamily: fonts.body, fontSize: 15, fontWeight: '800', color: colors.ink },
+  socialButtonText: { fontFamily: fonts.body, fontSize: 11, fontWeight: '700', letterSpacing: 0.2, color: colors.ink },
+  dividerRow: { marginVertical: 20, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
+  dividerText: { fontFamily: fonts.body, fontSize: 9, textTransform: 'uppercase', letterSpacing: 1.1, color: colors.muted },
   fieldGroup: { marginBottom: 17 },
   label: { marginBottom: 7, fontFamily: fonts.body, fontSize: 10, fontWeight: '700', letterSpacing: 1.1, textTransform: 'uppercase', color: colors.ink },
   input: { height: 54, paddingHorizontal: 16, borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.surface, fontFamily: fonts.body, fontSize: 16, color: colors.ink },

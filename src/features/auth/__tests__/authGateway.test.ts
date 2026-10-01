@@ -1,9 +1,9 @@
 let mockSupabase: any;
 
-const mockCreateURL = jest.fn(() => 'fitly://auth/callback');
+const mockCreateURL = jest.fn((_path: string) => 'fitly://auth/callback');
 const mockOpenAuthSessionAsync = jest.fn();
 
-jest.mock('expo-linking', () => ({ createURL: (...args: unknown[]) => mockCreateURL(...args) }));
+jest.mock('expo-linking', () => ({ createURL: (path: string) => mockCreateURL(path) }));
 jest.mock('expo-web-browser', () => ({
   maybeCompleteAuthSession: jest.fn(),
   openAuthSessionAsync: (...args: unknown[]) => mockOpenAuthSessionAsync(...args),

@@ -1,5 +1,9 @@
 import type { User } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../../lib/supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export type AuthIdentity = {
   id: string;
@@ -16,16 +20,20 @@ type SignUpInput = SignInInput & {
   displayName: string;
 };
 
+export type SocialAuthProvider = 'apple' | 'google';
+
 export type AuthGateway = {
   getCurrentIdentity: () => Promise<AuthIdentity | null>;
   subscribe: (listener: (identity: AuthIdentity | null) => void) => () => void;
   signIn: (input: SignInInput) => Promise<void>;
+  signInWithProvider: (provider: SocialAuthProvider) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<{ requiresEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 };
 
 const deletionFailureMessage = "We couldn't delete your account. Please try again.";
+const socialAuthFailureMessage = 'Could not complete social sign-in. Try again.';
 
 function requireClient() {
   if (!supabase) {
@@ -51,6 +59,20 @@ function toIdentity(user: User | null): AuthIdentity | null {
         ? metadataName.trim()
         : email.split('@')[0] || 'Fitly member',
   };
+}
+
+function readOAuthTokens(callbackUrl: string) {
+  const fragment = callbackUrl.split('#')[1] ?? '';
+  const query = callbackUrl.split('?')[1]?.split('#')[0] ?? '';
+  const params = new URLSearchParams(fragment || query);
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+
+  if (!accessToken || !refreshToken) {
+    throw new Error(socialAuthFailureMessage);
+  }
+
+  return { access_token: accessToken, refresh_token: refreshToken };
 }
 
 export const supabaseAuthGateway: AuthGateway = {
@@ -84,6 +106,31 @@ export const supabaseAuthGateway: AuthGateway = {
     const { error } = await client.auth.signInWithPassword(input);
     if (error) {
       throw error;
+    }
+  },
+
+  async signInWithProvider(provider) {
+    const client = requireClient();
+    const redirectTo = Linking.createURL('auth/callback');
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+
+    if (error || !data.url) {
+      throw new Error(socialAuthFailureMessage);
+    }
+
+    const browserResult = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+      preferEphemeralSession: true,
+    });
+    if (browserResult.type !== 'success') {
+      return;
+    }
+
+    const { error: sessionError } = await client.auth.setSession(readOAuthTokens(browserResult.url));
+    if (sessionError) {
+      throw new Error(socialAuthFailureMessage);
     }
   },
 
