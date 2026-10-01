@@ -1,14 +1,10 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import MarketScreen from '../market';
 
 jest.mock('expo-image', () => ({
   Image: () => null,
-}));
-
-jest.mock('../../../src/store', () => ({
-  useFitlyStore: (selector: (state: { garments: never[] }) => unknown) => selector({ garments: [] }),
 }));
 
 describe('MarketScreen', () => {
@@ -40,5 +36,29 @@ describe('MarketScreen', () => {
     expect(contentStyle.height).toBe(railStyle.height);
     expect(contentStyle.alignItems).toBe('center');
     expect(railStyle.height - chipStyle.height).toBeGreaterThanOrEqual(20);
+  });
+
+  it('filters the preview feed and exposes selected filter state', async () => {
+    const screen = await render(<MarketScreen />);
+    const donationFilter = screen.getByRole('button', { name: 'Donation filter' });
+
+    expect(donationFilter).toHaveAccessibilityState({ selected: false });
+    await fireEvent.press(donationFilter);
+
+    expect(donationFilter).toHaveAccessibilityState({ selected: true });
+    expect(screen.getAllByText('Donation')).toHaveLength(2);
+    expect(screen.queryByText('$24')).toBeNull();
+  });
+
+  it('explains that marketplace try-on is not active instead of using a dead button', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const screen = await render(<MarketScreen />);
+
+    await fireEvent.press(screen.getAllByRole('button', { name: 'See this listing on you' })[0]);
+
+    expect(alert).toHaveBeenCalledWith(
+      'Marketplace preview',
+      'Marketplace fittings will unlock when the regional marketplace launches.',
+    );
   });
 });
