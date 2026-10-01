@@ -12,14 +12,18 @@ import { useBodyPhotos } from '../../src/features/body-photos/useBodyPhotos';
 import { approvedBodyPhotos } from '../../src/features/body-photos/bodyPhotoPresentation';
 import { useGarments } from '../../src/features/garments/useGarments';
 import { TryOnFeedback } from '../../src/features/tryon/TryOnFeedback';
+import { TryOnReveal } from '../../src/features/tryon/TryOnReveal';
+import { shareTryOnResult } from '../../src/features/tryon/shareTryOnResult';
 import { useEnqueueTryOn, useSetTryOnFeedback, useTryOnJobs, useTryOnQuota, useTryOnRealtime } from '../../src/features/tryon/useTryOns';
 import { getTryOnAction, tryOnErrorMessage } from '../../src/features/tryon/tryonState';
+import { useMotionPreference } from '../../src/providers/MotionPreferenceProvider';
 
 const captions = ['Fitting the shoulders…', 'Matching the light…', 'Draping the fabric…', 'Almost there…'];
 
 export default function TryOnScreen() {
   const insets = useSafeAreaInsets();
   const { identity } = useAuth();
+  const { reduceMotion } = useMotionPreference();
   const bodyPhotoQuery = useBodyPhotos(identity?.id);
   const garmentQuery = useGarments(identity?.id);
   const jobsQuery = useTryOnJobs(identity?.id);
@@ -35,6 +39,9 @@ export default function TryOnScreen() {
   const [message, setMessage] = useState('');
   const [captionIndex, setCaptionIndex] = useState(0);
   const notifiedJobId = useRef<string | null>(null);
+  const resultCaptureRef = useRef<View>(null);
+  const [isResultLoaded, setIsResultLoaded] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const selected = useMemo(
     () => readyGarments.find((item) => item.id === selectedGarmentId) ?? readyGarments[0],
     [readyGarments, selectedGarmentId],
@@ -83,6 +90,10 @@ export default function TryOnScreen() {
     }
   }, [activeJob?.status, resultJob]);
 
+  useEffect(() => {
+    setIsResultLoaded(false);
+  }, [resultJob?.id]);
+
   const startTryOn = async () => {
     if (!selectedBodyPhoto || !selected) return;
     setMessage('');
@@ -94,6 +105,19 @@ export default function TryOnScreen() {
       setActiveJobId(result.jobId);
     } catch (error) {
       setMessage(tryOnErrorMessage(error));
+    }
+  };
+
+  const shareResult = async () => {
+    if (!isResultLoaded || isSharing) return;
+    setMessage('');
+    setIsSharing(true);
+    try {
+      await shareTryOnResult(resultCaptureRef);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not share that fitting. Try again.');
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -116,10 +140,20 @@ export default function TryOnScreen() {
       <View style={styles.resultScreen}>
         <StatusBar style="light" />
         <View style={styles.resultImageWrap}>
-          <Image source={{ uri: resultJob.resultUrl }} style={styles.resultImage} contentFit="cover" contentPosition="top" />
+          <TryOnReveal reduceMotion={reduceMotion}>
+            <View ref={resultCaptureRef} collapsable={false} style={styles.resultCapture}>
+              <Image
+                source={{ uri: resultJob.resultUrl }}
+                style={styles.resultImage}
+                contentFit="cover"
+                contentPosition="top"
+                onLoad={() => setIsResultLoaded(true)}
+              />
+              {!isPro && <Text style={styles.watermark}>FITLY</Text>}
+            </View>
+          </TryOnReveal>
           <Pressable accessibilityLabel="Back to studio" onPress={() => setActiveJobId(null)} style={[styles.backButton, { top: insets.top + 12 }]}><ChevronLeft size={22} color={colors.white} /></Pressable>
           <View style={styles.privatePill}><Lock size={12} color={colors.white} /><Text style={styles.privatePillText}>Only you can see this</Text></View>
-          {!isPro && <Text style={styles.watermark}>FITLY</Text>}
         </View>
         <View style={styles.resultSheet}>
           <View style={styles.fitRow}>
@@ -139,7 +173,16 @@ export default function TryOnScreen() {
           {!!message && <Text accessibilityRole="alert" style={styles.errorMessage}>{message}</Text>}
           <View style={styles.resultActions}>
             <Pressable style={[styles.resultAction, styles.resultActionActive]}><Bookmark size={15} color={colors.white} /><Text style={styles.resultActionActiveText}>Save</Text></Pressable>
-            <Pressable style={styles.resultAction}><Share2 size={15} color={colors.ink} /><Text style={styles.resultActionText}>Share</Text></Pressable>
+            <Pressable
+              accessibilityLabel="Share fitting"
+              accessibilityRole="button"
+              disabled={!isResultLoaded || isSharing}
+              onPress={shareResult}
+              style={[styles.resultAction, (!isResultLoaded || isSharing) && styles.resultActionDisabled]}
+            >
+              <Share2 size={15} color={colors.ink} />
+              <Text style={styles.resultActionText}>{isSharing ? 'Sharing…' : 'Share'}</Text>
+            </Pressable>
             <Pressable onPress={() => setActiveJobId(null)} style={styles.resultAction}><Repeat2 size={15} color={colors.ink} /><Text style={styles.resultActionText}>Again</Text></Pressable>
           </View>
         </View>
@@ -263,6 +306,7 @@ const styles = StyleSheet.create({
   caption: { fontFamily: fonts.body, fontSize: 12, color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.4, marginTop: 24 },
   resultScreen: { flex: 1, backgroundColor: colors.forestDark },
   resultImageWrap: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: colors.sand },
+  resultCapture: { flex: 1, position: 'relative', backgroundColor: colors.sand },
   resultImage: { width: '100%', height: '100%' },
   backButton: { position: 'absolute', left: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   privatePill: { position: 'absolute', left: 16, bottom: 16, height: 28, paddingHorizontal: 12, borderRadius: 99, backgroundColor: 'rgba(0,0,0,0.50)', flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -274,6 +318,7 @@ const styles = StyleSheet.create({
   resultActions: { flexDirection: 'row', gap: 10 },
   resultAction: { flex: 1, height: 46, borderRadius: 14, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   resultActionActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  resultActionDisabled: { opacity: 0.45 },
   resultActionText: { fontFamily: fonts.body, fontSize: 9.5, fontWeight: '700', color: colors.ink, textTransform: 'uppercase', letterSpacing: 1.1 },
   resultActionActiveText: { fontFamily: fonts.body, fontSize: 9.5, fontWeight: '700', color: colors.white, textTransform: 'uppercase', letterSpacing: 1.1 },
 });
