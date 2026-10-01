@@ -37,11 +37,11 @@ export default function ProScreen() {
         <View style={styles.sheet}>
           <View style={styles.benefits}>{benefits.map((benefit) => <View style={styles.benefit} key={benefit}><View style={styles.check}><Check size={13} color={colors.white} strokeWidth={3} /></View><Text style={styles.benefitText}>{benefit}</Text></View>)}</View>
           <View style={styles.plans}>
-            <Pressable style={styles.plan}><View><Text style={styles.planTitle}>Monthly</Text><Text style={styles.planSub}>Cancel anytime</Text></View><View><Text style={styles.price}>$7.99</Text><Text style={styles.period}>CAD / month</Text></View></Pressable>
-            <Pressable style={[styles.plan, styles.planActive]}><View style={styles.best}><Sparkles size={11} color={colors.forestDark} /><Text style={styles.bestText}>BEST VALUE</Text></View><View><Text style={styles.planTitle}>Yearly</Text><Text style={styles.planSub}>Save 38%</Text></View><View><Text style={styles.price}>$59</Text><Text style={styles.period}>CAD / year</Text></View></Pressable>
+            <View style={styles.plan}><View><Text style={styles.planTitle}>Monthly</Text><Text style={styles.planSub}>Planned option</Text></View><View><Text style={styles.price}>$7.99</Text><Text style={styles.period}>CAD / month</Text></View></View>
+            <View style={[styles.plan, styles.planActive]}><View style={styles.best}><Sparkles size={11} color={colors.forestDark} /><Text style={styles.bestText}>PLANNED VALUE</Text></View><View><Text style={styles.planTitle}>Yearly</Text><Text style={styles.planSub}>Pricing under review</Text></View><View><Text style={styles.price}>$59</Text><Text style={styles.period}>CAD / year</Text></View></View>
           </View>
           <Pressable accessibilityRole="button" onPress={choose} style={styles.continue}><Zap size={18} color={colors.white} fill={colors.white} /><Text style={styles.continueText}>Notify me about Fitly Pro</Text></Pressable>
-          <Text style={styles.legal}>7-day free trial, then $59/year. Cancel anytime in your App Store settings. Your wardrobe stays yours.</Text>
+          <Text style={styles.legal}>Purchases are unavailable during beta. Final pricing, trial terms, and store availability are still under review.</Text>
         </View>
       </SafeAreaView>
     </LinearGradient>

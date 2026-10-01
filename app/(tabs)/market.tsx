@@ -1,16 +1,17 @@
 import { Image } from 'expo-image';
-import { Eye, Gift, MapPin, Palette, Ruler, Tag } from 'lucide-react-native';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Eye, Gift, MapPin, Ruler, Tag } from 'lucide-react-native';
+import { useMemo, useState } from 'react';
+import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitlyStore } from '../../src/store';
 import { colors, fonts } from '../../src/theme';
 
-const filterData = [
-  { label: '25 km', Icon: MapPin, active: true },
-  { label: 'Sale', Icon: Tag, active: true },
-  { label: 'Donation', Icon: Gift, active: false },
-  { label: 'Size M', Icon: Ruler, active: false },
-  { label: 'Color', Icon: Palette, active: false },
+type MarketFilter = 'sale' | 'donation' | 'size-m';
+
+const filterData: { key: MarketFilter; label: string; Icon: typeof Tag }[] = [
+  { key: 'sale', label: 'Sale', Icon: Tag },
+  { key: 'donation', label: 'Donation', Icon: Gift },
+  { key: 'size-m', label: 'Size M', Icon: Ruler },
 ];
 
 const listingMeta = [
@@ -26,6 +27,30 @@ export default function MarketScreen() {
   const insets = useSafeAreaInsets();
   const garments = useFitlyStore((state) => state.garments);
   const listings = garments.slice(0, 6).map((garment, index) => ({ ...garment, ...listingMeta[index] }));
+  const [activeFilters, setActiveFilters] = useState<MarketFilter[]>([]);
+  const filteredListings = useMemo(() => listings.filter((item) => {
+    if (activeFilters.includes('sale') && item.price === 'Donation') return false;
+    if (activeFilters.includes('donation') && item.price !== 'Donation') return false;
+    if (activeFilters.includes('size-m') && item.size !== 'Size M') return false;
+    return true;
+  }), [activeFilters, listings]);
+
+  const toggleFilter = (filter: MarketFilter) => {
+    setActiveFilters((current) => {
+      if (current.includes(filter)) return current.filter((value) => value !== filter);
+      const withoutOpposite = filter === 'sale'
+        ? current.filter((value) => value !== 'donation')
+        : filter === 'donation'
+          ? current.filter((value) => value !== 'sale')
+          : current;
+      return [...withoutOpposite, filter];
+    });
+  };
+
+  const explainPreview = () => Alert.alert(
+    'Marketplace preview',
+    'Marketplace fittings will unlock when the regional marketplace launches.',
+  );
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 18 }]}>
@@ -48,16 +73,30 @@ export default function MarketScreen() {
         style={styles.filterScroll}
         contentContainerStyle={styles.filters}
       >
-        {filterData.map(({ label, Icon, active }) => (
-          <Pressable key={label} style={[styles.filter, active && styles.filterActive]}>
-            <Icon size={13} color={active ? colors.white : colors.muted} />
-            <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
-          </Pressable>
-        ))}
+        <View style={[styles.filter, styles.filterActive]}>
+          <MapPin size={13} color={colors.white} />
+          <Text style={[styles.filterText, styles.filterTextActive]}>25 km</Text>
+        </View>
+        {filterData.map(({ key, label, Icon }) => {
+          const active = activeFilters.includes(key);
+          return (
+            <Pressable
+              accessibilityLabel={`${label} filter`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              key={key}
+              onPress={() => toggleFilter(key)}
+              style={[styles.filter, active && styles.filterActive]}
+            >
+              <Icon size={13} color={active ? colors.white : colors.muted} />
+              <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
       <FlatList
-        data={listings}
+        data={filteredListings}
         numColumns={2}
         keyExtractor={(item) => item.id}
         columnWrapperStyle={styles.row}
@@ -71,7 +110,12 @@ export default function MarketScreen() {
             </View>
             <View style={styles.metaRow}><Text style={styles.price}>{item.price}</Text><Text style={styles.size}>{item.size}</Text></View>
             <Text style={styles.area}>{item.area}</Text>
-            <Pressable style={styles.tryButton}>
+            <Pressable
+              accessibilityLabel="See this listing on you"
+              accessibilityRole="button"
+              onPress={explainPreview}
+              style={styles.tryButton}
+            >
               <Eye size={13} color={colors.white} />
               <Text style={styles.tryText}>See it on you</Text>
             </Pressable>

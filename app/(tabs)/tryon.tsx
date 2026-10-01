@@ -182,7 +182,7 @@ export default function TryOnScreen() {
           </View>
           {!!message && <Text accessibilityRole="alert" style={styles.errorMessage}>{message}</Text>}
           <View style={styles.resultActions}>
-            <Pressable style={[styles.resultAction, styles.resultActionActive]}><Bookmark size={15} color={colors.white} /><Text style={styles.resultActionActiveText}>Save</Text></Pressable>
+            <View accessibilityLabel="Fitting saved automatically" style={[styles.resultAction, styles.resultActionActive]}><Bookmark size={15} color={colors.white} /><Text style={styles.resultActionActiveText}>Saved</Text></View>
             <Pressable
               accessibilityLabel="Share fitting"
               accessibilityRole="button"

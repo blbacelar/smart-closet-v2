@@ -8,6 +8,10 @@ jest.mock('expo-image', () => ({
 }));
 
 describe('MarketScreen', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('keeps the filter rail horizontal without a draggable vertical indicator', async () => {
     const screen = await render(<MarketScreen />);
     let filterScroll = screen.getByText('25 km').parent;
@@ -42,11 +46,12 @@ describe('MarketScreen', () => {
     const screen = await render(<MarketScreen />);
     const donationFilter = screen.getByRole('button', { name: 'Donation filter' });
 
-    expect(donationFilter).toHaveAccessibilityState({ selected: false });
+    expect(donationFilter.props.accessibilityState).toEqual({ selected: false });
     await fireEvent.press(donationFilter);
 
-    expect(donationFilter).toHaveAccessibilityState({ selected: true });
-    expect(screen.getAllByText('Donation')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Donation filter' }).props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByText('Northgate')).toBeTruthy();
+    expect(screen.getByText('Elmwood')).toBeTruthy();
     expect(screen.queryByText('$24')).toBeNull();
   });
 
