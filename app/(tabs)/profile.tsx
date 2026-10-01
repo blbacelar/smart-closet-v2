@@ -11,6 +11,7 @@ import {
 } from '../../src/features/body-photos/useBodyPhotos';
 import { colors, fonts } from '../../src/theme';
 import { useTryOnQuota } from '../../src/features/tryon/useTryOns';
+import { getProfileSettingNotice } from '../../src/features/profile/profileSettings';
 
 const settings = [
   { Icon: Shield, label: 'Privacy & visibility' },
@@ -32,6 +33,11 @@ export default function ProfileScreen() {
   const handleSettingPress = async (label: string) => {
     if (label === 'Delete account') {
       router.push('/delete-account');
+      return;
+    }
+    const notice = getProfileSettingNotice(label);
+    if (notice) {
+      Alert.alert(notice.title, notice.message);
       return;
     }
     if (label !== 'Sign out') {
@@ -60,7 +66,14 @@ export default function ProfileScreen() {
         onRetry={() => bodyPhotos.refetch()}
       />
 
-      <Pressable onPress={() => !isPro && router.push({ pathname: '/pro', params: { source: 'profile' } })} style={styles.proCard}>
+      <Pressable
+        accessibilityLabel={isPro ? 'Fitly Pro is active' : 'Explore Fitly Pro'}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isPro }}
+        disabled={isPro}
+        onPress={() => router.push({ pathname: '/pro', params: { source: 'profile' } })}
+        style={styles.proCard}
+      >
         <View style={styles.proBadge}><Text style={styles.proBadgeText}>FITLY PRO</Text></View>
         <Text style={styles.proTitle}>{isPro ? 'Your fitting room, unlocked.' : 'Unlimited fittings.'}</Text>
         <Text style={styles.proCopy}>60 try-ons a day · 3 body photos · no watermark</Text>
