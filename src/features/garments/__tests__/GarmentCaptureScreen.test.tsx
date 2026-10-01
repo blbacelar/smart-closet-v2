@@ -140,6 +140,25 @@ describe('GarmentCaptureScreen', () => {
     expect(screen.getByLabelText('Selected garment photo')).toBeTruthy();
   });
 
+  it('explains how to continue when the linked backend still rejects Auto category', async () => {
+    const onUpload = jest.fn().mockRejectedValue({
+      code: '42501',
+      message: 'new row violates row-level security policy for table "garments"',
+    });
+    const screen = await render(
+      <GarmentCaptureScreen picker={createPicker()} onUpload={onUpload} onClose={jest.fn()} />,
+    );
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Take garment photo' }));
+    await fireEvent.changeText(screen.getByLabelText('Garment name'), 'Shirt');
+    await fireEvent.press(screen.getByRole('button', { name: 'Add to my closet' }));
+
+    expect(await screen.findByText(
+      'Automatic category detection needs the latest backend update. Choose a category and try again.',
+    )).toBeTruthy();
+    expect(screen.getByLabelText('Selected garment photo')).toBeTruthy();
+  });
+
   it('edits and uploads each selected library photo as its own garment', async () => {
     const picker = createPicker();
     picker.pick.mockResolvedValue({ status: 'selected', assets: [validAsset, secondAsset] });
