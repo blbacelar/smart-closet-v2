@@ -1,0 +1,68 @@
+appId: app.fitly.mobile
+name: Signup to private AI fitting
+tags:
+  - phase-one
+  - smoke
+---
+- addMedia:
+    - ${E2E_BODY_PHOTO}
+    - ${E2E_GARMENT_PHOTO}
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- assertVisible: "Welcome back."
+- tapOn: "Create an account"
+- tapOn: "Name"
+- inputText: "Fitly Test Member"
+- tapOn: "Email"
+- inputText: ${E2E_EMAIL}
+- tapOn: "Password"
+- inputText: ${E2E_PASSWORD}
+- tapOn: "Create account"
+- assertVisible: "Your closet, on you."
+- tapOn: "Start my closet"
+
+# Add the first gallery image as the approved body-photo fixture.
+- tapOn: "Add body photo"
+- tapOn: "Choose from library"
+- tapOn:
+    point: "18%,25%"
+- tapOn:
+    text: "Add"
+    optional: true
+- tapOn:
+    text: "Done"
+    optional: true
+- assertVisible: "Selected body photo"
+- tapOn: "Save private photo"
+- extendedWaitUntil:
+    visible: "The Studio"
+    timeout: 30000
+
+# Select the second gallery image and save it with a manual category so the
+# garment path does not depend on automatic tagging.
+- tapOn: "Add piece"
+- tapOn: "Choose garment photos"
+- tapOn:
+    point: "42%,25%"
+- tapOn:
+    text: "Add"
+    optional: true
+- tapOn:
+    text: "Done"
+    optional: true
+- assertVisible: "Selected garment photo"
+- tapOn: "Garment name"
+- inputText: "E2E linen shirt"
+- tapOn: "Tops category"
+- tapOn: "Add to my closet"
+- extendedWaitUntil:
+    visible: "Try it on"
+    timeout: 60000
+
+- tapOn: "Try it on"
+- extendedWaitUntil:
+    visible: "Your Fitly fitting is ready"
+    timeout: 180000
+- assertVisible: "Only you can see this"
+- assertVisible: "How’s the fit?"
