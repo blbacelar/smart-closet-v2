@@ -86,4 +86,22 @@ describe('privacy-safe observability', () => {
       fatal: true,
     })).not.toThrow();
   });
+
+  it('supports the complete activation, fitting, and paywall funnel taxonomy', () => {
+    const target = adapter();
+    const client = createObservability(target);
+    const funnelEvents = [
+      'onboarding_completed',
+      'body_photo_uploaded',
+      'garment_uploaded',
+      'tryon_requested',
+      'tryon_completed',
+      'paywall_viewed',
+      'subscription_purchase_started',
+    ] as const;
+
+    funnelEvents.forEach((event) => client.track(event, { source: 'test' }));
+
+    expect(target.track.mock.calls.map(([event]) => event)).toEqual(funnelEvents);
+  });
 });

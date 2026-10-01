@@ -2,6 +2,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { AuthScreen } from '../AuthScreen';
 import { AuthGateway } from '../authGateway';
+import { ObservabilityClient } from '../../../lib/observability';
 
 function createGateway(): jest.Mocked<AuthGateway> {
   return {
@@ -12,6 +13,14 @@ function createGateway(): jest.Mocked<AuthGateway> {
     signUp: jest.fn().mockResolvedValue({ requiresEmailConfirmation: false }),
     signOut: jest.fn(),
     deleteAccount: jest.fn(),
+  };
+}
+
+function createTelemetry(): jest.Mocked<ObservabilityClient> {
+  return {
+    setUser: jest.fn(),
+    track: jest.fn(),
+    captureError: jest.fn(),
   };
 }
 
@@ -41,6 +50,26 @@ describe('AuthScreen', () => {
         password: 'password123',
       }),
     );
+  });
+
+  it('tracks successful email and provider authentication without identifiers', async () => {
+    const gateway = createGateway();
+    const telemetry = createTelemetry();
+    const screen = await render(
+      <AuthScreen gateway={gateway} observabilityClient={telemetry} />,
+    );
+
+    await fireEvent.changeText(screen.getByLabelText('Email'), 'bruno@example.com');
+    await fireEvent.changeText(screen.getByLabelText('Password'), 'password123');
+    await fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(telemetry.track).toHaveBeenCalledWith('auth_signed_in', {
+      method: 'email',
+    }));
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Continue with Google' }));
+    await waitFor(() => expect(telemetry.track).toHaveBeenCalledWith('auth_signed_in', {
+      method: 'google',
+    }));
   });
 
   it.each([
