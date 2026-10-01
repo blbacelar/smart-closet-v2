@@ -130,6 +130,7 @@ The intended live flow is:
 - Idempotent try-on job claims, private base64 provider inputs/outputs, atomic completion/cost writes, and one-time quota refunds.
 - Authenticated `tryon-enqueue` Edge Function and direct Gemini provider adapter deployed with JWT verification.
 - Persisted thumbs-up/down try-on feedback with optimistic UI updates, owner-only database enforcement, and failure rollback.
+- Reduced-motion-aware result reveal and native sharing with the Free watermark embedded in the captured JPEG.
 - Owner-filtered Supabase Realtime job updates with query polling retained as a fallback.
 - Scheduled, skip-locked recovery for interrupted try-on jobs with bounded batches and idempotent quota refunds.
 - Permanent account deletion with typed confirmation, generic retry errors, private-object cleanup, Auth cascade deletion, and local cache/session clearing.
@@ -140,6 +141,9 @@ The intended live flow is:
 - GitHub Actions quality checks for locked install, typecheck, coverage, Expo Doctor, web export, and critical production advisories.
 - Manual EAS build workflow defaulting to an Android preview, plus weekly npm and GitHub Actions dependency monitoring.
 - Privacy-safe analytics/error hooks that allowlist event data, strip sensitive fields, and never forward raw error messages or image references.
+- Activation, authentication, garment, try-on, paywall, and account-deletion funnel events routed through that privacy-safe boundary.
+- Service-role AI cost aggregation with hourly warning/critical alert records.
+- A Maestro signup-to-private-fitting smoke flow ready for an isolated preview build and funded provider.
 - Accessible global render-error recovery, system reduced-motion detection, and English/Brazilian Portuguese localization scaffolding.
 - A 42-assertion pgTAP suite covering RLS, anonymous access, owner isolation, private Storage boundaries, allowed member mutations, and atomic garment-category completion.
 - A CI PII-leak gate that blocks runtime console logging, committed secrets, private signed Storage URLs, personal contact details, and developer home-directory paths without echoing detected values.
