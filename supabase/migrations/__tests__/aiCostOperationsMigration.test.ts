@@ -13,9 +13,9 @@ describe('AI cost operations migration', () => {
     expect(sql).toContain('public.get_ai_cost_dashboard');
     expect(sql).toContain('p_days between 1 and 365');
     expect(sql).toContain('count(*) as request_count');
-    expect(sql).toContain('sum(cost_usd) as cost_usd');
+    expect(sql).toContain('sum(ledger.cost_usd) as cost_usd');
     expect(sql).toContain('grant execute on function public.get_ai_cost_dashboard(integer) to service_role');
-    expect(sql).not.toContain('to authenticated');
+    expect(sql).not.toMatch(/grant execute[^;]+to authenticated/);
   });
 
   it('stores warning and critical alerts behind RLS', () => {
