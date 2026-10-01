@@ -6,6 +6,8 @@ Safe working term: **Fitly Credits** in product drafts and `market_credit` in co
 Naming note: **Loops** has a strong circular-fashion metaphor but is commercially crowded and must not ship without clearance  
 Product phase: plan before Phase 2; launch only after the regional marketplace activation gate
 
+The proposed decision record and exact approval checklist live in [`docs/adr/0001-marketplace-membership-and-exchange-credits.md`](../docs/adr/0001-marketplace-membership-and-exchange-credits.md). It remains Proposed until all named approvers and evidence are present.
+
 ## Objective
 
 Replace the current cash-first marketplace assumption with a HomeExchange-inspired membership economy. A member pays an annual fee, receives an annual allotment of Fitly Credits, earns credits when another member acquires their garment, and spends credits on garments listed by other members. Two peers may instead agree to a direct garment-for-garment swap with no credits, and a garment may be offered as a free peer-to-peer give-away for zero credits.
