@@ -109,6 +109,7 @@ describe('AuthScreen', () => {
   it('exposes stable native identifiers for keyboard-driven authentication', async () => {
     const screen = await render(<AuthScreen gateway={createGateway()} />);
 
+    expect(screen.getByTestId('auth-scroll')).toHaveProp('keyboardDismissMode', 'on-drag');
     expect(screen.getByTestId('auth-email-input')).toBeTruthy();
     expect(screen.getByTestId('auth-password-input')).toBeTruthy();
 
