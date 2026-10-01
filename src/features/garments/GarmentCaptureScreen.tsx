@@ -47,7 +47,19 @@ const categoryOptions: { value: GarmentCategory | null; label: string; accessibi
 ];
 const colorOptions = ['Cream', 'Black', 'Blue', 'Green', 'Red'];
 
-function messageFrom(error: unknown) {
+function postgrestErrorCode(error: unknown) {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return null;
+  }
+
+  return typeof error.code === 'string' ? error.code : null;
+}
+
+function messageFrom(error: unknown, category?: GarmentCategory | null) {
+  if (category === null && postgrestErrorCode(error) === '42501') {
+    return 'Automatic category detection needs the latest backend update. Choose a category and try again.';
+  }
+
   return error instanceof Error ? error.message : 'Could not save that garment. Try again.';
 }
 
@@ -152,7 +164,7 @@ export function GarmentCaptureScreen({
         } catch (error) {
           setDrafts(drafts.slice(index));
           setActiveIndex(0);
-          const failure = messageFrom(error);
+          const failure = messageFrom(error, uploads[index].details.category);
           setMessage(index > 0 ? `Saved ${index} of ${uploads.length}. ${failure}` : failure);
           return;
         }
