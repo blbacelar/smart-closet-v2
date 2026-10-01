@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, fonts, shadow } from '../../theme';
-import { expoGarmentPicker, GarmentPicker } from './garmentPicker';
+import { expoGarmentPicker, GarmentPicker, garmentBatchLimit } from './garmentPicker';
 import {
   GarmentCategory,
   GarmentDetails,
@@ -27,6 +27,14 @@ type GarmentCaptureScreenProps = {
   picker?: GarmentPicker;
   onUpload: (input: { asset: ValidatedGarmentAsset; details: GarmentDetails }) => Promise<void>;
   onClose: () => void;
+};
+
+type GarmentDraft = {
+  asset: ValidatedGarmentAsset;
+  name: string;
+  category: GarmentCategory | null;
+  color: string;
+  size: string;
 };
 
 const categoryOptions: { value: GarmentCategory | null; label: string; accessibilityLabel: string }[] = [
@@ -43,19 +51,34 @@ function messageFrom(error: unknown) {
   return error instanceof Error ? error.message : 'Could not save that garment. Try again.';
 }
 
+function createDraft(asset: ValidatedGarmentAsset): GarmentDraft {
+  return { asset, name: '', category: null, color: 'Cream', size: 'M' };
+}
+
 export function GarmentCaptureScreen({
   picker = expoGarmentPicker,
   onUpload,
   onClose,
 }: GarmentCaptureScreenProps) {
-  const [asset, setAsset] = useState<ValidatedGarmentAsset | null>(null);
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState<GarmentCategory | null>(null);
-  const [color, setColor] = useState('Cream');
-  const [size, setSize] = useState('M');
+  const [drafts, setDrafts] = useState<GarmentDraft[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [message, setMessage] = useState('');
   const [isPicking, setIsPicking] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(1);
+  const activeDraft = drafts[activeIndex];
+
+  const updateActiveDraft = (patch: Partial<Omit<GarmentDraft, 'asset'>>) => {
+    setDrafts((current) => current.map((draft, index) => (
+      index === activeIndex ? { ...draft, ...patch } : draft
+    )));
+  };
+
+  const removeActiveDraft = () => {
+    setDrafts((current) => current.filter((_, index) => index !== activeIndex));
+    setActiveIndex((current) => Math.max(0, Math.min(current, drafts.length - 2)));
+    setMessage('');
+  };
 
   const pick = async (source: 'camera' | 'library') => {
     setMessage('');
@@ -70,13 +93,23 @@ export function GarmentCaptureScreen({
         return;
       }
 
-      const validation = validateGarmentAsset(result.asset);
-      if (!validation.ok) {
-        setAsset(null);
-        setMessage(validation.message);
-        return;
+      const validDrafts: GarmentDraft[] = [];
+      let firstRejection = '';
+      result.assets.forEach((asset, index) => {
+        const validation = validateGarmentAsset(asset);
+        if (validation.ok) {
+          validDrafts.push(createDraft(validation.asset));
+        } else if (!firstRejection) {
+          firstRejection = result.assets.length === 1
+            ? validation.message
+            : `Photo ${index + 1} was skipped: ${validation.message}`;
+        }
+      });
+      setDrafts(validDrafts);
+      setActiveIndex(0);
+      if (firstRejection) {
+        setMessage(firstRejection);
       }
-      setAsset(validation.asset);
     } catch (error) {
       setMessage(messageFrom(error));
     } finally {
@@ -85,30 +118,46 @@ export function GarmentCaptureScreen({
   };
 
   const save = async () => {
-    if (!asset) {
+    if (!drafts.length) {
       setMessage('Add a clear garment photo first.');
       return;
     }
 
-    const validation = validateGarmentDetails({
-      name,
-      category,
-      color,
-      size,
-      season: 'All year',
-    });
-    if (!validation.ok) {
-      setMessage(validation.message);
-      return;
+    const uploads: { asset: ValidatedGarmentAsset; details: GarmentDetails }[] = [];
+    for (let index = 0; index < drafts.length; index += 1) {
+      const draft = drafts[index];
+      const validation = validateGarmentDetails({
+        name: draft.name,
+        category: draft.category,
+        color: draft.color,
+        size: draft.size,
+        season: 'All year',
+      });
+      if (!validation.ok) {
+        setActiveIndex(index);
+        setMessage(drafts.length === 1 ? validation.message : `Piece ${index + 1}: ${validation.message}`);
+        return;
+      }
+      uploads.push({ asset: draft.asset, details: validation.details });
     }
 
     setMessage('');
     setIsUploading(true);
+    setUploadProgress(1);
     try {
-      await onUpload({ asset, details: validation.details });
+      for (let index = 0; index < uploads.length; index += 1) {
+        setUploadProgress(index + 1);
+        try {
+          await onUpload(uploads[index]);
+        } catch (error) {
+          setDrafts(drafts.slice(index));
+          setActiveIndex(0);
+          const failure = messageFrom(error);
+          setMessage(index > 0 ? `Saved ${index} of ${uploads.length}. ${failure}` : failure);
+          return;
+        }
+      }
       onClose();
-    } catch (error) {
-      setMessage(messageFrom(error));
     } finally {
       setIsUploading(false);
     }
@@ -142,11 +191,11 @@ export function GarmentCaptureScreen({
           style={styles.scroll}
           testID="garment-form-scroll"
         >
-        {asset ? (
+        {activeDraft ? (
           <View style={styles.photoReady}>
             <Image
               accessibilityLabel="Selected garment photo"
-              source={{ uri: asset.uri }}
+              source={{ uri: activeDraft.asset.uri }}
               style={styles.preview}
               contentFit="cover"
             />
@@ -155,12 +204,12 @@ export function GarmentCaptureScreen({
               <Text style={styles.cleanText}>Original saved first · cleanup pending</Text>
             </View>
             <Pressable
-              accessibilityLabel="Change garment photo"
+              accessibilityLabel={drafts.length > 1 ? 'Remove current garment photo' : 'Change garment photo'}
               accessibilityRole="button"
               style={styles.change}
-              onPress={() => setAsset(null)}
+              onPress={removeActiveDraft}
             >
-              <Text style={styles.changeText}>Change photo</Text>
+              <Text style={styles.changeText}>{drafts.length > 1 ? 'Remove piece' : 'Change photo'}</Text>
             </Pressable>
           </View>
         ) : (
@@ -182,16 +231,46 @@ export function GarmentCaptureScreen({
                 <Text style={styles.primaryPhotoText}>Take photo</Text>
               </Pressable>
               <Pressable
-                accessibilityLabel="Choose garment photo"
+                accessibilityLabel="Choose garment photos"
                 accessibilityRole="button"
                 disabled={isBusy}
                 style={styles.secondaryPhoto}
                 onPress={() => pick('library')}
               >
                 <ImagePlus size={17} color={colors.forest} />
-                <Text style={styles.secondaryPhotoText}>Choose</Text>
+                <Text style={styles.secondaryPhotoText}>Choose up to {garmentBatchLimit}</Text>
               </Pressable>
             </View>
+          </View>
+        )}
+
+        {!!drafts.length && (
+          <View style={styles.batchSection}>
+            <View style={styles.batchSummary}>
+              <Text style={styles.batchCount}>{drafts.length} {drafts.length === 1 ? 'piece' : 'pieces'} selected</Text>
+              <Text style={styles.batchPosition}>Piece {activeIndex + 1} of {drafts.length}</Text>
+            </View>
+            {drafts.length > 1 && (
+              <ScrollView
+                contentContainerStyle={styles.batchRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {drafts.map((draft, index) => (
+                  <Pressable
+                    accessibilityLabel={`Edit piece ${index + 1}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: index === activeIndex }}
+                    key={`${draft.asset.uri}-${index}`}
+                    onPress={() => setActiveIndex(index)}
+                    style={[styles.batchThumbButton, index === activeIndex && styles.batchThumbButtonActive]}
+                  >
+                    <Image source={{ uri: draft.asset.uri }} style={styles.batchThumb} contentFit="cover" />
+                    <View style={styles.batchNumber}><Text style={styles.batchNumberText}>{index + 1}</Text></View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
           </View>
         )}
 
@@ -207,8 +286,8 @@ export function GarmentCaptureScreen({
         <Text style={styles.label}>NAME</Text>
         <TextInput
           accessibilityLabel="Garment name"
-          value={name}
-          onChangeText={setName}
+          value={activeDraft?.name ?? ''}
+          onChangeText={(name) => updateActiveDraft({ name })}
           placeholder="e.g. Vintage denim jacket"
           placeholderTextColor="#9B9F9B"
           returnKeyType="done"
@@ -221,12 +300,12 @@ export function GarmentCaptureScreen({
             <Pressable
               accessibilityLabel={item.accessibilityLabel}
               accessibilityRole="button"
-              accessibilityState={{ selected: category === item.value }}
+              accessibilityState={{ selected: activeDraft?.category === item.value }}
               key={item.value ?? 'auto'}
-              onPress={() => setCategory(item.value)}
-              style={[styles.option, category === item.value && styles.optionActive]}
+              onPress={() => updateActiveDraft({ category: item.value })}
+              style={[styles.option, activeDraft?.category === item.value && styles.optionActive]}
             >
-              <Text style={[styles.optionText, category === item.value && styles.optionTextActive]}>
+              <Text style={[styles.optionText, activeDraft?.category === item.value && styles.optionTextActive]}>
                 {item.label}
               </Text>
             </Pressable>
@@ -243,10 +322,10 @@ export function GarmentCaptureScreen({
               accessibilityLabel={`${item} color`}
               accessibilityRole="button"
               key={item}
-              onPress={() => setColor(item)}
-              style={[styles.option, color === item && styles.optionActive]}
+              onPress={() => updateActiveDraft({ color: item })}
+              style={[styles.option, activeDraft?.color === item && styles.optionActive]}
             >
-              <Text style={[styles.optionText, color === item && styles.optionTextActive]}>{item}</Text>
+              <Text style={[styles.optionText, activeDraft?.color === item && styles.optionTextActive]}>{item}</Text>
             </Pressable>
           ))}
         </View>
@@ -254,8 +333,8 @@ export function GarmentCaptureScreen({
         <Text style={styles.label}>SIZE</Text>
         <TextInput
           accessibilityLabel="Garment size"
-          value={size}
-          onChangeText={setSize}
+          value={activeDraft?.size ?? ''}
+          onChangeText={(size) => updateActiveDraft({ size })}
           placeholder="M"
           placeholderTextColor="#9B9F9B"
           returnKeyType="done"
@@ -265,14 +344,20 @@ export function GarmentCaptureScreen({
 
         <View style={styles.footer}>
           <Pressable
-            accessibilityLabel="Add to my closet"
+            accessibilityLabel={drafts.length > 1 ? `Add ${drafts.length} pieces to my closet` : 'Add to my closet'}
             accessibilityRole="button"
             onPress={save}
             disabled={isBusy}
             style={[styles.save, isBusy && styles.saveDisabled]}
           >
             {isUploading ? <ActivityIndicator color={colors.white} /> : <Sparkles size={18} color={colors.white} />}
-            <Text style={styles.saveText}>{isUploading ? 'Saving your piece…' : 'Add to my closet'}</Text>
+            <Text style={styles.saveText}>
+              {isUploading
+                ? `Saving ${uploadProgress} of ${drafts.length}…`
+                : drafts.length > 1
+                  ? `Add ${drafts.length} pieces to my closet`
+                  : 'Add to my closet'}
+            </Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -305,6 +390,16 @@ const styles = StyleSheet.create({
   cleanText: { fontFamily: fonts.body, color: colors.forest, fontSize: 10, fontWeight: '800' },
   change: { position: 'absolute', right: 13, bottom: 13, backgroundColor: 'rgba(27,33,29,0.76)', borderRadius: 99, paddingHorizontal: 12, paddingVertical: 8 },
   changeText: { fontFamily: fonts.body, color: colors.white, fontSize: 10.5, fontWeight: '700' },
+  batchSection: { marginTop: 13, gap: 10 },
+  batchSummary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2 },
+  batchCount: { fontFamily: fonts.body, color: colors.ink, fontSize: 12, fontWeight: '800' },
+  batchPosition: { fontFamily: fonts.body, color: colors.muted, fontSize: 11, fontWeight: '600' },
+  batchRail: { gap: 9, paddingVertical: 2 },
+  batchThumbButton: { width: 66, height: 66, borderRadius: 17, padding: 3, borderWidth: 2, borderColor: colors.line, backgroundColor: colors.surface },
+  batchThumbButtonActive: { borderColor: colors.forest },
+  batchThumb: { width: '100%', height: '100%', borderRadius: 12 },
+  batchNumber: { position: 'absolute', right: 5, bottom: 5, width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.forest },
+  batchNumberText: { fontFamily: fonts.body, color: colors.white, fontSize: 9, fontWeight: '800' },
   tip: { marginTop: 13, backgroundColor: colors.sage, borderRadius: 17, padding: 13, flexDirection: 'row', gap: 9, alignItems: 'center' },
   tipIcon: { width: 25, height: 25, borderRadius: 9, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   tipText: { flex: 1, fontFamily: fonts.body, color: '#5F5F64', fontSize: 10.5, lineHeight: 15 },

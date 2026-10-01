@@ -105,7 +105,7 @@ describe('GarmentCaptureScreen', () => {
       <GarmentCaptureScreen picker={picker} onUpload={jest.fn()} onClose={jest.fn()} />,
     );
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Choose garment photo' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Choose garment photos' }));
 
     expect(await screen.findByText('Choose a photo that is at least 600 × 600 pixels.')).toBeTruthy();
     expect(screen.queryByLabelText('Selected garment photo')).toBeNull();

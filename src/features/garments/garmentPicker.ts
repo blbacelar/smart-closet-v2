@@ -2,7 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { GarmentAsset } from './garmentValidation';
 
 export type GarmentPickResult =
-  | { status: 'selected'; asset: GarmentAsset }
+  | { status: 'selected'; assets: GarmentAsset[] }
   | { status: 'cancelled' }
   | { status: 'permission-denied' };
 
@@ -15,11 +15,20 @@ type ImagePickerApi = Pick<
   'requestCameraPermissionsAsync' | 'launchCameraAsync' | 'launchImageLibraryAsync'
 >;
 
-const options: ImagePicker.ImagePickerOptions = {
+export const garmentBatchLimit = 5;
+
+const cameraOptions: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
   allowsEditing: false,
   base64: true,
   quality: 0.8,
+};
+
+const libraryOptions: ImagePicker.ImagePickerOptions = {
+  ...cameraOptions,
+  allowsMultipleSelection: true,
+  orderedSelection: true,
+  selectionLimit: garmentBatchLimit,
 };
 
 export function createGarmentPicker(imagePicker: ImagePickerApi): GarmentPicker {
@@ -34,22 +43,21 @@ export function createGarmentPicker(imagePicker: ImagePickerApi): GarmentPicker 
 
       const result =
         source === 'camera'
-          ? await imagePicker.launchCameraAsync(options)
-          : await imagePicker.launchImageLibraryAsync(options);
+          ? await imagePicker.launchCameraAsync(cameraOptions)
+          : await imagePicker.launchImageLibraryAsync(libraryOptions);
 
       if (result.canceled || !result.assets?.[0]) {
         return { status: 'cancelled' };
       }
 
-      const asset = result.assets[0];
       return {
         status: 'selected',
-        asset: {
+        assets: result.assets.slice(0, garmentBatchLimit).map((asset) => ({
           uri: asset.uri,
           base64: asset.base64,
           width: asset.width,
           height: asset.height,
-        },
+        })),
       };
     },
   };
