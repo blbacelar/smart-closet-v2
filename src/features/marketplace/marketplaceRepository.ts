@@ -70,6 +70,14 @@ const transactionRowSchema = z.object({
   created_at: z.string().min(1),
 });
 
+const messageRowSchema = z.object({
+  id: z.string().uuid(),
+  offer_id: z.string().uuid(),
+  sender_id: z.string().uuid(),
+  body: z.string().min(1).max(1000),
+  created_at: z.string().min(1),
+});
+
 export type MarketplaceSummary = {
   annualPriceCents: number;
   currencyCode: string;
@@ -137,6 +145,14 @@ export type MarketplaceTransaction = {
   createdAt: string;
 };
 
+export type MarketplaceMessage = {
+  id: string;
+  offerId: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+};
+
 export type MarketplaceRepository = {
   getSummary: () => Promise<MarketplaceSummary>;
   activateMembership: () => Promise<{ creditsGranted: number }>;
@@ -155,6 +171,8 @@ export type MarketplaceRepository = {
   listTransactions: () => Promise<MarketplaceTransaction[]>;
   confirmHandoff: (transactionId: string) => Promise<'awaiting_handoff' | 'completed'>;
   cancelTransaction: (transactionId: string) => Promise<void>;
+  listMessages: (offerId: string) => Promise<MarketplaceMessage[]>;
+  sendMessage: (offerId: string, body: string) => Promise<string>;
 };
 
 function throwIfError(error: unknown): asserts error is null | undefined {
@@ -322,6 +340,29 @@ export function createMarketplaceRepository(client: SupabaseClient): Marketplace
       });
       throwIfError(error);
     },
+
+    async listMessages(offerId) {
+      const { data, error } = await client.rpc('marketplace_my_messages', {
+        p_offer_id: offerId,
+      });
+      throwIfError(error);
+      return z.array(messageRowSchema).parse(data ?? []).map((row) => ({
+        id: row.id,
+        offerId: row.offer_id,
+        senderId: row.sender_id,
+        body: row.body,
+        createdAt: row.created_at,
+      }));
+    },
+
+    async sendMessage(offerId, body) {
+      const { data, error } = await client.rpc('marketplace_send_message', {
+        p_offer_id: offerId,
+        p_body: body.trim(),
+      });
+      throwIfError(error);
+      return z.string().uuid().parse(data);
+    },
   };
 }
 
@@ -343,4 +384,6 @@ export const supabaseMarketplaceRepository: MarketplaceRepository = {
   listTransactions: () => requireRepository().listTransactions(),
   confirmHandoff: (transactionId) => requireRepository().confirmHandoff(transactionId),
   cancelTransaction: (transactionId) => requireRepository().cancelTransaction(transactionId),
+  listMessages: (offerId) => requireRepository().listMessages(offerId),
+  sendMessage: (offerId, body) => requireRepository().sendMessage(offerId, body),
 };

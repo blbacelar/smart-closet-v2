@@ -32,6 +32,14 @@ const listingRow = {
   created_at: '2026-10-13T10:00:00Z',
 };
 
+const messageRow = {
+  id: '66666666-6666-4666-8666-666666666666',
+  offer_id: '44444444-4444-4444-8444-444444444444',
+  sender_id: '33333333-3333-4333-8333-333333333333',
+  body: 'Meet at the community centre?',
+  created_at: '2026-10-13T10:05:00Z',
+};
+
 function createClient() {
   const rpc: jest.Mock = jest.fn(async (name: string) => {
     if (name === 'marketplace_my_summary') return { data: [summaryRow], error: null };
@@ -45,6 +53,8 @@ function createClient() {
     if (name === 'marketplace_create_offer') {
       return { data: '44444444-4444-4444-8444-444444444444', error: null };
     }
+    if (name === 'marketplace_my_messages') return { data: [messageRow], error: null };
+    if (name === 'marketplace_send_message') return { data: messageRow.id, error: null };
     return { data: null, error: null };
   });
   const createSignedUrl = jest.fn().mockResolvedValue({
@@ -126,6 +136,26 @@ describe('marketplaceRepository', () => {
       p_mode: 'swap',
       p_swap_listing_id: '55555555-5555-4555-8555-555555555555',
       p_message: 'Would you like to swap?',
+    });
+  });
+
+  it('loads and sends private messages scoped to an offer', async () => {
+    const mocks = createClient();
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.listMessages(messageRow.offer_id)).resolves.toEqual([
+      {
+        id: messageRow.id,
+        offerId: messageRow.offer_id,
+        senderId: messageRow.sender_id,
+        body: messageRow.body,
+        createdAt: messageRow.created_at,
+      },
+    ]);
+    await expect(repository.sendMessage(messageRow.offer_id, '  Sounds good.  ')).resolves.toBe(messageRow.id);
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_send_message', {
+      p_offer_id: messageRow.offer_id,
+      p_body: 'Sounds good.',
     });
   });
 

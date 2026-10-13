@@ -9,6 +9,10 @@ const relistingMigrationPath = resolve(
   __dirname,
   '../20261013160000_marketplace_relisting_safety.sql',
 );
+const messagingMigrationPath = resolve(
+  __dirname,
+  '../20261013170000_marketplace_private_messages.sql',
+);
 
 describe('marketplace economy migration', () => {
   it('defines membership, credits, listings, offers, and transactions', () => {
@@ -66,5 +70,16 @@ describe('marketplace economy migration', () => {
 
     expect(sql).toContain('or swap_listing_id = p_listing_id');
     expect(sql).toContain('or swap_listing_id = v_offer.swap_listing_id');
+  });
+
+  it('keeps offer conversations private and server-authored', () => {
+    expect(existsSync(messagingMigrationPath)).toBe(true);
+    const sql = readFileSync(messagingMigrationPath, 'utf8').toLowerCase();
+
+    expect(sql).toContain('create table public.marketplace_messages');
+    expect(sql).toContain('alter table public.marketplace_messages enable row level security');
+    expect(sql).toContain('create or replace function public.marketplace_my_messages');
+    expect(sql).toContain('create or replace function public.marketplace_send_message');
+    expect(sql).toContain('revoke insert, update, delete on public.marketplace_messages');
   });
 });

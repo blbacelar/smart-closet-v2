@@ -138,7 +138,7 @@ The intended live flow is:
 - No-charge development membership activation with a 500-credit first-year grant and 250-credit renewal grant; the annual pilot price remains server configuration.
 - Closet-to-marketplace publishing for credit exchange, one-for-one swap, and free peer give-away modes.
 - Server-authoritative credit reservation, release, settlement, insufficient-balance protection, competing-offer supersession, and cancellation-safe relisting.
-- Marketplace discovery, listing details, optional offer messages, member activity, and dual-party handoff confirmation.
+- Marketplace discovery, listing details, private participant chat, member activity, and dual-party handoff confirmation.
 - Reduced-motion-aware result reveal and native sharing with the Free watermark embedded in the captured JPEG.
 - Owner-filtered Supabase Realtime job updates with query polling retained as a fallback.
 - Scheduled, skip-locked recovery for interrupted try-on jobs with bounded batches and idempotent quota refunds.
@@ -169,7 +169,7 @@ The intended live flow is:
 - Migration of existing screen copy into the localization catalog and a user-facing language selector.
 - Broader feature/E2E tests and the `EXPO_TOKEN` needed for manual EAS builds.
 - Production marketplace billing and renewal webhooks. Development activation is intentionally no-charge; the final annual price and iOS/Android/web payment rail still require product, storefront, legal, and tax approval.
-- Marketplace chat, push notifications, dispute operations, ratings/reporting, blocking, and production safety moderation.
+- Marketplace push notifications, dispute operations, ratings/reporting, blocking, and production safety moderation.
 - A controlled two-device staging run with representative buyer and seller accounts; the code, migrations, and automated contracts are ready, but production credentials and pilot operators are external dependencies.
 
 ## Common Tasks

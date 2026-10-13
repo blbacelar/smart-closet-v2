@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { ArrowLeft, Check, Clock3, Coins, Gift, Repeat2, X } from 'lucide-react-native';
+import { ArrowLeft, Check, Clock3, Coins, Gift, Inbox, Repeat2, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -113,6 +113,7 @@ export default function MarketplaceActivityRoute() {
             <CardHeader imageUrl={item.imageUrl} mode={item.mode} name={item.listingName} status={item.status} />
             <Text style={styles.detail}>{offerDetail(item.mode, item.creditAmount, item.swapListingName)}</Text>
             {!!item.message && <Text style={styles.note}>“{item.message}”</Text>}
+            {(item.status === 'pending' || item.status === 'accepted') && <ChatButton offerId={item.id} />}
             {item.status === 'pending' && (
               <View style={styles.actions}>
                 <Pressable
@@ -141,6 +142,7 @@ export default function MarketplaceActivityRoute() {
           <View key={item.id} style={styles.card}>
             <CardHeader imageUrl={item.imageUrl} mode={item.mode} name={item.listingName} status={item.status} />
             <Text style={styles.detail}>{offerDetail(item.mode, item.creditAmount, item.swapListingName)}</Text>
+            {(item.status === 'pending' || item.status === 'accepted') && <ChatButton offerId={item.id} />}
             {item.status === 'pending' && (
               <>
                 <View style={styles.pendingRow}><Clock3 color={colors.muted} size={12} /><Text style={styles.pending}>Waiting for the owner</Text></View>
@@ -173,6 +175,20 @@ function SectionTitle({ title, count }: { title: string; count: number }) {
 
 function Empty({ text }: { text: string }) {
   return <Text style={styles.empty}>{text}</Text>;
+}
+
+function ChatButton({ offerId }: { offerId: string }) {
+  return (
+    <Pressable
+      accessibilityLabel="Open offer conversation"
+      accessibilityRole="button"
+      onPress={() => router.push(`/marketplace-chat/${offerId}`)}
+      style={styles.chatAction}
+    >
+      <Inbox color={colors.ink} size={14} />
+      <Text style={styles.chatActionText}>Message member</Text>
+    </Pressable>
+  );
 }
 
 function CardHeader({ imageUrl, mode, name, status }: { imageUrl: string; mode: MarketplaceMode; name: string; status: string }) {
@@ -223,4 +239,6 @@ const styles = StyleSheet.create({
   textActionDanger: { fontFamily: fonts.body, color: '#8C3C34', fontSize: 10.5, fontWeight: '800' },
   pendingRow: { marginTop: 9, flexDirection: 'row', alignItems: 'center', gap: 5 },
   pending: { fontFamily: fonts.body, color: colors.muted, fontSize: 9.5 },
+  chatAction: { minHeight: 42, marginTop: 10, paddingHorizontal: 13, alignSelf: 'flex-start', borderRadius: 13, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.canvas },
+  chatActionText: { fontFamily: fonts.body, color: colors.ink, fontSize: 10, fontWeight: '800' },
 });

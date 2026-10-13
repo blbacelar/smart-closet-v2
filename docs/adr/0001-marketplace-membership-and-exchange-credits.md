@@ -84,7 +84,7 @@ B.C. law generally prohibits expiry dates for prepaid purchase cards subject to 
 5. Implement server-authoritative listing, offer, settlement, dispute, notification, and reporting contracts with feature-specific kill switches.
 6. Run iOS and Android staging journeys for credit, swap, give-away, cancellation, insufficient balance, lapse, and dispute before regional pilot activation.
 
-Until this ADR is Accepted, membership activation remains explicitly no-charge and development-only. The membership, credit, listing, offer, and handoff schema is deployed for controlled testing; production payment, public launch, chat, push, disputes, and ratings remain gated by the approvals above.
+Until this ADR is Accepted, membership activation remains explicitly no-charge and development-only. The membership, credit, listing, offer, private conversation, and handoff schema is deployed for controlled testing; production payment, public launch, push, disputes, and ratings remain gated by the approvals above.
 
 ## Rejected alternatives
 
