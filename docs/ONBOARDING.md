@@ -2,9 +2,9 @@
 
 ## Overview
 
-Fitly helps people photograph their clothes, organize a private digital closet, and preview garments on their own body with AI. The Phase 1 product is valuable for one person without a marketplace; local resale and donations are planned only after enough active closets exist in the Lower Mainland and Fraser Valley, BC.
+Fitly helps people photograph their clothes, organize a private digital closet, preview garments on their own body with AI, and exchange ready closet pieces with other members. The marketplace supports Fitly Credits, direct clothing swaps, and free peer give-aways. Public launch remains limited by billing, policy, safety, and regional-density decisions, but the complete transaction loop is available in development mode.
 
-The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with Gemini moderation and undoable per-photo removal, garment processing, and the persisted try-on pipeline are live. Automatic Gemini garment-category suggestions and their linked Supabase migration/function are deployed and verified. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Subscriptions and marketplace screens still use pending or local sample behavior.
+The codebase is currently between prototype and MVP: authentication, account deletion, private body photos with Gemini moderation and undoable per-photo removal, garment processing, the persisted try-on pipeline, and the development marketplace are live. Automatic Gemini garment-category suggestions and their linked Supabase migration/function are deployed and verified. Privacy-safe observability, a global error fallback, reduced-motion preferences, and English/Brazilian Portuguese localization foundations are also in place. The Gemini key is configured, but its Google project needs prepaid credits before a successful real-image smoke test; garment cleanup still needs its development provider key. Marketplace membership activation is deliberately no-charge until the final price and storefront rail are approved.
 
 ## Tech Stack
 
@@ -53,6 +53,10 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `app/(tabs)/_layout.tsx` — Closet, Studio, Market, and Profile tabs.
 - `app/(tabs)/tryon.tsx` — live private inputs, persisted job status, stored results, and server quota display.
 - `app/add-garment.tsx` — authenticated garment upload route.
+- `app/(tabs)/market.tsx` — persisted marketplace discovery, filters, membership balance, and activity entry point.
+- `app/marketplace/[id].tsx` — credit, swap, and free give-away offer creation.
+- `app/marketplace-activity.tsx` — offer response, cancellation, and dual-confirmation handoff flow.
+- `src/features/marketplace/` — marketplace validation, Supabase repository, queries, membership UI, and tests.
 - `app/delete-account.tsx` — destructive-confirmation route for permanent Phase 1 account deletion.
 - `src/store.ts` — current in-memory prototype state.
 - `src/lib/supabase.ts` — shared authenticated Supabase client.
@@ -105,7 +109,7 @@ The intended live flow is:
 - Single-camera or ordered five-photo library garment capture with independent metadata, invalid-photo filtering, and duplicate-safe partial retry.
 - Default automatic garment category detection with a manual category override that always wins.
 - Persisted try-on selection, progress, private result display, server-authoritative quota UI, and owner-only fit feedback.
-- Marketplace preview, Pro paywall, and privacy/account settings UI.
+- Persisted marketplace discovery, membership, offers, handoffs, and privacy/account settings UI.
 - Expo SDK 57 compatibility for the current App Store Expo Go release.
 - Supabase client with persisted mobile sessions and app-state token refresh.
 - Email/password sign-in and account creation with user profile metadata.
@@ -130,6 +134,11 @@ The intended live flow is:
 - Idempotent try-on job claims, private base64 provider inputs/outputs, atomic completion/cost writes, and one-time quota refunds.
 - Authenticated `tryon-enqueue` Edge Function and direct Gemini provider adapter deployed with JWT verification.
 - Persisted thumbs-up/down try-on feedback with optimistic UI updates, owner-only database enforcement, and failure rollback.
+- Persisted marketplace membership, credit accounts, append-only credit ledger, listings, offers, and transactions.
+- No-charge development membership activation with a 500-credit first-year grant and 250-credit renewal grant; the annual pilot price remains server configuration.
+- Closet-to-marketplace publishing for credit exchange, one-for-one swap, and free peer give-away modes.
+- Server-authoritative credit reservation, release, settlement, insufficient-balance protection, competing-offer supersession, and cancellation-safe relisting.
+- Marketplace discovery, listing details, optional offer messages, member activity, and dual-party handoff confirmation.
 - Reduced-motion-aware result reveal and native sharing with the Free watermark embedded in the captured JPEG.
 - Owner-filtered Supabase Realtime job updates with query polling retained as a fallback.
 - Scheduled, skip-locked recovery for interrupted try-on jobs with bounded batches and idempotent quota refunds.
@@ -159,7 +168,9 @@ The intended live flow is:
 - An external crash-reporting service. Product-funnel analytics now use the first-party Supabase adapter; no PostHog or session-replay dependency is required.
 - Migration of existing screen copy into the localization catalog and a user-facing language selector.
 - Broader feature/E2E tests and the `EXPO_TOKEN` needed for manual EAS builds.
-- Marketplace tables and flows; those are intentionally Phase 2. The proposed annual-membership and exchange-credit direction is captured as discovery-only issue [#48](https://github.com/blbacelar/smart-closet-v2/issues/48) and is blocked on its product/legal/tax/store ADR.
+- Production marketplace billing and renewal webhooks. Development activation is intentionally no-charge; the final annual price and iOS/Android/web payment rail still require product, storefront, legal, and tax approval.
+- Marketplace chat, push notifications, dispute operations, ratings/reporting, blocking, and production safety moderation.
+- A controlled two-device staging run with representative buyer and seller accounts; the code, migrations, and automated contracts are ready, but production credentials and pilot operators are external dependencies.
 
 ## Common Tasks
 
@@ -183,5 +194,5 @@ The intended live flow is:
 ## Recommended Build Order
 
 1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
-2. Add `EXPO_TOKEN` when an Android cloud build is needed, wire approved observability vendors after defining consent, then add Pro subscriptions, broader tests, and prepare the beta release.
-3. Build the marketplace only after the Phase 1 activation and retention gates are credible.
+2. Run the three marketplace settlement modes with two controlled staging accounts, then add chat, notifications, dispute/safety operations, and the approved production membership provider.
+3. Add `EXPO_TOKEN` when an Android cloud build is needed, wire approved observability vendors after defining consent, then prepare the regional beta release.

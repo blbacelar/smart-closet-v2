@@ -1,6 +1,6 @@
 # Fitly Marketplace Membership and Exchange-Credit Economy Blueprint
 
-Status: **discovery ticket only; no-go for implementation until Step 1 is approved**  
+Status: **development transaction loop implemented; production billing and public launch remain gated**
 Tracking issue: [#48](https://github.com/blbacelar/smart-closet-v2/issues/48)  
 Safe working term: **Fitly Credits** in product drafts and `market_credit` in code  
 Naming note: **Loops** has a strong circular-fashion metaphor but is commercially crowded and must not ship without clearance  
@@ -12,7 +12,7 @@ The proposed decision record and exact approval checklist live in [`docs/adr/000
 
 Replace the current cash-first marketplace assumption with a HomeExchange-inspired membership economy. A member pays an annual fee, receives an annual allotment of Fitly Credits, earns credits when another member acquires their garment, and spends credits on garments listed by other members. Two peers may instead agree to a direct garment-for-garment swap with no credits, and a garment may be offered as a free peer-to-peer give-away for zero credits.
 
-This is a proposed direction change for the existing Marketplace Foundation, Offers, and Payments epics. No implementation should begin until the business, legal, tax, accounting, App Store/Play, identity-retention, and migration decisions in Step 1 are approved; the PRD, architecture, and affected tickets are then revised and committed as the canonical contract.
+This direction now has a no-charge development implementation for product and technical validation. Business, legal, tax, accounting, App Store/Play, identity-retention, and safety decisions in Step 1 still gate real billing and public launch; the PRD, architecture, and affected tickets must then be revised as the canonical production contract.
 
 ## Product Model
 

@@ -5,6 +5,10 @@ const migrationPath = resolve(
   __dirname,
   '../20261013140000_marketplace_economy.sql',
 );
+const relistingMigrationPath = resolve(
+  __dirname,
+  '../20261013160000_marketplace_relisting_safety.sql',
+);
 
 describe('marketplace economy migration', () => {
   it('defines membership, credits, listings, offers, and transactions', () => {
@@ -46,5 +50,21 @@ describe('marketplace economy migration', () => {
     expect(sql).toContain('marketplace_one_open_listing_per_garment');
     expect(sql).toContain('marketplace_one_pending_offer_per_buyer');
     expect(sql).toContain('idempotency_key text not null unique');
+  });
+
+  it('allows a cancelled listing to receive a new transaction safely', () => {
+    expect(existsSync(relistingMigrationPath)).toBe(true);
+    const sql = readFileSync(relistingMigrationPath, 'utf8').toLowerCase();
+
+    expect(sql).toContain('drop constraint if exists marketplace_transactions_listing_id_key');
+    expect(sql).toContain('marketplace_one_non_cancelled_transaction_per_listing');
+    expect(sql).toContain("where status in ('awaiting_handoff', 'completed', 'disputed')");
+  });
+
+  it('releases every pending offer that depends on an accepted or withdrawn swap piece', () => {
+    const sql = readFileSync(relistingMigrationPath, 'utf8').toLowerCase();
+
+    expect(sql).toContain('or swap_listing_id = p_listing_id');
+    expect(sql).toContain('or swap_listing_id = v_offer.swap_listing_id');
   });
 });

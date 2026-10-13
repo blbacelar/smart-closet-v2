@@ -1,13 +1,13 @@
 # ADR 0001: Marketplace membership and exchange credits
 
-- Status: **Proposed — implementation blocked**
+- Status: **Development prototype implemented — public billing and launch blocked**
 - Owner: Product founder
 - Required approvers: Product, Canadian legal counsel, Canadian tax/accounting adviser, security/privacy owner
 - Last reviewed: 2026-10-01
 - Supersedes: nothing until accepted
 - Related: GitHub #27, #36–#48; `plans/marketplace-loops-economy.md`; `plans/marketplace-economics-scenarios.md`
 
-This is a decision record, not legal or tax advice. Items marked **Required** must have written evidence before this ADR can become Accepted and before marketplace implementation begins.
+This is a decision record, not legal or tax advice. The no-charge development implementation may be exercised for product testing. Items marked **Required** must have written evidence before this ADR can become Accepted, before real money is collected, or before a public marketplace launch.
 
 ## Decision summary
 
@@ -84,7 +84,7 @@ B.C. law generally prohibits expiry dates for prepaid purchase cards subject to 
 5. Implement server-authoritative listing, offer, settlement, dispute, notification, and reporting contracts with feature-specific kill switches.
 6. Run iOS and Android staging journeys for credit, swap, give-away, cancellation, insufficient balance, lapse, and dispute before regional pilot activation.
 
-Until this ADR is Accepted, the Market tab remains a non-transactional preview and no membership, credit, listing, offer, chat, push, payment, handoff, or rating schema is deployed.
+Until this ADR is Accepted, membership activation remains explicitly no-charge and development-only. The membership, credit, listing, offer, and handoff schema is deployed for controlled testing; production payment, public launch, chat, push, disputes, and ratings remain gated by the approvals above.
 
 ## Rejected alternatives
 
