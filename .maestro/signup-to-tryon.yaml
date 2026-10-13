@@ -17,7 +17,7 @@ tags:
 - tapOn: "Create an account"
 - tapOn:
     id: "auth-birth-date-input"
-- inputText: "1990-01-01"
+- inputText: "19900101"
 - tapOn:
     id: "auth-name-input"
 - inputText: "Fitly Test Member"

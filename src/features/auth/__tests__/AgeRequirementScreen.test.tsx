@@ -19,7 +19,10 @@ describe('AgeRequirementScreen', () => {
     const onConfirm = jest.fn().mockResolvedValue(undefined);
     const screen = await render(<AgeRequirementScreen onConfirm={onConfirm} />);
 
-    await fireEvent.changeText(screen.getByLabelText('Date of birth'), '1990-01-01');
+    const input = screen.getByLabelText('Date of birth');
+    expect(input.props.inputMode).toBe('numeric');
+    await fireEvent.changeText(input, '19900101');
+    expect(input.props.value).toBe('1990-01-01');
     await fireEvent.press(screen.getByRole('button', { name: 'Confirm age eligibility' }));
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith());

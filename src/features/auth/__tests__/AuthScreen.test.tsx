@@ -32,6 +32,16 @@ async function confirmAdult(screen: Awaited<ReturnType<typeof render>>) {
 }
 
 describe('AuthScreen', () => {
+  it('keeps the numeric keyboard and formats a digit-only birth date', async () => {
+    const screen = await render(<AuthScreen gateway={createGateway()} />);
+    const input = screen.getByLabelText('Date of birth');
+
+    expect(input.props.inputMode).toBe('numeric');
+    await fireEvent.changeText(input, '19830715');
+
+    expect(input.props.value).toBe('1983-07-15');
+  });
+
   it('validates before sending sign-in credentials', async () => {
     const gateway = createGateway();
     const screen = await render(<AuthScreen gateway={gateway} />);

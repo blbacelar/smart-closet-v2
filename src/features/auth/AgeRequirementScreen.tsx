@@ -3,7 +3,11 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen } from '../../components/Screen';
 import { colors, fonts } from '../../theme';
-import { ageEligibilityMessage, checkAgeEligibility } from './ageEligibility';
+import {
+  ageEligibilityMessage,
+  checkAgeEligibility,
+  formatBirthDateInput,
+} from './ageEligibility';
 
 type Props = {
   onConfirm: () => Promise<void>;
@@ -46,7 +50,7 @@ export function AgeRequirementScreen({ onConfirm }: Props) {
         editable={!isSubmitting}
         inputMode="numeric"
         onChangeText={(value) => {
-          setBirthDate(value);
+          setBirthDate(formatBirthDateInput(value));
           setMessage('');
         }}
         onSubmitEditing={() => void submit()}

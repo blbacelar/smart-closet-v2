@@ -15,7 +15,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts } from '../../theme';
 import { observability, ObservabilityClient } from '../../lib/observability';
 import { AuthGateway, SocialAuthProvider, supabaseAuthGateway } from './authGateway';
-import { ageEligibilityMessage, checkAgeEligibility } from './ageEligibility';
+import {
+  ageEligibilityMessage,
+  checkAgeEligibility,
+  formatBirthDateInput,
+} from './ageEligibility';
 import { AuthFieldErrors, AuthFields, AuthMode, validateAuthForm } from './credentials';
 
 type AuthScreenProps = {
@@ -154,7 +158,7 @@ export function AuthScreen({
               autoComplete="birthdate-full"
               inputMode="numeric"
               onChangeText={(value) => {
-                setBirthDate(value);
+                setBirthDate(formatBirthDateInput(value));
                 setAgeError('');
                 setStatusMessage('');
               }}
