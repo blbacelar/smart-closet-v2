@@ -27,7 +27,8 @@ const row = {
 
 function createClient() {
   const order = jest.fn().mockResolvedValue({ data: [row], error: null });
-  const eq = jest.fn(() => ({ order }));
+  const is = jest.fn(() => ({ order }));
+  const eq = jest.fn(() => ({ is }));
   const selectList = jest.fn(() => ({ eq }));
   const single = jest.fn().mockResolvedValue({ data: row, error: null });
   const selectInsert = jest.fn(() => ({ single }));
@@ -49,6 +50,7 @@ function createClient() {
   return {
     client: { from: fromTable, storage: { from: fromBucket }, functions: { invoke } },
     eq,
+    is,
     order,
     insert,
     update,
@@ -103,6 +105,7 @@ describe('garmentRepository', () => {
       },
     ]);
     expect(mocks.eq).toHaveBeenCalledWith('user_id', 'user-1');
+    expect(mocks.is).toHaveBeenCalledWith('marketplace_archived_at', null);
     expect(mocks.createSignedUrl).toHaveBeenCalledWith('user-1/original.jpg', 3600);
   });
 

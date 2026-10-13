@@ -114,4 +114,62 @@ describe('GarmentDetailScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Close garment editor' }));
     expect(screen.queryByText('GARMENT TAGS')).toBeNull();
   });
+
+  it('publishes a ready closet garment with credits, swap, and pickup details', async () => {
+    const onPublish = jest.fn().mockResolvedValue(undefined);
+    const screen = await render(
+      <GarmentDetailScreen
+        garment={garment}
+        marketplace={{
+          listing: null,
+          membershipActive: true,
+          isSaving: false,
+          onMembershipRequired: jest.fn(),
+          onPublish,
+          onWithdraw: jest.fn(),
+        }}
+        onBack={jest.fn()}
+        onSave={jest.fn()}
+      />,
+    );
+
+    await fireEvent.press(screen.getByRole('button', { name: 'List garment in marketplace' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Credits listing mode' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Swap listing mode' }));
+    await fireEvent.changeText(screen.getByLabelText('Fitly Credit price'), '75');
+    await fireEvent.changeText(screen.getByLabelText('General pickup area'), 'Burnaby Heights');
+    await fireEvent.press(screen.getByRole('button', { name: 'Publish marketplace listing' }));
+
+    await waitFor(() => expect(onPublish).toHaveBeenCalledWith({
+      acceptsCredits: true,
+      acceptsSwap: true,
+      isGiveaway: false,
+      creditPrice: 75,
+      pickupArea: 'Burnaby Heights',
+    }));
+  });
+
+  it('routes non-members to membership instead of opening listing controls', async () => {
+    const onMembershipRequired = jest.fn();
+    const screen = await render(
+      <GarmentDetailScreen
+        garment={garment}
+        marketplace={{
+          listing: null,
+          membershipActive: false,
+          isSaving: false,
+          onMembershipRequired,
+          onPublish: jest.fn(),
+          onWithdraw: jest.fn(),
+        }}
+        onBack={jest.fn()}
+        onSave={jest.fn()}
+      />,
+    );
+
+    await fireEvent.press(screen.getByRole('button', { name: 'List garment in marketplace' }));
+
+    expect(onMembershipRequired).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('FITLY MARKET')).toBeNull();
+  });
 });

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Check, X } from 'lucide-react-native';
+import { Check, Coins, Gift, Repeat2, Store, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,6 +16,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, fonts, shadow } from '../../theme';
 import type { Garment } from './garmentRepository';
+import type { MarketplaceListing } from '../marketplace/marketplaceRepository';
+import {
+  MarketplaceMode,
+  validateMarketplaceListing,
+  ValidatedMarketplaceListing,
+} from '../marketplace/marketplaceValidation';
 import {
   GarmentCategory,
   GarmentDetails,
@@ -26,6 +32,14 @@ type GarmentDetailScreenProps = {
   garment: Garment;
   onBack: () => void;
   onSave: (details: GarmentDetails) => Promise<void>;
+  marketplace?: {
+    listing: MarketplaceListing | null;
+    membershipActive: boolean;
+    isSaving: boolean;
+    onMembershipRequired: () => void;
+    onPublish: (listing: ValidatedMarketplaceListing) => Promise<void>;
+    onWithdraw: () => Promise<void>;
+  };
 };
 
 const categoryOptions: { value: GarmentCategory; label: string }[] = [
@@ -48,7 +62,7 @@ function displayValue(value: string | null) {
   return value || 'Not set';
 }
 
-export function GarmentDetailScreen({ garment, onBack, onSave }: GarmentDetailScreenProps) {
+export function GarmentDetailScreen({ garment, onBack, onSave, marketplace }: GarmentDetailScreenProps) {
   const [editorVisible, setEditorVisible] = useState(false);
   const [name, setName] = useState(garment.name ?? '');
   const [category, setCategory] = useState<GarmentCategory>(garment.category ?? 'top');
@@ -57,6 +71,11 @@ export function GarmentDetailScreen({ garment, onBack, onSave }: GarmentDetailSc
   const [season, setSeason] = useState(garment.season ?? '');
   const [message, setMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [listingVisible, setListingVisible] = useState(false);
+  const [listingModes, setListingModes] = useState<MarketplaceMode[]>([]);
+  const [creditPrice, setCreditPrice] = useState('');
+  const [pickupArea, setPickupArea] = useState('');
+  const [listingMessage, setListingMessage] = useState('');
 
   const openEditor = () => {
     setName(garment.name ?? '');
@@ -88,6 +107,58 @@ export function GarmentDetailScreen({ garment, onBack, onSave }: GarmentDetailSc
       setMessage('Could not save those details. Try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const openListing = () => {
+    if (!marketplace) return;
+    if (!marketplace.membershipActive) {
+      marketplace.onMembershipRequired();
+      return;
+    }
+    const listing = marketplace.listing;
+    setListingModes([
+      ...(listing?.acceptsCredits ? ['credits' as const] : []),
+      ...(listing?.acceptsSwap ? ['swap' as const] : []),
+      ...(listing?.isGiveaway ? ['giveaway' as const] : []),
+    ]);
+    setCreditPrice(listing?.creditPrice?.toString() ?? '');
+    setPickupArea(listing?.pickupArea ?? '');
+    setListingMessage('');
+    setListingVisible(true);
+  };
+
+  const toggleListingMode = (mode: MarketplaceMode) => {
+    setListingModes((current) => current.includes(mode)
+      ? current.filter((item) => item !== mode)
+      : [...current, mode]);
+    setListingMessage('');
+  };
+
+  const publishListing = async () => {
+    if (!marketplace) return;
+    const result = validateMarketplaceListing({ modes: listingModes, creditPrice, pickupArea });
+    if (!result.ok) {
+      setListingMessage(result.message);
+      return;
+    }
+    setListingMessage('');
+    try {
+      await marketplace.onPublish(result.listing);
+      setListingVisible(false);
+    } catch (error) {
+      setListingMessage(error instanceof Error ? error.message : 'Could not publish that listing.');
+    }
+  };
+
+  const withdrawListing = async () => {
+    if (!marketplace?.listing) return;
+    setListingMessage('');
+    try {
+      await marketplace.onWithdraw();
+      setListingVisible(false);
+    } catch (error) {
+      setListingMessage(error instanceof Error ? error.message : 'Could not remove that listing.');
     }
   };
 
@@ -136,6 +207,19 @@ export function GarmentDetailScreen({ garment, onBack, onSave }: GarmentDetailSc
         >
           <Text style={styles.editButtonText}>Edit details</Text>
         </Pressable>
+        {!!marketplace && garment.status === 'ready' && (
+          <Pressable
+            accessibilityLabel={marketplace.listing ? 'Manage marketplace listing' : 'List garment in marketplace'}
+            accessibilityRole="button"
+            onPress={openListing}
+            style={[styles.editButton, styles.marketButton]}
+          >
+            <Store color={colors.white} size={17} />
+            <Text style={styles.editButtonText}>
+              {marketplace.listing ? 'Manage marketplace listing' : 'List in marketplace'}
+            </Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       <Modal
@@ -224,7 +308,142 @@ export function GarmentDetailScreen({ garment, onBack, onSave }: GarmentDetailSc
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => !marketplace?.isSaving && setListingVisible(false)}
+        transparent
+        visible={listingVisible}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
+          <View accessibilityViewIsModal style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetEyebrow}>FITLY MARKET</Text>
+                <Text style={styles.sheetTitle}>{marketplace?.listing ? 'Manage listing' : 'List this piece'}</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close marketplace listing"
+                accessibilityRole="button"
+                disabled={marketplace?.isSaving}
+                onPress={() => setListingVisible(false)}
+                style={styles.iconButton}
+              >
+                <X size={19} color={colors.ink} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.form}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.listingHelp}>Choose every exchange type you are open to.</Text>
+              <View style={styles.modeOptions}>
+                <ModeOption
+                  Icon={Coins}
+                  active={listingModes.includes('credits')}
+                  label="Credits"
+                  onPress={() => toggleListingMode('credits')}
+                />
+                <ModeOption
+                  Icon={Repeat2}
+                  active={listingModes.includes('swap')}
+                  label="Swap"
+                  onPress={() => toggleListingMode('swap')}
+                />
+                <ModeOption
+                  Icon={Gift}
+                  active={listingModes.includes('giveaway')}
+                  label="Give away"
+                  onPress={() => toggleListingMode('giveaway')}
+                />
+              </View>
+
+              {listingModes.includes('credits') && (
+                <>
+                  <Text style={styles.label}>CREDIT PRICE</Text>
+                  <TextInput
+                    accessibilityLabel="Fitly Credit price"
+                    inputMode="numeric"
+                    maxLength={5}
+                    onChangeText={(value) => setCreditPrice(value.replace(/\D/g, ''))}
+                    placeholder="e.g. 75"
+                    placeholderTextColor="#9B9F9B"
+                    style={styles.input}
+                    value={creditPrice}
+                  />
+                </>
+              )}
+
+              <Text style={styles.label}>GENERAL PICKUP AREA</Text>
+              <TextInput
+                accessibilityLabel="General pickup area"
+                maxLength={80}
+                onChangeText={setPickupArea}
+                placeholder="e.g. Burnaby Heights"
+                placeholderTextColor="#9B9F9B"
+                style={styles.input}
+                value={pickupArea}
+              />
+              <Text style={styles.locationNotice}>Use a neighbourhood only. Share an exact address privately after an offer is accepted.</Text>
+              {!!listingMessage && <Text accessibilityRole="alert" style={styles.message}>{listingMessage}</Text>}
+            </ScrollView>
+
+            <Pressable
+              accessibilityLabel="Publish marketplace listing"
+              accessibilityRole="button"
+              disabled={marketplace?.isSaving}
+              onPress={() => void publishListing()}
+              style={[styles.saveButton, marketplace?.isSaving && styles.disabledButton]}
+            >
+              {marketplace?.isSaving && <ActivityIndicator color={colors.white} size="small" />}
+              <Text style={styles.saveButtonText}>{marketplace?.isSaving ? 'Saving…' : marketplace?.listing ? 'Update listing' : 'Publish listing'}</Text>
+            </Pressable>
+            {!!marketplace?.listing && (
+              <Pressable
+                accessibilityLabel="Remove marketplace listing"
+                accessibilityRole="button"
+                disabled={marketplace.isSaving}
+                onPress={() => void withdrawListing()}
+                style={styles.withdrawButton}
+              >
+                <Text style={styles.withdrawButtonText}>Remove from marketplace</Text>
+              </Pressable>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
+  );
+}
+
+function ModeOption({
+  Icon,
+  active,
+  label,
+  onPress,
+}: {
+  Icon: typeof Coins;
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`${label} listing mode`}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={[styles.modeOption, active && styles.modeOptionActive]}
+    >
+      <Icon color={active ? colors.white : colors.ink} size={17} />
+      <Text style={[styles.modeOptionText, active && styles.modeOptionTextActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -254,7 +473,8 @@ const styles = StyleSheet.create({
   detailRowLast: { borderBottomWidth: 0 },
   detailLabel: { fontFamily: fonts.body, color: colors.muted, fontSize: 12 },
   detailValue: { fontFamily: fonts.body, color: colors.ink, fontSize: 13, fontWeight: '700' },
-  editButton: { height: 52, marginTop: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink, ...shadow },
+  editButton: { height: 52, marginTop: 16, borderRadius: 16, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink, ...shadow },
+  marketButton: { backgroundColor: colors.forest },
   editButtonText: { fontFamily: fonts.body, color: colors.white, fontSize: 13, fontWeight: '800' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(20,20,20,0.46)' },
   sheet: { maxHeight: '88%', paddingTop: 20, paddingHorizontal: 20, paddingBottom: 22, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.canvas, ...shadow },
@@ -273,4 +493,13 @@ const styles = StyleSheet.create({
   saveButton: { minHeight: 54, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.ink },
   disabledButton: { opacity: 0.68 },
   saveButtonText: { fontFamily: fonts.body, color: colors.white, fontSize: 13, fontWeight: '800' },
+  listingHelp: { marginTop: 8, fontFamily: fonts.body, color: colors.muted, fontSize: 12, lineHeight: 18 },
+  modeOptions: { marginTop: 16, flexDirection: 'row', gap: 8 },
+  modeOption: { flex: 1, minHeight: 72, paddingHorizontal: 8, borderRadius: 15, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 7 },
+  modeOptionActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  modeOptionText: { fontFamily: fonts.body, color: colors.ink, fontSize: 10.5, fontWeight: '800' },
+  modeOptionTextActive: { color: colors.white },
+  locationNotice: { marginTop: 8, fontFamily: fonts.body, color: colors.muted, fontSize: 9.5, lineHeight: 14 },
+  withdrawButton: { minHeight: 46, marginTop: 10, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#C98780' },
+  withdrawButtonText: { fontFamily: fonts.body, color: '#8C3C34', fontSize: 11.5, fontWeight: '800' },
 });

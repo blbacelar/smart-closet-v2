@@ -108,6 +108,7 @@ export function createGarmentRepository(
         .from('garments')
         .select(selection)
         .eq('user_id', userId)
+        .is('marketplace_archived_at', null)
         .order('created_at', { ascending: false });
       throwIfError(error);
 

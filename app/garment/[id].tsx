@@ -5,13 +5,27 @@ import { useGarments, useUpdateGarment } from '../../src/features/garments/useGa
 import type { GarmentDetails } from '../../src/features/garments/garmentValidation';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { colors, fonts } from '../../src/theme';
+import {
+  useMarketplaceListings,
+  useMarketplaceSummary,
+  usePublishMarketplaceListing,
+  useWithdrawMarketplaceListing,
+} from '../../src/features/marketplace/useMarketplace';
+import type { ValidatedMarketplaceListing } from '../../src/features/marketplace/marketplaceValidation';
 
 export default function GarmentDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { identity } = useAuth();
   const garments = useGarments(identity?.id);
   const update = useUpdateGarment(identity?.id ?? 'signed-out');
+  const marketplaceSummary = useMarketplaceSummary(identity?.id);
+  const marketplaceListings = useMarketplaceListings(identity?.id);
+  const publishListing = usePublishMarketplaceListing();
+  const withdrawListing = useWithdrawMarketplaceListing();
   const garment = garments.data?.find((item) => item.id === id);
+  const listing = marketplaceListings.data?.find((item) => (
+    item.garmentId === id && item.sellerId === identity?.id
+  )) ?? null;
 
   if (garments.isLoading) {
     return <View style={styles.center}><ActivityIndicator color={colors.ink} /></View>;
@@ -43,7 +57,27 @@ export default function GarmentDetailRoute() {
     await update.mutateAsync({ garmentId: garment.id, details });
   };
 
-  return <GarmentDetailScreen garment={garment} onBack={() => router.back()} onSave={save} />;
+  const publish = async (input: ValidatedMarketplaceListing) => {
+    await publishListing.mutateAsync({ garmentId: garment.id, ...input });
+  };
+
+  return (
+    <GarmentDetailScreen
+      garment={garment}
+      marketplace={{
+        listing,
+        membershipActive: marketplaceSummary.data?.membershipStatus === 'active',
+        isSaving: publishListing.isPending || withdrawListing.isPending,
+        onMembershipRequired: () => router.push('/marketplace-membership'),
+        onPublish: publish,
+        onWithdraw: async () => {
+          if (listing) await withdrawListing.mutateAsync(listing.id);
+        },
+      }}
+      onBack={() => router.back()}
+      onSave={save}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
