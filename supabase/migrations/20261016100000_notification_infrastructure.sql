@@ -29,7 +29,7 @@ create table private.notification_push_tokens (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   installation_id uuid not null,
-  expo_token text not null unique
+  expo_token text not null
     check (expo_token ~ '^(ExpoPushToken|ExponentPushToken)\[[A-Za-z0-9_-]+\]$'),
   platform text not null check (platform in ('ios', 'android')),
   status text not null default 'active' check (status in ('active', 'disabled')),
@@ -45,6 +45,9 @@ create table private.notification_push_tokens (
 
 create unique index notification_active_installation_idx
   on private.notification_push_tokens(user_id, installation_id)
+  where status = 'active';
+create unique index notification_active_expo_token_idx
+  on private.notification_push_tokens(expo_token)
   where status = 'active';
 create index notification_push_token_user_idx
   on private.notification_push_tokens(user_id, status, last_seen_at desc);
@@ -78,9 +81,9 @@ create index notification_outbox_claim_idx
 create table private.notification_deliveries (
   id uuid primary key default gen_random_uuid(),
   outbox_id uuid not null references private.notification_outbox(id) on delete cascade,
-  token_id uuid not null references private.notification_push_tokens(id) on delete restrict,
+  token_id uuid not null references private.notification_push_tokens(id) on delete cascade,
   status text not null default 'pending'
-    check (status in ('pending', 'retry', 'ticketed', 'delivered', 'dead')),
+    check (status in ('pending', 'retry', 'sending', 'ticketed', 'delivered', 'dead')),
   attempts integer not null default 0 check (attempts >= 0 and attempts <= 5),
   provider_ticket_id text unique,
   receipt_available_at timestamptz,
@@ -150,6 +153,20 @@ begin
   perform pg_advisory_xact_lock(hashtextextended(p_expo_token, 10102026));
   perform pg_advisory_xact_lock(hashtextextended(v_user_id::text || ':' || p_installation_id::text, 10102026));
 
+  select id into v_token_id
+  from private.notification_push_tokens
+  where user_id = v_user_id
+    and installation_id = p_installation_id
+    and expo_token = p_expo_token
+    and status = 'active'
+  for update;
+  if v_token_id is not null then
+    update private.notification_push_tokens
+    set platform = p_platform, last_seen_at = now()
+    where id = v_token_id;
+    return v_token_id;
+  end if;
+
   update private.notification_push_tokens
   set status = 'disabled',
       disabled_reason = 'rotated_or_reassigned',
@@ -168,14 +185,6 @@ begin
     v_user_id, p_installation_id, p_expo_token, p_platform, 'active',
     null, null, now()
   )
-  on conflict (expo_token) do update
-  set user_id = excluded.user_id,
-      installation_id = excluded.installation_id,
-      platform = excluded.platform,
-      status = 'active',
-      disabled_reason = null,
-      disabled_at = null,
-      last_seen_at = now()
   returning id into v_token_id;
 
   return v_token_id;
@@ -209,6 +218,12 @@ security definer
 set search_path = ''
 as $$
 begin
+  update private.notification_deliveries delivery
+  set status = 'dead', last_error_code = 'account_deletion', updated_at = now()
+  where delivery.outbox_id in (
+    select item.id from private.notification_outbox item
+    where item.recipient_user_id = new.auth_user_id
+  ) and delivery.status in ('pending', 'retry', 'sending');
   update private.notification_push_tokens
   set status = 'disabled', disabled_reason = 'account_deletion', disabled_at = now(), last_seen_at = now()
   where user_id = new.auth_user_id and status = 'active';
@@ -293,6 +308,16 @@ begin
       claimed_by = null, claimed_at = null, lease_until = null
   where attempts >= 5 and status in ('pending', 'processing');
 
+  update private.notification_deliveries delivery
+  set status = 'dead', last_error_code = 'ambiguous_provider_attempt', updated_at = now()
+  where delivery.status = 'sending'
+    and exists (
+      select 1 from private.notification_outbox item
+      where item.id = delivery.outbox_id
+        and item.status = 'processing'
+        and item.lease_until < now()
+    );
+
   return query
   with candidates as (
     select item.id
@@ -345,14 +370,76 @@ begin
   where outbox_id = p_outbox_id and status = 'retry' and attempts >= 5;
 
   return query
-  select delivery.id, token.expo_token, item.kind, item.route
+  with candidates as (
+    select delivery.id
+    from private.notification_deliveries delivery
+    join private.notification_push_tokens token on token.id = delivery.token_id
+    join private.notification_outbox item on item.id = delivery.outbox_id
+    where delivery.outbox_id = p_outbox_id
+      and delivery.status in ('pending', 'retry')
+      and delivery.attempts < 5
+      and token.status = 'active'
+      and token.user_id = item.recipient_user_id
+    order by delivery.created_at
+    for update of delivery
+  ), sending as (
+    update private.notification_deliveries delivery
+    set status = 'sending', attempts = attempts + 1, updated_at = now()
+    from candidates
+    where delivery.id = candidates.id
+    returning delivery.id, delivery.outbox_id, delivery.token_id
+  )
+  select sending.id, token.expo_token, item.kind, item.route
+  from sending
+  join private.notification_push_tokens token on token.id = sending.token_id
+  join private.notification_outbox item on item.id = sending.outbox_id
+  order by sending.id;
+end;
+$$;
+
+create or replace function public.notification_authorize_deliveries(
+  p_outbox_id uuid,
+  p_worker_id text,
+  p_delivery_ids uuid[]
+)
+returns table(delivery_id uuid)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update private.notification_deliveries delivery
+  set status = 'dead', last_error_code = 'dispatch_revoked', updated_at = now()
+  where delivery.outbox_id = p_outbox_id
+    and delivery.id = any(coalesce(p_delivery_ids, '{}'::uuid[]))
+    and delivery.status = 'sending'
+    and not exists (
+      select 1
+      from private.notification_outbox item
+      join private.notification_push_tokens token on token.id = delivery.token_id
+      where item.id = delivery.outbox_id
+        and item.status = 'processing'
+        and item.claimed_by = p_worker_id
+        and item.lease_until >= now()
+        and token.status = 'active'
+        and token.user_id = item.recipient_user_id
+        and private.account_deletion_active_request(item.recipient_user_id, null) is null
+    );
+
+  return query
+  select delivery.id
   from private.notification_deliveries delivery
   join private.notification_push_tokens token on token.id = delivery.token_id
   join private.notification_outbox item on item.id = delivery.outbox_id
   where delivery.outbox_id = p_outbox_id
-    and delivery.status in ('pending', 'retry')
-    and delivery.attempts < 5
+    and delivery.id = any(coalesce(p_delivery_ids, '{}'::uuid[]))
+    and delivery.status = 'sending'
+    and item.status = 'processing'
+    and item.claimed_by = p_worker_id
+    and item.lease_until >= now()
     and token.status = 'active'
+    and token.user_id = item.recipient_user_id
+    and private.account_deletion_active_request(item.recipient_user_id, null) is null
   order by delivery.created_at;
 end;
 $$;
@@ -393,6 +480,7 @@ declare
   v_delivery_id uuid;
   v_attempts integer;
   v_has_transient boolean := false;
+  v_has_ambiguous boolean := false;
 begin
   if jsonb_typeof(p_results) <> 'array' then raise exception 'Invalid ticket results'; end if;
   select attempts into v_attempts
@@ -400,7 +488,13 @@ begin
   where id = p_outbox_id and status = 'processing' and claimed_by = p_worker_id
     and lease_until >= now()
   for update;
-  if not found then raise exception 'Notification outbox lease does not belong to worker'; end if;
+  if not found then
+    if exists (
+      select 1 from private.notification_outbox
+      where id = p_outbox_id and status = 'dead' and last_error_code = 'account_deletion'
+    ) then return; end if;
+    raise exception 'Notification outbox lease does not belong to worker';
+  end if;
 
   for v_result in select value from jsonb_array_elements(p_results)
   loop
@@ -411,17 +505,16 @@ begin
       v_has_transient := true;
     elsif v_state = 'ticketed' and nullif(v_result ->> 'ticketId', '') is not null then
       update private.notification_deliveries
-      set status = 'ticketed', attempts = least(attempts + 1, 5),
+      set status = 'ticketed',
           provider_ticket_id = v_result ->> 'ticketId',
           receipt_available_at = now() + interval '15 minutes',
           last_error_code = null, updated_at = now()
       where id = v_delivery_id and outbox_id = p_outbox_id
-        and status in ('pending', 'retry');
+        and status = 'sending';
     elsif v_state = 'permanent-failure' then
       update private.notification_deliveries
-      set status = 'dead', attempts = least(attempts + 1, 5),
-          last_error_code = v_code, updated_at = now()
-      where id = v_delivery_id and outbox_id = p_outbox_id
+      set status = 'dead', last_error_code = v_code, updated_at = now()
+      where id = v_delivery_id and outbox_id = p_outbox_id and status = 'sending'
       returning token_id into v_delivery_id;
       if v_code = 'DeviceNotRegistered' and v_delivery_id is not null then
         update private.notification_push_tokens
@@ -432,10 +525,15 @@ begin
     elsif v_state = 'transient-failure' then
       v_has_transient := true;
       update private.notification_deliveries
-      set status = case when attempts + 1 >= 5 then 'dead' else 'retry' end,
-          attempts = least(attempts + 1, 5), last_error_code = v_code, updated_at = now()
+      set status = case when attempts >= 5 then 'dead' else 'retry' end,
+          last_error_code = v_code, updated_at = now()
       where id = v_delivery_id and outbox_id = p_outbox_id
-        and status in ('pending', 'retry');
+        and status = 'sending';
+    elsif v_state = 'ambiguous-failure' then
+      v_has_ambiguous := true;
+      update private.notification_deliveries
+      set status = 'dead', last_error_code = v_code, updated_at = now()
+      where id = v_delivery_id and outbox_id = p_outbox_id and status = 'sending';
     else
       raise exception 'Invalid ticket result';
     end if;
@@ -462,7 +560,8 @@ begin
   else
     update private.notification_outbox
     set status = 'completed', attempts = v_attempts, completed_at = now(),
-        claimed_by = null, claimed_at = null, lease_until = null
+        claimed_by = null, claimed_at = null, lease_until = null,
+        last_error_code = case when v_has_ambiguous then 'ambiguous_provider_attempt' else null end
     where id = p_outbox_id;
   end if;
 end;
@@ -583,6 +682,7 @@ revoke all on function public.notification_enqueue(text, uuid, text, jsonb) from
 revoke all on function public.notification_claim_outbox(text, integer, interval) from public, anon, authenticated;
 grant execute on function public.notification_claim_outbox(text, integer, interval) to service_role;
 revoke all on function public.notification_prepare_deliveries(uuid) from public, anon, authenticated;
+revoke all on function public.notification_authorize_deliveries(uuid, text, uuid[]) from public, anon, authenticated;
 revoke all on function public.notification_defer_without_provider(uuid, text) from public, anon, authenticated;
 revoke all on function public.notification_record_tickets(uuid, text, jsonb) from public, anon, authenticated;
 revoke all on function public.notification_claim_receipts(text, integer, interval) from public, anon, authenticated;
@@ -590,6 +690,7 @@ revoke all on function public.notification_record_receipts(text, jsonb) from pub
 
 grant execute on function public.notification_enqueue(text, uuid, text, jsonb) to service_role;
 grant execute on function public.notification_prepare_deliveries(uuid) to service_role;
+grant execute on function public.notification_authorize_deliveries(uuid, text, uuid[]) to service_role;
 grant execute on function public.notification_defer_without_provider(uuid, text) to service_role;
 grant execute on function public.notification_record_tickets(uuid, text, jsonb) to service_role;
 grant execute on function public.notification_claim_receipts(text, integer, interval) to service_role;

@@ -6,6 +6,7 @@ type ClaimedReceipt = { deliveryId: string; ticketId: string };
 export type NotificationProcessorDependencies = {
   claim: (workerId: string) => Promise<ClaimedOutbox[]>;
   prepare: (outboxId: string) => Promise<PushDelivery[]>;
+  authorize: (outboxId: string, deliveries: PushDelivery[]) => Promise<PushDelivery[]>;
   send: (deliveries: PushDelivery[]) => Promise<TicketResult[]>;
   recordTickets: (
     outboxId: string,
@@ -32,17 +33,25 @@ export async function processNotificationBatch(
       await dependencies.deferWithoutProvider(item.id, input.workerId);
       continue;
     }
+    let deliveries: PushDelivery[] = [];
     try {
-      const deliveries = await dependencies.prepare(item.id);
-      const results = await dependencies.send(deliveries);
+      deliveries = await dependencies.prepare(item.id);
+      const authorized = await dependencies.authorize(item.id, deliveries);
+      const results = authorized.length > 0 ? await dependencies.send(authorized) : [];
       await dependencies.recordTickets(item.id, results);
-      attempted += deliveries.length;
+      attempted += authorized.length;
     } catch {
-      await dependencies.recordTickets(item.id, [{
-        deliveryId: null,
-        state: 'transient-failure',
-        code: 'worker_failure',
-      }]);
+      await dependencies.recordTickets(item.id, deliveries.length > 0
+        ? deliveries.map((delivery) => ({
+            deliveryId: delivery.deliveryId,
+            state: 'ambiguous-failure' as const,
+            code: 'worker_failure',
+          }))
+        : [{
+            deliveryId: null,
+            state: 'transient-failure' as const,
+            code: 'worker_failure' as const,
+          }]);
     }
   }
   return { claimed: claimed.length, attempted };

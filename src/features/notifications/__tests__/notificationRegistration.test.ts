@@ -113,6 +113,16 @@ describe('notification registration', () => {
     expect(remove).toHaveBeenCalledTimes(1);
   });
 
+  it('does not install a native token listener when remote push is unavailable', () => {
+    const deps = dependencies({ isExpoGo: true });
+
+    const stop = maintainPushNotifications(deps, jest.fn());
+
+    expect(deps.subscribeToTokenChanges).not.toHaveBeenCalled();
+    expect(deps.register).not.toHaveBeenCalled();
+    expect(stop()).toBeUndefined();
+  });
+
   it('disables the current installation before logout and is idempotent without an installation', async () => {
     const deps = dependencies();
 

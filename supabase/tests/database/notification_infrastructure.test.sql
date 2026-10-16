@@ -174,11 +174,13 @@ select is(
   0::bigint,
   'lease recovery never re-sends a delivery with an ambiguous prior POST'
 );
+reset role;
 select is(
   (select status from private.notification_deliveries where outbox_id = (select id from claimed_notifications)),
   'dead',
   'an abandoned sending delivery is terminally fenced'
 );
+set local role service_role;
 select lives_ok(
   $$select public.notification_defer_without_provider(
     (select id from claimed_notifications),
@@ -208,7 +210,13 @@ select lives_ok(
   'logout disables the caller installation'
 );
 reset role;
-select is((select status from private.notification_push_tokens where expo_token = 'ExpoPushToken[token-one]'), 'disabled', 'logout leaves the token inactive');
+select is(
+  (select status from private.notification_push_tokens
+   where expo_token = 'ExpoPushToken[token-one]'
+     and user_id = '00000000-0000-4000-8000-000000000092'),
+  'disabled',
+  'logout leaves the token inactive'
+);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-4000-8000-000000000094', 'push-receipt@example.com', '{"adult_confirmed":true}'),
@@ -303,6 +311,7 @@ select is(
   0::bigint,
   'a deletion crossing prepare and send revokes provider authorization'
 );
+reset role;
 select public.account_deletion_mark_storage_step((select request_id from deletion_request), 'body');
 select public.account_deletion_mark_storage_step((select request_id from deletion_request), 'garments');
 select public.account_deletion_mark_storage_step((select request_id from deletion_request), 'results');
@@ -314,7 +323,6 @@ select lives_ok(
   $$delete from auth.users where id = '00000000-0000-4000-8000-000000000095'$$,
   'notification history does not block final Auth deletion'
 );
-reset role;
 select is(
   (select status from private.account_deletion_requests where id = (select request_id from deletion_request)),
   'completed',

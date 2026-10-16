@@ -69,6 +69,19 @@ Deno.serve(async (request) => {
         } as PushDelivery;
       });
     },
+    async authorize(outboxId, deliveries) {
+      if (deliveries.length === 0) return [];
+      const { data, error } = await admin.rpc('notification_authorize_deliveries', {
+        p_outbox_id: outboxId,
+        p_worker_id: workerId,
+        p_delivery_ids: deliveries.map((delivery) => delivery.deliveryId),
+      });
+      throwIfError(error);
+      const authorized = new Set(
+        (data ?? []).map((value: unknown) => String(record(value).delivery_id)),
+      );
+      return deliveries.filter((delivery) => authorized.has(delivery.deliveryId));
+    },
     send: (deliveries) => provider.send(deliveries),
     async recordTickets(outboxId, results) {
       const { error } = await admin.rpc('notification_record_tickets', {

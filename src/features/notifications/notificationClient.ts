@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import {
   disablePushNotifications,
   enablePushNotifications,
+  maintainPushNotifications,
   signOutAfterPushDisable,
   type NormalizedPermission,
   type NotificationPlatform,
@@ -99,6 +100,10 @@ export function createNativeNotificationDependencies(): NotificationRegistration
       });
       if (error) throw new Error('Could not safely disable notifications. Try again.');
     },
+    subscribeToTokenChanges: (listener) => {
+      const subscription = Notifications.addPushTokenListener(() => listener());
+      return () => subscription.remove();
+    },
   };
 }
 
@@ -112,4 +117,8 @@ export function disableNotificationsForCurrentInstallation() {
 
 export function signOutWithNotificationCleanup(signOut: () => Promise<void>) {
   return signOutAfterPushDisable(createNativeNotificationDependencies(), signOut);
+}
+
+export function maintainNotificationsForCurrentSession(onError: (error: unknown) => void) {
+  return maintainPushNotifications(createNativeNotificationDependencies(), onError);
 }

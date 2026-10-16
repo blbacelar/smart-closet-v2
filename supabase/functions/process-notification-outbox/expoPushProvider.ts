@@ -12,7 +12,11 @@ export type PushDelivery = {
 
 export type TicketResult =
   | { deliveryId: string; state: 'ticketed'; ticketId: string }
-  | { deliveryId: string; state: 'permanent-failure' | 'transient-failure'; code: string };
+  | {
+      deliveryId: string;
+      state: 'permanent-failure' | 'transient-failure' | 'ambiguous-failure';
+      code: string;
+    };
 
 export type ReceiptResult =
   | { ticketId: string; state: 'delivered' }
@@ -25,7 +29,12 @@ type ProviderDependencies = {
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const permanentCodes = new Set(['DeviceNotRegistered', 'InvalidCredentials']);
+const permanentCodes = new Set([
+  'DeviceNotRegistered',
+  'InvalidCredentials',
+  'MessageTooBig',
+  'MismatchSenderId',
+]);
 
 export class ExpoPushProviderError extends Error {
   constructor(public readonly retryable: boolean) {
@@ -65,6 +74,14 @@ function failureState(code: string) {
   return permanentCodes.has(code) ? 'permanent-failure' as const : 'transient-failure' as const;
 }
 
+function appendUnattempted(results: TicketResult[], deliveries: PushDelivery[]) {
+  results.push(...deliveries.map((delivery) => ({
+    deliveryId: delivery.deliveryId,
+    state: 'transient-failure' as const,
+    code: 'dispatch_not_attempted',
+  })));
+}
+
 function headers(accessToken: string) {
   return {
     Accept: 'application/json',
@@ -96,28 +113,39 @@ export function createExpoPushProvider(dependencies: ProviderDependencies) {
             body: JSON.stringify(messages),
           });
         } catch {
-          results.push(...deliveries.slice(offset).map((delivery) => ({
+          results.push(...batch.map((delivery) => ({
             deliveryId: delivery.deliveryId,
-            state: 'transient-failure' as const,
+            state: 'ambiguous-failure' as const,
             code: 'provider_transport_error',
           })));
+          appendUnattempted(results, deliveries.slice(offset + batch.length));
           break;
         }
         if (!response.ok) {
-          results.push(...deliveries.slice(offset).map((delivery) => ({
+          const state = response.status === 408 || response.status === 429 || response.status >= 500
+            ? 'transient-failure' as const
+            : 'permanent-failure' as const;
+          results.push(...batch.map((delivery) => ({
             deliveryId: delivery.deliveryId,
-            state: 'transient-failure' as const,
+            state,
             code: `provider_http_${response.status}`,
           })));
+          appendUnattempted(results, deliveries.slice(offset + batch.length));
           break;
         }
-        const data = record(await response.json()).data;
+        let data: unknown;
+        try {
+          data = record(await response.json()).data;
+        } catch {
+          data = null;
+        }
         if (!Array.isArray(data) || data.length !== batch.length) {
-          results.push(...deliveries.slice(offset).map((delivery) => ({
+          results.push(...batch.map((delivery) => ({
             deliveryId: delivery.deliveryId,
-            state: 'transient-failure' as const,
+            state: 'ambiguous-failure' as const,
             code: 'provider_malformed_response',
           })));
+          appendUnattempted(results, deliveries.slice(offset + batch.length));
           break;
         }
         results.push(...data.map((ticket, index) => {

@@ -15,8 +15,13 @@ owned by C11; C10 does not manufacture those product events early.
   APIs are called.
 - Android creates the `default` channel before requesting permission. iOS
   authorized, provisional, and ephemeral permission states are accepted.
-- A random installation UUID is persisted locally. The server owns rotation,
-  duplicate-token reassignment, status, last-seen time, and invalid receipts.
+- A random installation UUID is persisted locally. After explicit opt-in, every
+  signed-in startup silently refreshes the existing registration without
+  prompting, and an Expo native-token listener re-registers runtime rotations.
+  Expo Go and unsupported devices do not install this listener.
+- The server owns duplicate-token reassignment, status, last-seen time, and
+  invalid receipts. Reassignment creates a new active identity and disables the
+  old immutable token row, so historical deliveries can never change owner.
 - Sign-out disables the current installation before changing the local account.
   Account-deletion start disables every token and kills queued items in the same
   database transaction.
@@ -30,10 +35,15 @@ Only `service_role` can enqueue, claim, or complete delivery work.
 
 An immutable `event_key` deduplicates product events. Each active token receives
 one delivery row per event. Claimers use `FOR UPDATE SKIP LOCKED`, a recoverable
-lease, bounded exponential retry, and a five-attempt poison boundary. Provider
-tickets and receipts have separate state, so an accepted message is not resent
-while its receipt is pending. `DeviceNotRegistered` permanently disables the
-token. Payloads use generic copy and allow only the `marketplace_inbox`,
+lease, bounded exponential retry, and a five-attempt poison boundary. A delivery
+is durably changed to `sending` before any provider POST and is re-authorized
+against the current owner, account-deletion fence, token state, and worker lease
+immediately before dispatch. A lost response or abandoned `sending` lease is
+terminally marked ambiguous instead of resent; only a confirmed transient
+rejection is eligible for retry. Provider tickets and receipts have separate
+state, so an accepted message is not resent while its receipt is pending.
+Permanent Expo errors disable or stop their delivery as appropriate. Payloads
+use generic copy and allow only the `marketplace_inbox`,
 `transaction`, or `listing` route schemas.
 
 ## Worker operation
@@ -58,11 +68,13 @@ enhanced push security is enabled.
 
 ## Verification and rollback
 
-The isolated database harness tests token ownership, RLS, event deduplication,
-overlapping claims, abandoned leases, poison isolation, ticket/receipt state,
-invalid-token disablement, logout, and account deletion. Unit tests cover SDK
-capability/permission ordering, safe payloads, Expo's 100-message batch limit,
-provider error classification, and no-credential operation.
+The isolated database harness tests immutable token reassignment, RLS, event
+deduplication, overlapping claims, abandoned/ambiguous leases, poison isolation,
+ticket/receipt state, invalid-token disablement, logout, deletion crossing
+prepare→send, database purge, and final Auth deletion. Unit tests cover SDK
+capability/permission ordering, startup refresh and runtime rotation, safe
+payloads, Expo's 100-message batch limit, provider error classification, and
+no-credential operation.
 
 To stop delivery, set `EXPO_PUSH_ENABLED=false`; queued rows remain private and
 deferred. A forward rollback may disable the profile action and worker, but must

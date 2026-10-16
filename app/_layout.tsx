@@ -7,6 +7,7 @@ import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
 import { I18nProvider } from '../src/i18n/i18n';
 import { loadAnalyticsConsent } from '../src/lib/analyticsConsent';
 import { observability } from '../src/lib/observability';
+import { maintainNotificationsForCurrentSession } from '../src/features/notifications/notificationClient';
 import { MotionPreferenceProvider } from '../src/providers/MotionPreferenceProvider';
 import { AuthProvider, useAuth } from '../src/providers/AuthProvider';
 import { colors } from '../src/theme';
@@ -28,6 +29,17 @@ function RootNavigator() {
       active = false;
     };
   }, [identity?.id]);
+
+  useEffect(() => {
+    if (!identity?.id || !identity.adultConfirmed) return undefined;
+    return maintainNotificationsForCurrentSession((error) => {
+      observability.captureError(error, {
+        operation: 'notification_registration_refresh',
+        code: 'notification_registration_refresh_failed',
+        fatal: false,
+      });
+    });
+  }, [identity?.adultConfirmed, identity?.id]);
 
   if (isLoading) {
     return (
