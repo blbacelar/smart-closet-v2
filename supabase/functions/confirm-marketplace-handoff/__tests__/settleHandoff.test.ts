@@ -2,10 +2,8 @@ import { settleHandoff, type AcquisitionManifestItem } from '../settleHandoff';
 
 const originalOnly: AcquisitionManifestItem = {
   acquiredGarmentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  sourceOriginalPath: 'seller/original.jpg',
-  sourceCleanPath: null,
-  destinationOriginalPath: 'buyer/acquired/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/original',
-  destinationCleanPath: null,
+  sourceMarketplacePath: 'seller/original.jpg',
+  destinationPath: 'buyer/acquired/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/asset',
 };
 
 function dependencies() {
@@ -31,16 +29,14 @@ describe('settleHandoff', () => {
     expect(deps.finalize).not.toHaveBeenCalled();
   });
 
-  it('copies every missing original and clean asset before finalization', async () => {
+  it('copies exactly one marketplace-safe asset per acquired garment', async () => {
     const deps = dependencies();
     deps.getManifest.mockResolvedValue([
       originalOnly,
       {
         acquiredGarmentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        sourceOriginalPath: 'other/original.jpg',
-        sourceCleanPath: 'other/clean.png',
-        destinationOriginalPath: 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/original',
-        destinationCleanPath: 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/clean',
+        sourceMarketplacePath: 'other/clean.png',
+        destinationPath: 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/asset',
       },
     ]);
 
@@ -48,9 +44,8 @@ describe('settleHandoff', () => {
       'completed',
     );
     expect(deps.copyObject.mock.calls).toEqual([
-      ['seller/original.jpg', 'buyer/acquired/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/original'],
-      ['other/original.jpg', 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/original'],
-      ['other/clean.png', 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/clean'],
+      ['seller/original.jpg', 'buyer/acquired/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/asset'],
+      ['other/clean.png', 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/asset'],
     ]);
     expect(deps.finalize).toHaveBeenCalledWith('transaction-1');
     expect(deps.copyObject.mock.invocationCallOrder.at(-1)).toBeLessThan(
@@ -81,7 +76,7 @@ describe('settleHandoff', () => {
   it('rejects a manifest that could overwrite the source object', async () => {
     const deps = dependencies();
     deps.getManifest.mockResolvedValue([
-      { ...originalOnly, destinationOriginalPath: originalOnly.sourceOriginalPath },
+      { ...originalOnly, destinationPath: originalOnly.sourceMarketplacePath },
     ]);
 
     await expect(settleHandoff('transaction-1', 'user-1', deps)).rejects.toThrow(

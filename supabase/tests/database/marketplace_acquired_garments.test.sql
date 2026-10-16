@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(29);
+select plan(36);
 
 select has_table('private', 'marketplace_acquisitions', 'acquisition provenance is private');
 select is(
@@ -124,17 +124,67 @@ select is(
   'swap prepares both recipient directions exactly once'
 );
 
+select results_eq(
+  $$select transactions_disputed, items_deferred
+    from public.marketplace_expire_stale(now() + interval '1 day', 100)$$,
+  $$values (0, 4)$$,
+  'expiry defers every fully-confirmed settlement plan instead of disputing it'
+);
+select is(
+  (select count(*) from public.marketplace_transactions
+   where status = 'awaiting_handoff'),
+  4::bigint,
+  'the settlement fence preserves every confirmed transaction for retry'
+);
+select results_eq(
+  $$select source_marketplace_path
+    from public.marketplace_acquisition_manifest(
+      (select id from acquisition_transactions where mode = 'credits')
+    )$$,
+  $$values ('00000000-0000-4000-8000-000000000071/credit-clean.png'::text)$$,
+  'a cleaned listing exposes only its marketplace-safe asset to the copy worker'
+);
+select results_eq(
+  $$select source_marketplace_path
+    from public.marketplace_acquisition_manifest(
+      (select id from acquisition_transactions where mode = 'giveaway')
+    )$$,
+  $$values ('00000000-0000-4000-8000-000000000071/giveaway.jpg'::text)$$,
+  'an original image is used only when no cleaned marketplace asset exists'
+);
+
+insert into storage.objects (id, bucket_id, name) values
+  ('50000000-0000-4000-8000-000000000071', 'garments',
+   '00000000-0000-4000-8000-000000000071/credit-original.jpg'),
+  ('50000000-0000-4000-8000-000000000171', 'garments',
+   '00000000-0000-4000-8000-000000000071/credit-clean.png'),
+  ('50000000-0000-4000-8000-000000000271', 'garments',
+   '00000000-0000-4000-8000-000000000071/unlisted-delete.jpg');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000071', true);
+select is_empty(
+  $$delete from storage.objects
+    where bucket_id = 'garments'
+      and name = '00000000-0000-4000-8000-000000000071/credit-clean.png'
+    returning name$$,
+  'a seller cannot delete the safe asset while settlement is pending'
+);
+select results_eq(
+  $$delete from storage.objects
+    where bucket_id = 'garments'
+      and name = '00000000-0000-4000-8000-000000000071/unlisted-delete.jpg'
+    returning name$$,
+  $$values ('00000000-0000-4000-8000-000000000071/unlisted-delete.jpg'::text)$$,
+  'a seller can still delete an unlisted garment asset'
+);
+reset role;
+
 insert into storage.objects (id, bucket_id, name)
-select gen_random_uuid(), 'garments', manifest.destination_original_path
+select gen_random_uuid(), 'garments', manifest.destination_path
 from acquisition_transactions transaction_record
 cross join lateral public.marketplace_acquisition_manifest(transaction_record.id) manifest
 where transaction_record.mode <> 'missing';
-insert into storage.objects (id, bucket_id, name)
-select gen_random_uuid(), 'garments', manifest.destination_clean_path
-from acquisition_transactions transaction_record
-cross join lateral public.marketplace_acquisition_manifest(transaction_record.id) manifest
-where transaction_record.mode <> 'missing'
-  and manifest.destination_clean_path is not null;
 
 select is(
   public.marketplace_finalize_handoff((select id from acquisition_transactions where mode = 'credits')),
@@ -175,6 +225,14 @@ select is(
      on acquisition.acquired_garment_id = garment.id
    where garment.original_path like garment.user_id::text || '/acquired/%'),
   4::bigint, 'every acquired object path belongs to its recipient namespace'
+);
+select is(
+  (select count(*) from public.garments garment
+   join private.marketplace_acquisitions acquisition
+     on acquisition.acquired_garment_id = garment.id
+   where garment.clean_path is null
+     and garment.original_path like garment.user_id::text || '/acquired/%/asset'),
+  4::bigint, 'each recipient garment references one sanitized marketplace asset'
 );
 select is(
   (select count(*) from public.garments garment

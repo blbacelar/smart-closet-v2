@@ -36,6 +36,25 @@ describe('marketplace acquired garments migration', () => {
     expect(sql).not.toMatch(/update public\.garments[\s\S]{0,200}set user_id/);
   });
 
+  it('fences confirmed settlement from the expiry worker', () => {
+    expect(sql).toContain('marketplace_settlement_fence');
+    expect(sql).toContain('marketplace acquisitions are pending');
+    expect(sql).toContain('marketplace_expiry_failures');
+  });
+
+  it('moves only the marketplace-safe image across ownership boundaries', () => {
+    expect(sql).toContain('coalesce(source.clean_path, source.original_path)');
+    expect(sql).toContain('source_marketplace_path');
+    expect(sql).not.toContain('source_clean_path');
+  });
+
+  it('prevents members from deleting media needed by a non-terminal exchange', () => {
+    expect(sql).toContain('marketplace_can_delete_garment_object');
+    expect(sql).toMatch(/status in \('active', 'reserved'\)/);
+    expect(sql).toMatch(/status in \('awaiting_handoff', 'disputed'\)/);
+    expect(sql).toMatch(/private_image_delete[\s\S]*marketplace_can_delete_garment_object/);
+  });
+
   it('creates one recipient copy per listing and two for swaps', () => {
     expect(sql).toContain('v_tx.listing_id, v_tx.buyer_party_id');
     expect(sql).toContain('v_tx.swap_listing_id, v_tx.seller_party_id');
