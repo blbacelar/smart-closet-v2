@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(56);
+select plan(57);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -123,10 +123,33 @@ select results_eq(
 insert into storage.objects (id, bucket_id, name)
 values
   ('40000000-0000-4000-8000-000000000001', 'body', '00000000-0000-4000-8000-000000000001/body-one.jpg'),
-  ('40000000-0000-4000-8000-000000000002', 'body', '00000000-0000-4000-8000-000000000002/body-two.jpg');
+  ('40000000-0000-4000-8000-000000000002', 'body', '00000000-0000-4000-8000-000000000002/body-two.jpg'),
+  ('40000000-0000-4000-8000-000000000006', 'garments', '00000000-0000-4000-8000-000000000001/garment-one-clean.png');
+
+insert into public.marketplace_listings (
+  id, garment_id, seller_id, accepts_credits, accepts_swap, is_giveaway, credit_price, pickup_area
+)
+values (
+  '50000000-0000-4000-8000-000000000001',
+  '20000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000001',
+  true,
+  false,
+  false,
+  100,
+  'Test pickup area'
+);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
+
+select results_eq(
+  $$select name from storage.objects
+    where bucket_id = 'garments'
+      and name = '00000000-0000-4000-8000-000000000001/garment-one-clean.png'$$,
+  $$values ('00000000-0000-4000-8000-000000000001/garment-one-clean.png'::text)$$,
+  'a buyer can read the image of another member active marketplace listing'
+);
 
 select throws_ok(
   $$insert into public.body_photos (id, user_id, storage_path, status)
@@ -285,7 +308,15 @@ select results_eq(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 
-select results_eq('select count(*) from storage.objects', array[1::bigint], 'member sees only their private objects');
+select results_eq(
+  $$select count(*) from storage.objects
+    where name in (
+      '00000000-0000-4000-8000-000000000001/body-one.jpg',
+      '00000000-0000-4000-8000-000000000001/garment-one-clean.png'
+    )$$,
+  array[2::bigint],
+  'member sees their private objects and their listed garment image'
+);
 select is(
   (select count(*)::integer from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'private_image_delete' and cmd = 'DELETE'),
   1,

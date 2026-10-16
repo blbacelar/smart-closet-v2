@@ -29,10 +29,11 @@ Supabase target, run:
 
 ```bash
 maestro test \
+  -e EXPO_URL="exp+fitly://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" \
   -e E2E_SELLER_EMAIL="fitly-e2e-seller@example.com" \
-  -e E2E_SELLER_PASSWORD="Fitly-E2E-Seller-2026!" \
+  -e E2E_SELLER_PASSWORD="FitlyE2ESeller2026" \
   -e E2E_BUYER_EMAIL="fitly-e2e-buyer@example.com" \
-  -e E2E_BUYER_PASSWORD="Fitly-E2E-Buyer-2026!" \
+  -e E2E_BUYER_PASSWORD="FitlyE2EBuyer2026" \
   .maestro/two-account-marketplace-smoke.yaml
 ```
 

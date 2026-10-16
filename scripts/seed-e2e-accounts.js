@@ -5,8 +5,8 @@ const { createClient } = require('@supabase/supabase-js');
 
 const SELLER_EMAIL = 'fitly-e2e-seller@example.com';
 const BUYER_EMAIL = 'fitly-e2e-buyer@example.com';
-const LOCAL_SELLER_PASSWORD = 'Fitly-E2E-Seller-2026!';
-const LOCAL_BUYER_PASSWORD = 'Fitly-E2E-Buyer-2026!';
+const LOCAL_SELLER_PASSWORD = 'FitlyE2ESeller2026';
+const LOCAL_BUYER_PASSWORD = 'FitlyE2EBuyer2026';
 const GARMENT_ID = 'e2000000-0000-4000-8000-000000000001';
 const LISTING_ID = 'e2000000-0000-4000-8000-000000000002';
 const FIXED_START = '2026-01-01T00:00:00.000Z';

@@ -105,12 +105,14 @@ describe('Maestro activation journey', () => {
     const flow = readFileSync(twoAccountFlowPath, 'utf8');
 
     expect(flow).toContain('appId: app.fitly.mobile');
+    expect(flow).toContain('openLink: ${EXPO_URL}');
     expect(flow).toContain('${E2E_SELLER_EMAIL}');
     expect(flow).toContain('${E2E_SELLER_PASSWORD}');
     expect(flow).toContain('${E2E_BUYER_EMAIL}');
     expect(flow).toContain('${E2E_BUYER_PASSWORD}');
+    expect(flow.match(/inputText: "19900101"/g)?.length).toBe(2);
     expect(flow.match(/E2E green overshirt/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(flow).toContain('500 available');
+    expect(flow).toContain('500 Fitly credits available; view marketplace membership');
     expect(flow).toContain('Sign out');
   });
 });
