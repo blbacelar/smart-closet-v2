@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C05 and C07-C08 merged; C09 implementation and verification in progress; C06 waits on External Gate B)
+**Status:** ECC-reviewed; execution in progress (C01-C05 and C07-C09 merged; C10 implementation and verification in progress; C06 waits on External Gate B)
 
 **Created:** 2026-10-15
 
@@ -29,7 +29,7 @@ The repository already contains:
 Known baseline failures and gaps:
 
 - Marketplace account deletion now separates private erasure from pseudonymous retained accounting records; scheduled retention expiry and backup re-deletion still wait on the approved Gate B policy.
-- Abandoned reservations do not expire automatically and acquired garments are not copied into the recipient’s closet.
+- Abandoned reservations expire automatically and completed credit/swap/give-away handoffs create sanitized recipient closet copies exactly once.
 - Disputes, reports, blocks, ratings, production moderation, operator tools, and push notifications are missing.
 - Marketplace proximity is not backed by privacy-preserving geospatial search.
 - Real billing, renewals, restore/refund/revocation behavior, store policy approval, and final economic parameters are not approved or implemented.

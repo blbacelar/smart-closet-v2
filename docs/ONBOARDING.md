@@ -73,6 +73,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
 - `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and stateless direct Gemini adapter.
 - `supabase/functions/delete-account/` — authenticated Storage purge followed by permanent Auth-user deletion.
+- `supabase/functions/process-notification-outbox/` — service-only leased push dispatch and Expo ticket/receipt processing.
 - `supabase/functions/delete-body-photo/` — authenticated owner-only cleanup of one body photo and its generated result objects.
 - `supabase/functions/validate-body-photo/` — authenticated, owner-derived Gemini moderation and atomic cost recording.
 
@@ -157,6 +158,7 @@ The intended live flow is:
 - A 47-assertion pgTAP suite covering RLS, anonymous access, owner isolation, private Storage boundaries, consent-gated event insertion, allowed member mutations, and atomic garment-category completion.
 - A CI PII-leak gate that blocks runtime console logging, committed secrets, private signed Storage URLs, personal contact details, and developer home-directory paths without echoing detected values.
 - Explicit least-privilege Data API grants and source-only private Storage writes, deployed through migration `20260904120000_explicit_authenticated_grants.sql`.
+- Explicit physical-device push permission, private token rotation/reassignment, logout/deletion cleanup, immutable outbox deduplication, leased dispatch, and Expo ticket/receipt processing; real delivery remains Gate D.
 
 ## Not Implemented Yet
 
@@ -169,7 +171,7 @@ The intended live flow is:
 - Migration of existing screen copy into the localization catalog and a user-facing language selector.
 - Broader feature/E2E tests and the `EXPO_TOKEN` needed for manual EAS builds.
 - Production marketplace billing and renewal webhooks. Development activation is intentionally no-charge; the final annual price and iOS/Android/web payment rail still require product, storefront, legal, and tax approval.
-- Marketplace push notifications, dispute operations, ratings/reporting, blocking, and production safety moderation.
+- Marketplace notification event/deep-link integration, dispute operations, ratings/reporting, blocking, and production safety moderation.
 - A controlled two-device staging run with representative buyer and seller accounts; the code, migrations, and automated contracts are ready, but production credentials and pilot operators are external dependencies.
 
 ## Common Tasks

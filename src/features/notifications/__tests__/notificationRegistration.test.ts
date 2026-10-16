@@ -1,6 +1,7 @@
 import {
   disablePushNotifications,
   enablePushNotifications,
+  signOutAfterPushDisable,
   type NotificationRegistrationDependencies,
 } from '../notificationRegistration';
 
@@ -87,5 +88,21 @@ describe('notification registration', () => {
     const missing = dependencies({ installationId: jest.fn().mockResolvedValue(null) });
     await expect(disablePushNotifications(missing)).resolves.toBeUndefined();
     expect(missing.disable).not.toHaveBeenCalled();
+  });
+
+  it('does not switch accounts until the current installation is safely disabled', async () => {
+    const order: string[] = [];
+    const deps = dependencies({
+      disable: jest.fn(async () => { order.push('disable'); }),
+    });
+    const signOut = jest.fn(async () => { order.push('sign-out'); });
+
+    await signOutAfterPushDisable(deps, signOut);
+
+    expect(order).toEqual(['disable', 'sign-out']);
+
+    deps.disable = jest.fn().mockRejectedValue(new Error('network unavailable'));
+    await expect(signOutAfterPushDisable(deps, signOut)).rejects.toThrow('network unavailable');
+    expect(signOut).toHaveBeenCalledTimes(1);
   });
 });

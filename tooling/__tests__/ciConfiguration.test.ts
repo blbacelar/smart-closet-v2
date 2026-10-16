@@ -121,13 +121,19 @@ describe('dependency automation', () => {
 });
 
 describe('coverage ownership', () => {
-  it('includes the launch-critical marketplace implementation', () => {
+  it('includes launch-critical marketplace and notification implementations', () => {
     const packageJson = JSON.parse(read('package.json')) as {
       jest?: { collectCoverageFrom?: string[] };
     };
 
     expect(packageJson.jest?.collectCoverageFrom).toContain(
       'src/features/marketplace/**/*.{ts,tsx}',
+    );
+    expect(packageJson.jest?.collectCoverageFrom).toContain(
+      'src/features/notifications/notificationRegistration.ts',
+    );
+    expect(packageJson.jest?.collectCoverageFrom).toContain(
+      'supabase/functions/process-notification-outbox/{expoPushProvider,processor}.ts',
     );
   });
 });

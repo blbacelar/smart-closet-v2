@@ -573,6 +573,76 @@ async function verifyAcquiredGarmentFinalization(databaseUrl) {
   );
 }
 
+async function verifyConcurrentNotificationClaims(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email, raw_user_meta_data) values (
+        '00000000-0000-4000-8000-000000000093',
+        'notification-claim-race@example.com',
+        '{"adult_confirmed":true}'
+      );
+      insert into private.notification_push_tokens (
+        user_id, installation_id, expo_token, platform
+      ) values (
+        '00000000-0000-4000-8000-000000000093',
+        '10000000-0000-4000-8000-000000000093',
+        'ExpoPushToken[claim-race]',
+        'ios'
+      );
+      select public.notification_enqueue(
+        'notification-claim-race',
+        '00000000-0000-4000-8000-000000000093',
+        'account_update',
+        null
+      );
+    `,
+    'Create the concurrent notification-claim fixture',
+  );
+
+  const claim = (workerId) => `
+    begin;
+    set local role service_role;
+    select id from public.notification_claim_outbox(
+      '${workerId}', 1, interval '1 minute'
+    );
+    select pg_sleep(0.4);
+    commit;
+  `;
+  const results = await Promise.all([
+    concurrentQuery(databaseUrl, claim('notification-worker-one')),
+    concurrentQuery(databaseUrl, claim('notification-worker-two')),
+  ]);
+  if (results.some((result) => result.code !== 0)) {
+    throw new UpgradeTestError(
+      `Concurrent notification claims failed: ${results.map((result) => result.stderr).join('\n')}`,
+    );
+  }
+  const claimedIds = results
+    .flatMap((result) => result.stdout.split('\n'))
+    .filter((value) => /^[0-9a-f-]{36}$/i.test(value.trim()));
+  if (claimedIds.length !== 1) {
+    throw new UpgradeTestError(
+      `Overlapping notification workers claimed ${claimedIds.length} copies of one event.`,
+    );
+  }
+
+  const state = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-F', '|', '-c',
+      `select status, attempts, claimed_by is not null
+       from private.notification_outbox
+       where event_key = 'notification-claim-race';`,
+    ],
+    'Read the concurrent notification-claim result',
+  ).trim();
+  if (state !== 'processing|0|t') {
+    throw new UpgradeTestError(`Notification lease state was invalid after claim: ${state}`);
+  }
+
+}
+
 async function verifyExpiryWriterLockOrder(databaseUrl) {
   psql(
     databaseUrl,
@@ -1315,7 +1385,17 @@ async function main() {
       ], workspace),
       'Verify sanitized recipient closet copies and settlement finalization',
     );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/notification_infrastructure.test.sql'),
+      ], workspace),
+      'Verify private push lifecycle and notification outbox leases',
+    );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyConcurrentNotificationClaims(latestDatabaseUrl);
     await verifyAcquiredGarmentFinalization(latestDatabaseUrl);
     await verifyConcurrentMarketplaceExpiry(latestDatabaseUrl);
     await verifyExpiryWriterLockOrder(latestDatabaseUrl);

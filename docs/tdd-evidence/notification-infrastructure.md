@@ -31,4 +31,14 @@ code.
 
 ## GREEN
 
-Pending implementation and focused/full verification.
+Implemented with Expo SDK 57-compatible `expo-notifications` 57.0.23 and
+`expo-device` 57.0.2, a private migration, service-only Edge worker, explicit
+profile action, and logout/account-deletion cleanup.
+
+Focused Jest verification passed the notification and profile contracts. The
+final `npm run quality` passed 94 suites and 541 tests with 90.84% statements,
+80.40% branches, 85.08% functions, and 92.53% lines. PII scanning, Expo Doctor
+21/21, web export, and the critical production audit passed. The isolated
+database migration/lint, legacy backfill, all existing RLS/ledger/marketplace
+suites, 33 notification pgTAP assertions, and the two-connection outbox claim
+race passed. External Gate D still owns physical push delivery acceptance.

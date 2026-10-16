@@ -77,4 +77,59 @@ describe('Expo push provider adapter', () => {
       { ticketId: 'ticket-gone', state: 'permanent-failure', code: 'DeviceNotRegistered' },
     ]);
   });
+
+  it('chunks dispatches at the Expo API maximum without reordering delivery results', async () => {
+    const fetch = jest.fn()
+      .mockResolvedValueOnce(response(true, 200, {
+        data: Array.from({ length: 100 }, (_, index) => ({ status: 'ok', id: `ticket-${index}` })),
+      }))
+      .mockResolvedValueOnce(response(true, 200, {
+        data: [{ status: 'ok', id: 'ticket-100' }],
+      }));
+    const provider = createExpoPushProvider({ accessToken: '', fetch });
+    const deliveries = Array.from({ length: 101 }, (_, index) => ({
+      deliveryId: `delivery-${index}`,
+      token: `ExpoPushToken[token-${index}]`,
+      kind: 'account_update' as const,
+      route: null,
+    }));
+
+    const results = await provider.send(deliveries);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetch.mock.calls[0][1].body))).toHaveLength(100);
+    expect(JSON.parse(String(fetch.mock.calls[1][1].body))).toHaveLength(1);
+    expect(results).toHaveLength(101);
+    expect(results[100]).toEqual({
+      deliveryId: 'delivery-100', state: 'ticketed', ticketId: 'ticket-100',
+    });
+  });
+
+  it('preserves accepted earlier chunks when a later provider call is uncertain', async () => {
+    const fetch = jest.fn()
+      .mockResolvedValueOnce(response(true, 200, {
+        data: Array.from({ length: 100 }, (_, index) => ({ status: 'ok', id: `ticket-${index}` })),
+      }))
+      .mockRejectedValueOnce(new Error('network interrupted'));
+    const provider = createExpoPushProvider({ accessToken: '', fetch });
+    const deliveries = Array.from({ length: 101 }, (_, index) => ({
+      deliveryId: `delivery-${index}`,
+      token: `ExpoPushToken[token-${index}]`,
+      kind: 'account_update' as const,
+      route: null,
+    }));
+
+    await expect(provider.send(deliveries)).resolves.toEqual([
+      ...Array.from({ length: 100 }, (_, index) => ({
+        deliveryId: `delivery-${index}`,
+        state: 'ticketed',
+        ticketId: `ticket-${index}`,
+      })),
+      {
+        deliveryId: 'delivery-100',
+        state: 'transient-failure',
+        code: 'provider_transport_error',
+      },
+    ]);
+  });
 });

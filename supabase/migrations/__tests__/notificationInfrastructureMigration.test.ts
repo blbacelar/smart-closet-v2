@@ -34,5 +34,6 @@ describe('notification infrastructure migration', () => {
   it('disables tokens as soon as account deletion starts', () => {
     expect(sql).toContain('notification_disable_for_account_deletion');
     expect(sql).toContain('account_deletion_requests');
+    expect(sql).toMatch(/notification_enqueue[\s\S]*account_deletion_lock_subjects/);
   });
 });
