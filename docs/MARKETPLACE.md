@@ -28,6 +28,27 @@ Official HomeExchange references used for the adaptation:
 5. At the in-person handoff, both members confirm. Only the second confirmation completes the transaction and transfers reserved credits to the seller.
 6. Before either member confirms, either participant can cancel; credits are released exactly once and the listing can receive another offer.
 
+## Server-authoritative state contract
+
+The database, rather than the mobile client, owns all marketplace transitions:
+
+- Offers start as `pending` and may become `accepted`, `rejected`, `withdrawn`, `superseded`, or `expired`. Every terminal transition is one-way.
+- Transactions start as `awaiting_handoff` and may become `completed`, `cancelled`, `disputed`, or `expired`. Disputed transactions remain frozen until the dispute-resolution slice defines and tests the approved outcomes.
+- Offers and handoffs carry server-generated deadlines. The configured durations are bounded to 30 days; clients cannot extend them or invent terminal timestamps.
+- Accepting an offer locks the affected listings before the offer. Competing acceptances therefore have one winner, while all losing offers are superseded and their reservations are released once.
+- A private, immutable terms record captures the accepted listing, mode, credit amount, participant parties, and swap listing. It deliberately excludes messages, media, and precise pickup information.
+- Repeating an accepted response returns the original transaction. Repeating rejection or cancellation is a safe no-op, so network retries cannot duplicate value movement.
+
+Expiry execution and acquired-garment copies are separate completion slices. Until the expiry worker is merged, the deadlines are authoritative data but do not imply that a background job has already enforced them.
+
+## Operational switches
+
+Marketplace configuration exposes independent server-side switches for grants, new offers, acceptance, and settlement. The master `transactions_enabled` switch also blocks every value-creating path. Disabling a switch never silently abandons existing state:
+
+- withdrawals, rejections, cancellations, history, and reconciliation remain available;
+- a settlement pause freezes an accepted physical handoff instead of releasing its credits or garment;
+- grants, offer creation, offer acceptance, and confirmations fail closed at the database boundary when their corresponding switch is off.
+
 ## Safety and accounting guarantees
 
 - The app client cannot write membership, balance, ledger, offer status, or transaction status tables directly.
@@ -36,6 +57,7 @@ Official HomeExchange references used for the adaptation:
 - Only authenticated members can discover listings, and only offer/transaction participants can read their offers, private messages, and handoffs.
 - Marketplace photos reuse the existing private garment bucket and are exposed only through short-lived signed URLs.
 - Exact addresses are intentionally not collected; listings use a general pickup area.
+- Accepted terms contain no chat text, media path, or exact pickup data and survive account deletion only through pseudonymous party identifiers.
 
 ## Production gates
 

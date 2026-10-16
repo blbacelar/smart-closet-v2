@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C04 merged; C05 implementation in review)
+**Status:** ECC-reviewed; execution in progress (C01-C05 merged; C07 implementation and verification in progress; C06 waits on External Gate B)
 
 **Created:** 2026-10-15
 
@@ -28,7 +28,7 @@ The repository already contains:
 
 Known baseline failures and gaps:
 
-- Marketplace account deletion/retention is incompatible with permanent transaction records.
+- Marketplace account deletion now separates private erasure from pseudonymous retained accounting records; scheduled retention expiry and backup re-deletion still wait on the approved Gate B policy.
 - Abandoned reservations do not expire automatically and acquired garments are not copied into the recipient’s closet.
 - Disputes, reports, blocks, ratings, production moderation, operator tools, and push notifications are missing.
 - Marketplace proximity is not backed by privacy-preserving geospatial search.
@@ -107,7 +107,7 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 | C04 | Double-entry account/journal/posting/cohort/reversal foundation and reconciliation | C03, Gate A for final cohort policy | #48 + #73 | Balanced journal and concurrency pgTAP tests |
 | C05 | Deletion tombstone, write barrier, durable checkpoints, private-media purge | C03, C04, Gate B retention rules | #30 replacement/new issue | Deletion races with uploads/workers safely |
 | C06 | Retention expiry/hold release, backup re-deletion, purge evidence | C05, Gate B | same as C05 | Scheduled purge and restore/re-delete drill |
-| C07 | Offer/transaction state contract, timeout policy, immutable snapshots, kill-switch semantics | C04, C05 | #41/#46 rewrite | State transitions and deletion tombstone races tested |
+| C07 | Offer/transaction state contract, timeout policy, immutable snapshots, kill-switch semantics | C04, C05 | #41 | State transitions and deletion tombstone races tested |
 | C08 | Expiry worker and exactly-once reservation/credit release | C07 | #46 rewrite | Time-travel/concurrency tests; no stranded state |
 | C09 | Sanitized acquired-garment copies for credit/swap/give-away settlement | C07 | #46 rewrite | All three modes populate recipient closets once |
 | C10 | Push token lifecycle and notification outbox/provider adapter | C02 | #43 rewrite | Device push/token rotation tests |
