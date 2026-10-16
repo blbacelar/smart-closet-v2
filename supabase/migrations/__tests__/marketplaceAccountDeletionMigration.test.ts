@@ -28,6 +28,8 @@ describe('marketplace-aware account deletion migration', () => {
     expect(sql).toMatch(/create trigger account_deletion_storage_write_barrier[\s\S]*storage\.objects/i);
     expect(sql).toMatch(/create policy "private_source_image_insert"[\s\S]*account_deletion_write_allowed/i);
     expect(sql).toMatch(/marketplace_can_read_garment_object[\s\S]*account_deletion_active_request/i);
+    expect(sql).toContain('private.account_deletion_lock_subjects');
+    expect(sql).toMatch(/create trigger account_deletion_write_barrier[\s\S]*public\.analytics_events/i);
   });
 
   it('exposes only service-role orchestration and completes from auth deletion', () => {
@@ -37,6 +39,8 @@ describe('marketplace-aware account deletion migration', () => {
     expect(sql).toContain('public.account_deletion_mark_storage_step');
     expect(sql).toContain('public.account_deletion_purge_database');
     expect(sql).toContain('private.complete_account_deletion_after_auth_delete');
+    expect(sql).toContain('private.guard_account_deletion_before_auth_delete');
+    expect(sql).toMatch(/create trigger guard_account_deletion_before_auth_delete[\s\S]*before delete on auth\.users/i);
     expect(sql).toMatch(/grant execute on function public\.account_deletion_start\(uuid\) to service_role/i);
     expect(sql).toMatch(/revoke all on function public\.account_deletion_start\(uuid\) from public, anon, authenticated/i);
   });
@@ -50,5 +54,9 @@ describe('marketplace-aware account deletion migration', () => {
     expect(sql).toContain('delete from public.tryon_jobs');
     expect(sql).toContain('delete from public.body_photos');
     expect(sql).toContain('delete from public.garments');
+    expect(sql).toContain('delete from public.analytics_events');
+    expect(sql).toMatch(/marketplace_my_transactions[\s\S]*left join public\.garments/i);
+    expect(sql).toMatch(/marketplace_my_transactions[\s\S]*marketplace_party_matches/i);
+    expect(sql).toContain('app.account_deletion_internal_cleanup');
   });
 });

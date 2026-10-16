@@ -72,6 +72,91 @@ function concurrentQuery(databaseUrl, sql) {
   });
 }
 
+async function verifyDeletionWriteFence(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000023', 'deletion-race@example.com');
+    `,
+    'Create the committed deletion-fence fixture',
+  );
+
+  const writer = spawn(
+    'psql',
+    [databaseUrl, '-X', '-v', 'ON_ERROR_STOP=1', '-qAt'],
+    { shell: false },
+  );
+  let writerStderr = '';
+  writer.stderr.on('data', (chunk) => { writerStderr += chunk.toString(); });
+  const writerClosed = new Promise((resolveClose) => {
+    writer.on('error', (error) => resolveClose({ code: 1, error }));
+    writer.on('close', (code) => resolveClose({ code: code ?? 1 }));
+  });
+  const writerReady = new Promise((resolveReady, rejectReady) => {
+    const timeout = setTimeout(
+      () => rejectReady(new UpgradeTestError('Timed out waiting for the held storage write.')),
+      5000,
+    );
+    writer.stdout.on('data', (chunk) => {
+      if (chunk.toString().includes('WRITE_LOCKED')) {
+        clearTimeout(timeout);
+        resolveReady();
+      }
+    });
+  });
+  writer.stdin.write(`
+    begin;
+    insert into storage.objects (id, bucket_id, name) values (
+      '60000000-0000-4000-8000-000000000023',
+      'garments',
+      '00000000-0000-4000-8000-000000000023/racing.jpg'
+    );
+    select 'WRITE_LOCKED';
+  `);
+  await writerReady;
+
+  let deletionSettled = false;
+  const deletion = concurrentQuery(
+    databaseUrl,
+    `select * from public.account_deletion_start(
+      '00000000-0000-4000-8000-000000000023'
+    );`,
+  ).then((result) => {
+    deletionSettled = true;
+    return result;
+  });
+  await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+  if (deletionSettled) {
+    writer.stdin.end('rollback;\n\\q\n');
+    await writerClosed;
+    throw new UpgradeTestError(
+      'Account deletion crossed an in-flight storage write instead of waiting for its transaction.',
+    );
+  }
+
+  writer.stdin.end('commit;\n\\q\n');
+  const [writerResult, deletionResult] = await Promise.all([writerClosed, deletion]);
+  if (writerResult.code !== 0) {
+    throw new UpgradeTestError(`Held storage write failed: ${writerStderr}`);
+  }
+  if (deletionResult.code !== 0) {
+    throw new UpgradeTestError(`Deletion fence failed: ${deletionResult.stderr}`);
+  }
+
+  const lateWrite = await concurrentQuery(
+    databaseUrl,
+    `insert into storage.objects (id, bucket_id, name) values (
+      '60000000-0000-4000-8000-000000000123',
+      'garments',
+      '00000000-0000-4000-8000-000000000023/late.jpg'
+    );`,
+  );
+  if (!lateWrite.stderr.includes('Account deletion in progress')) {
+    throw new UpgradeTestError('A storage write crossed the committed deletion tombstone.');
+  }
+}
+
 async function verifyConcurrentReservation(databaseUrl) {
   psql(
     databaseUrl,
@@ -350,6 +435,17 @@ async function main() {
       'supabase',
       withWorkdir(['db', 'reset', '--local'], workspace),
       'Reset the isolated database to the latest clean schema',
+    );
+    const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyDeletionWriteFence(latestDatabaseUrl);
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/upgrade-tests/account-deletion-concurrency.test.sql'),
+      ], workspace),
+      'Verify the account-deletion write fence across connections',
     );
     run(
       'supabase',
