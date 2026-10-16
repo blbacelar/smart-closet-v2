@@ -19,13 +19,13 @@ reviewer still verifies the referenced provider/private-register evidence.
 
 - Commit: `e135e3f` (`feat: validate Gate D and E receipts fail closed`)
 - Same command result: 17 of 17 tests passed after the initial implementation.
-- Hardening run: 36 of 36 tests passed after adding capability manifests,
+- Hardening run: 37 of 37 tests passed after adding capability manifests,
   exact check IDs, environment/build/reconciliation rules, chronology, exact
   ISO-8601/calendar, field types, nested schemas, private-file/symlink
   boundaries, CLI exit codes, and adversarial no-secret/no-key-echo coverage.
 - Coverage command:
   `npx jest scripts/__tests__/checkGateReadinessReceipt.test.js --runInBand --coverage --collectCoverageFrom=scripts/check-gate-readiness-receipt.js`
-- Coverage: 87.55% statements, 85.64% branches, 94.28% functions, and 88.93%
+- Coverage: 87.74% statements, 85.91% branches, 94.28% functions, and 89.12%
   lines.
 
 ## Guarantees exercised
@@ -34,6 +34,8 @@ reviewer still verifies the referenced provider/private-register evidence.
   `decision-only` receipts pass.
 - Missing ownership, approval, access reference, checks, reconciliation, or
   reconsideration fails closed.
+- Deferred cleanup decisions require a dated reconsideration trigger; only an
+  excluded decision may be permanent for the release.
 - Capability/stage/environment mismatches, missing native builds, and missing,
   duplicate, or unknown capability check IDs fail closed.
 - Failed, rejected, expired, future, malformed, and non-ISO evidence fails.

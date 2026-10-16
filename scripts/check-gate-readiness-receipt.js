@@ -563,10 +563,13 @@ function validateDecisionOnly(receipt, now, findings) {
   if (reconsideration?.kind === 'date') {
     rejectUnexpectedObjectFields(
       reconsideration,
-      new Set(['kind', 'reviewAt']),
+      new Set(['kind', 'trigger', 'reviewAt']),
       'reconsideration',
       findings,
     );
+    if (!isNonEmptyString(reconsideration.trigger)) {
+      findings.push(finding('missing-field', 'reconsideration.trigger'));
+    }
     const timestamp = parseDate(reconsideration.reviewAt, 'reconsideration.reviewAt', findings);
     if (timestamp !== null && timestamp <= now.getTime()) {
       findings.push(finding('expired-evidence', 'reconsideration.reviewAt'));
@@ -583,6 +586,9 @@ function validateDecisionOnly(receipt, now, findings) {
     );
     if (!isNonEmptyString(reconsideration.statement)) {
       findings.push(finding('missing-field', 'reconsideration.statement'));
+    }
+    if (receipt.providerDecision !== 'excluded') {
+      findings.push(finding('decision-reconsideration-mismatch', 'reconsideration.kind'));
     }
   } else if (reconsideration !== undefined) {
     findings.push(finding('invalid-reconsideration', 'reconsideration'));

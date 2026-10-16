@@ -83,6 +83,7 @@ function decisionOnlyReceipt(overrides = {}) {
     noProviderAccountCredentialOrData: 'confirmed',
     reconsideration: {
       kind: 'date',
+      trigger: 'Review if cleanup quality becomes a release requirement.',
       reviewAt: '2027-01-16T11:00:00.000Z',
     },
     evidenceReference: 'private-register:cleanup-decision-1',
@@ -236,6 +237,33 @@ describe('Gate D/E readiness receipt validator', () => {
     }), { now })).toEqual([]);
   });
 
+  it('requires dated deferred reconsideration with a trigger', () => {
+    const permanentDeferred = decisionOnlyReceipt({
+      providerDecision: 'deferred',
+      reconsideration: {
+        kind: 'permanent-for-release',
+        statement: 'No reconsideration this release.',
+      },
+    });
+    const missingTrigger = decisionOnlyReceipt({
+      providerDecision: 'deferred',
+      reconsideration: {
+        kind: 'date',
+        reviewAt: '2027-01-16T11:00:00.000Z',
+      },
+    });
+
+    expect(validateReceipt(permanentDeferred, { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'decision-reconsideration-mismatch',
+        field: 'reconsideration.kind',
+      }),
+    ]));
+    expect(validateReceipt(missingTrigger, { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'missing-field', field: 'reconsideration.trigger' }),
+    ]));
+  });
+
   it('rejects unknown fields and secret-like or personal evidence values without echoing them', () => {
     const secret = 'sk-' + 'x'.repeat(30);
     const receipt = accessReceipt({
@@ -350,6 +378,7 @@ describe('Gate D/E readiness receipt validator', () => {
     const findings = validateReceipt(decisionOnlyReceipt({
       reconsideration: {
         kind: 'date',
+        trigger: 'Review at the approved checkpoint.',
         reviewAt: '2027-01-16T11:00:00.000Z',
         statement: 'Conflicts with date reconsideration.',
       },
@@ -381,7 +410,11 @@ describe('Gate D/E readiness receipt validator', () => {
   it('rejects invalid decision values and expired or malformed reconsideration', () => {
     expect(validateReceipt(decisionOnlyReceipt({
       providerDecision: 'required',
-      reconsideration: { kind: 'date', reviewAt: '2026-10-15T11:00:00.000Z' },
+      reconsideration: {
+        kind: 'date',
+        trigger: 'Review at the approved checkpoint.',
+        reviewAt: '2026-10-15T11:00:00.000Z',
+      },
     }), { now })).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'invalid-provider-decision' }),
       expect.objectContaining({ kind: 'expired-evidence', field: 'reconsideration.reviewAt' }),
@@ -402,7 +435,11 @@ describe('Gate D/E readiness receipt validator', () => {
     ]));
     expect(validateReceipt(decisionOnlyReceipt({
       decidedAt: '2027-01-16T11:00:00.000Z',
-      reconsideration: { kind: 'date', reviewAt: '2026-12-16T11:00:00.000Z' },
+      reconsideration: {
+        kind: 'date',
+        trigger: 'Review at the approved checkpoint.',
+        reviewAt: '2026-12-16T11:00:00.000Z',
+      },
     }), { now: new Date('2026-10-16T12:00:00.000Z') })).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'invalid-chronology', field: 'reconsideration.reviewAt' }),
     ]));
