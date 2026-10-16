@@ -34,38 +34,65 @@ and all secrets remain human-owned external actions.
 
 ## Evidence receipt
 
-Record one receipt per capability in GitHub #48 or an approved private evidence
-register. Do not paste credentials or personal data into an issue.
+Record one receipt per capability **per stage** in GitHub #48 or an approved
+private evidence register. Every applicable capability therefore needs an
+`access-ready` receipt and a later `acceptance-ready` receipt. Do not paste
+credentials or personal data into an issue.
 
-| Field | Required value |
+Both stages require these common fields:
+
+| Common field | Required value |
 | --- | --- |
 | Gate and capability | Exact row name from this pack |
 | Receipt stage | Exact `access-ready` or `acceptance-ready` stage |
 | Environment | Staging, sandbox, or production |
 | Account owner | Named accountable human; keep contact details private |
-| Authorized approver | Named human authorized to accept this capability for Fitly |
+| Authorized approver | Named human authorized to accept this stage for Fitly |
 | Least-privilege operator | Human/role permitted to configure and rotate access |
-| Evidence reference | Non-sensitive build, case, console, or private-register ID |
-| Capability verification | Exact test performed and explicit `passed` or `failed` result |
-| Disable/rollback verification | Exact exercise performed and explicit `passed` or `failed` result |
-| App/build version | Immutable commit and native build identifier |
+| Evidence reference | Non-sensitive console, case, build, or private-register ID |
 | Verified at | ISO-8601 timestamp |
 | Reviewer | Independent human who checked the evidence |
-| Open findings | `none`, or the capability remains open |
-| Decision | Explicit `approved` or `rejected` by the authorized approver |
+| Open findings | Exact `none`, or the stage remains open |
+| Decision | Exact `approved` or `rejected` by the authorized approver |
 | Decision time | ISO-8601 timestamp |
-| Disable/rollback action | Provider-supported action and responsible owner |
-| Expiry/rotation | Expiry date or next access review |
+| Expiry/rotation | Expiry date or next evidence/access review |
 
-An `access-ready` receipt authorizes only the corresponding story start; it does
-not close the capability or Gate D. An `acceptance-ready` receipt closes the
-capability only when every required field is present, the capability and
-disable/rollback verifications both passed, open findings are `none`, the
-authorized approver explicitly decided `approved`, and the evidence can still
-be accessed by the named reviewer. A failed, rejected, conditional, expired,
-inaccessible, or partially completed receipt leaves that stage open. Editing
-the underlying provider configuration invalidates both stages affected by the
-change.
+An `access-ready` receipt additionally requires:
+
+| Access-ready field | Required value |
+| --- | --- |
+| Access-row verification | Every item in the capability's access-ready row, each explicitly `passed` or `failed` |
+| Terms/funding/entitlement | Current provider terms accepted and required funding/entitlement explicitly verified |
+| Secret boundary | Secret location and scope verified without copying the secret into evidence |
+| Minimum connectivity | Exact non-destructive check and explicit `passed` or `failed` result |
+| Revocation owner and planned action | Named role and provider-supported access/credential revocation procedure; execution is acceptance evidence when the story requires it |
+
+`access-ready` is approved only when all common and access fields are present,
+every access-row and connectivity check passed, evidence is current and
+accessible to the reviewer, open findings are `none`, and the authorized
+approver decided `approved`. It authorizes only the corresponding story start;
+it does not require a native build or an executed rollback, and it does not
+close the capability or Gate D.
+
+An `acceptance-ready` receipt additionally requires:
+
+| Acceptance-ready field | Required value |
+| --- | --- |
+| Access receipt reference | Current approved `access-ready` receipt for the same capability/environment |
+| App/build version | Immutable commit and, when applicable, native build identifier |
+| Acceptance-row verification | Every item in the capability's acceptance-ready row, each explicitly `passed` or `failed` |
+| End-to-end/failure evidence | Exact story-owned tests and explicit results |
+| Disable/rollback verification | Exact exercise, responsible owner, and explicit `passed` or `failed` result |
+| Reconciliation | Exact post-test/recovery reconciliation and explicit result when state or money-like credits are involved |
+
+`acceptance-ready` is approved only when the referenced access receipt remains
+current, all common and acceptance fields are present, every acceptance,
+failure, disable/rollback, and applicable reconciliation check passed, evidence
+is accessible to the reviewer, open findings are `none`, and the authorized
+approver decided `approved`. Only that receipt closes the capability. A failed,
+rejected, conditional, expired, inaccessible, or partially completed receipt
+leaves its stage open. Editing the provider configuration invalidates both
+stages affected by the change.
 
 ## Gate D — accounts and credentials
 
@@ -93,7 +120,7 @@ owned by the story.
 | Production SMTP | Provider owner, verified sending-domain control, accepted terms, least-privilege credential outside Git, and authenticated sandbox/test connection to a controlled non-personal inbox | C24 email implementation |
 | Approved crash/error provider | Product/privacy-approved provider, account/project owner, accepted terms, least-privilege project, environment-bound credential outside Git, retention ceiling, and authenticated project connectivity | C24 crash-provider implementation |
 | Apple and Google OAuth | Provider app/client owners, accepted terms, registered client identifiers and exact redirect URIs, secrets outside Git, consent-screen plan, and provider configuration access | C22 |
-| Web billing provider (conditional) | When selected by Gate C: provider/account owner, accepted terms, sandbox/production separation, sandbox product/price IDs, tax configuration owner, scoped API and webhook secrets outside Git, and authenticated sandbox connectivity | C19 provider event work; C20 selected web rail; C24 release work |
+| Web billing provider (conditional) | When selected by Gate C: provider/account owner, accepted terms, sandbox/production separation, sandbox product/price IDs, tax configuration owner, scoped API and webhook secrets outside Git, and authenticated sandbox connectivity | C20 selected web rail; C24 release work |
 | StoreKit billing (conditional) | When selected by Gate C: App Store Connect owner, accepted agreements, sandbox SKU/product identifiers, tax/banking owner where applicable, server-notification configuration access, secrets outside Git, and authenticated sandbox access | C20 selected iOS rail; C24 iOS release work |
 | Google Play Billing (conditional) | When selected by Gate C: Play owner, accepted agreements, sandbox SKU/product identifiers, merchant/tax owner where applicable, Real-time Developer Notifications configuration access, secrets outside Git, and authenticated sandbox access | C20 selected Android rail; C24 Android release work |
 
@@ -169,12 +196,12 @@ because least-privilege access and dual approval cannot be tested without them.
 | C11 marketplace notifications | C07, C10, and C15; EAS/APNs/FCM `access-ready` approval is required before physical delivery/deep-link acceptance begins |
 | C13-C15 moderation/block/dispute | Gate B takedown, report, evidence, appeal, retention, and resolution policies approved |
 | C16 ratings/operator tools | C15 plus Gate E moderator/support owner and dual-approval operators |
-| C17 real-provider AI | Gemini `access-ready` approved; optional cleanup `access-ready` decision recorded |
+| C17 real-provider AI | Hosted Supabase staging and Gemini `access-ready` approved; optional cleanup `access-ready` decision recorded |
 | C18A/B final language/accessibility | Its upstream user-visible stories are implemented and final copy exists |
 | C19 entitlement lifecycle | Signed Gates A-C contract and issue #27 contract reconciled |
-| C20 store billing | C19, the signed Gate C rail, and every corresponding web/StoreKit/Play `access-ready` row approved |
+| C20 store billing | C19, the signed Gate C rail, hosted Supabase staging `access-ready`, and every corresponding web/StoreKit/Play `access-ready` row approved |
 | C21 seller compliance | Gate B reporting/due-diligence decision approved |
-| C22 social OAuth | Corresponding OAuth provider `access-ready` row approved |
+| C22 social OAuth | Hosted Supabase staging and corresponding OAuth provider `access-ready` rows approved |
 | C24 production release | C18B and C19-C23 complete plus all applicable production Gate D `access-ready` rows approved; C24 produces their acceptance-ready evidence |
 | C25 release acceptance | C05-C17 and C18B-C24 complete with two-device/provider evidence |
 | C26A waitlist/metrics | Gate E pilot owner, region, cohort, density, and support thresholds approved |
