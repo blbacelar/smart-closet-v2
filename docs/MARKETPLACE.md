@@ -39,7 +39,7 @@ The database, rather than the mobile client, owns all marketplace transitions:
 - A private, immutable terms record captures the accepted listing, mode, credit amount, participant parties, and swap listing. It deliberately excludes messages, media, and precise pickup information.
 - Repeating an accepted response returns the original transaction. Repeating rejection or cancellation is a safe no-op, so network retries cannot duplicate value movement.
 
-Expiry execution and acquired-garment copies are separate completion slices. Until the expiry worker is merged, the deadlines are authoritative data but do not imply that a background job has already enforced them.
+The database expiry worker enforces offer and handoff deadlines in bounded batches. Pending offers release reservations once. An overdue handoff with no confirmation expires and reopens its listing set; a handoff with either participant already confirmed becomes `disputed` and keeps credits/listings frozen for the future dispute resolver. Acquired-garment copies remain a separate completion slice.
 
 ## Operational switches
 

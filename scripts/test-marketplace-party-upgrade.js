@@ -267,6 +267,130 @@ async function verifyConcurrentOfferAcceptance(databaseUrl) {
   }
 }
 
+async function verifyConcurrentMarketplaceExpiry(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email) values
+        ('00000000-0000-4000-8000-000000000055', 'expiry-race-seller@example.com'),
+        ('00000000-0000-4000-8000-000000000056', 'expiry-race-buyer@example.com');
+      insert into public.marketplace_memberships (user_id, expires_at) values
+        ('00000000-0000-4000-8000-000000000055', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000056', now() + interval '1 year');
+      insert into public.marketplace_credit_accounts (user_id, available_balance)
+      values ('00000000-0000-4000-8000-000000000056', 100);
+      insert into public.marketplace_credit_ledger (
+        user_id, kind, delta_available, idempotency_key, description
+      ) values (
+        '00000000-0000-4000-8000-000000000056', 'adjustment', 100,
+        'expiry-race-opening', 'Concurrent expiry fixture'
+      );
+      insert into public.garments (
+        id, user_id, original_path, image_hash, name, category, status
+      ) values
+        ('20000000-0000-4000-8000-000000000055',
+         '00000000-0000-4000-8000-000000000055',
+         '00000000-0000-4000-8000-000000000055/offer.jpg',
+         'expiry-race-offer', 'Expiry offer race', 'top', 'ready'),
+        ('20000000-0000-4000-8000-000000000155',
+         '00000000-0000-4000-8000-000000000055',
+         '00000000-0000-4000-8000-000000000055/transaction.jpg',
+         'expiry-race-transaction', 'Expiry transaction race', 'top', 'ready');
+      insert into public.marketplace_listings (
+        id, garment_id, seller_id, accepts_credits, accepts_swap,
+        is_giveaway, credit_price, pickup_area
+      ) values
+        ('40000000-0000-4000-8000-000000000055',
+         '20000000-0000-4000-8000-000000000055',
+         '00000000-0000-4000-8000-000000000055',
+         true, false, false, 20, 'Expiry race area'),
+        ('40000000-0000-4000-8000-000000000155',
+         '20000000-0000-4000-8000-000000000155',
+         '00000000-0000-4000-8000-000000000055',
+         true, false, false, 30, 'Expiry race area');
+
+      begin;
+      set local role authenticated;
+      select set_config(
+        'request.jwt.claim.sub',
+        '00000000-0000-4000-8000-000000000056', true
+      );
+      select public.marketplace_create_offer(
+        '40000000-0000-4000-8000-000000000055', 'credits', null, null
+      );
+      select public.marketplace_create_offer(
+        '40000000-0000-4000-8000-000000000155', 'credits', null, null
+      );
+      commit;
+
+      begin;
+      set local role authenticated;
+      select set_config(
+        'request.jwt.claim.sub',
+        '00000000-0000-4000-8000-000000000055', true
+      );
+      select public.marketplace_respond_to_offer(
+        (select id from public.marketplace_offers
+         where listing_id = '40000000-0000-4000-8000-000000000155'),
+        true
+      );
+      commit;
+    `,
+    'Create the concurrent marketplace-expiry fixture',
+  );
+
+  const expiryQuery = `
+    select * from public.marketplace_expire_stale(
+      now() + interval '8 days', 100
+    );
+  `;
+  const results = await Promise.all([
+    concurrentQuery(databaseUrl, expiryQuery),
+    concurrentQuery(databaseUrl, expiryQuery),
+  ]);
+  const diagnostics = results.map((result) => result.stderr).join('\n');
+  if (results.some((result) => result.code !== 0)) {
+    throw new UpgradeTestError(
+      `Concurrent marketplace expiry failed: ${diagnostics}`,
+    );
+  }
+  if (diagnostics.toLowerCase().includes('deadlock detected')) {
+    throw new UpgradeTestError('Concurrent marketplace expiry deadlocked.');
+  }
+
+  const state = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-F', '|', '-c',
+      `select
+         (select count(*) from public.marketplace_offers
+          where listing_id = '40000000-0000-4000-8000-000000000055'
+            and status = 'expired'),
+         (select count(*) from public.marketplace_transactions
+          where listing_id = '40000000-0000-4000-8000-000000000155'
+            and status = 'expired'),
+         (select available_balance from public.marketplace_credit_accounts
+          where user_id = '00000000-0000-4000-8000-000000000056'),
+         (select reserved_balance from public.marketplace_credit_accounts
+          where user_id = '00000000-0000-4000-8000-000000000056'),
+         (select count(*) from public.marketplace_credit_ledger
+          where user_id = '00000000-0000-4000-8000-000000000056'
+            and kind = 'offer_release'),
+         (select count(*) from public.marketplace_credit_ledger
+          where user_id = '00000000-0000-4000-8000-000000000056'
+            and kind = 'expiration_release'),
+         (select status from public.marketplace_listings
+          where id = '40000000-0000-4000-8000-000000000155');`,
+    ],
+    'Read concurrent marketplace-expiry result',
+  ).trim();
+  if (state !== '1|1|100|0|1|1|active') {
+    throw new UpgradeTestError(
+      `Concurrent marketplace expiry was not exactly once: ${state}`,
+    );
+  }
+}
+
 async function verifyAcceptanceDeletionLockOrder(databaseUrl) {
   psql(
     databaseUrl,
@@ -871,7 +995,17 @@ async function main() {
       ], workspace),
       'Verify the server-authoritative marketplace state contract',
     );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/marketplace_expiry_worker.test.sql'),
+      ], workspace),
+      'Verify marketplace deadline enforcement and exactly-once release',
+    );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyConcurrentMarketplaceExpiry(latestDatabaseUrl);
     await verifyConcurrentOfferAcceptance(latestDatabaseUrl);
     run(
       'supabase',

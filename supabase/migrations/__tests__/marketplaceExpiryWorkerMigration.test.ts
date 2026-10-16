@@ -28,7 +28,8 @@ describe('marketplace expiry worker migration', () => {
     expect(body).toMatch(
       /marketplace_lock_listings[\s\S]*?account_deletion_lock_subjects[\s\S]*?for update/,
     );
-    expect(body).toContain('skip locked');
+    expect(body).toMatch(/order by[\s\S]*?limit p_limit/);
+    expect(body).not.toMatch(/for update skip locked[\s\S]*?marketplace_lock_listings/);
   });
 
   it('keeps partial confirmations frozen and releases unconfirmed work once', () => {
