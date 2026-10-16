@@ -94,6 +94,32 @@ rejected, conditional, expired, inaccessible, or partially completed receipt
 leaves its stage open. Editing the provider configuration invalidates both
 stages affected by the change.
 
+### Decision-only exception for optional image cleanup
+
+If product/privacy decides that the optional image-cleanup provider is
+`deferred` or `excluded`, record one `decision-only` receipt instead of
+fabricating provider access and acceptance receipts. It requires:
+
+| Decision-only field | Required value |
+| --- | --- |
+| Gate and capability | `Optional image cleanup provider` |
+| Receipt type and decision | Exact `decision-only` plus exact `deferred` or `excluded` |
+| Decision owner and authorized approver | Named accountable humans; keep contact details private |
+| Rationale and product/privacy review | Approved reason, user-impact analysis, and confirmation that original-image behavior remains safe |
+| No-provider assertion | Explicit confirmation that no provider account/credential was created and no image/member data was sent |
+| Reconsideration | Trigger and ISO-8601 review/expiry date, or an approved statement that exclusion is permanent for this release |
+| Evidence reference and decision time | Non-sensitive private-register/issue reference and ISO-8601 timestamp |
+| Independent reviewer and findings | Named reviewer and exact `none` open findings |
+
+For an approved `deferred`/`excluded` decision, provider account owner,
+least-privilege provider operator, environment, provider terms/funding, secret
+boundary, connectivity, build/E2E, rollback execution, and provider
+reconciliation fields are legitimately not applicable and must be omitted, not
+filled with invented values. The decision-only receipt satisfies only the
+cleanup-provider decision for C17. If the decision becomes `required`, the
+decision-only receipt is invalidated and normal `access-ready` plus
+`acceptance-ready` receipts are mandatory before provider use.
+
 ## Gate D — accounts and credentials
 
 Gate D has two phases. **Access-ready** proves that engineering can safely begin
@@ -116,7 +142,7 @@ owned by the story.
 | Hosted Supabase production | Separate production project/account owner, accepted terms, least-privilege deployment and recovery roles, production-bound secrets outside Git, backup entitlement, and authenticated health/connectivity check without member data | C24 production deployment work |
 | EAS project, APNs/FCM v1, and Expo push | Confirmed EAS project `ac7a88d2-7cf9-49da-8e55-e03dc63e7618` owner, scoped automation role, APNs/FCM owners, credentials outside Git, rotation/revocation owners, and authenticated non-delivery connectivity checks | C10 physical acceptance follow-up; C11; C24 build/push work |
 | Funded direct Gemini staging project | Billing/funding owner, accepted provider terms, budget/alert boundary, approved data-processing configuration, secret stored in the Edge Function environment, non-personal fixture policy, and minimal authenticated model connectivity check | C17 |
-| Optional image cleanup provider | Written `required`, `deferred`, or `excluded` decision; if required, provider owner, privacy approval, funding/budget, credentials outside Git, deletion contract, and minimal connectivity check | C17 when required |
+| Optional image cleanup provider | Written `required`, `deferred`, or `excluded` decision; `deferred`/`excluded` uses the decision-only receipt above; if `required`, provider owner, privacy approval, funding/budget, credentials outside Git, deletion contract, and minimal connectivity check are mandatory | C17 when required |
 | Production SMTP | Provider owner, verified sending-domain control, accepted terms, least-privilege credential outside Git, and authenticated sandbox/test connection to a controlled non-personal inbox | C24 email implementation |
 | Approved crash/error provider | Product/privacy-approved provider, account/project owner, accepted terms, least-privilege project, environment-bound credential outside Git, retention ceiling, and authenticated project connectivity | C24 crash-provider implementation |
 | Apple and Google OAuth | Provider app/client owners, accepted terms, registered client identifiers and exact redirect URIs, secrets outside Git, consent-screen plan, and provider configuration access | C22 |
@@ -134,7 +160,7 @@ owned by the story.
 | Hosted Supabase production | Approved auth/storage/network/retention configuration, migration/function deployment, backup schedule, isolated restore drill, old-client/schema compatibility window, and forward-fix drill | Revoke scoped access, disable affected features, preserve compatible clients, restore to isolation, and apply a reviewed forward fix |
 | EAS project, APNs/FCM v1, and Expo push | Reproducible physical builds; credential rotation/revocation exercise; push registration and Expo ticket/receipt reconciliation; observed safe delivery/deep links on physical iOS/Android in foreground, background, and terminated states | Revoke/rotate credentials; set `EXPO_PUSH_ENABLED=false`; republish only a runtime-compatible OTA; halt binary rollout and ship a replacement while preserving server compatibility. Installed binaries cannot be remotely replaced |
 | Funded direct Gemini staging project | Successful moderation, tagging, color, and try-on flows using representative non-personal images; recorded latency/cost/privacy behavior; provider failure and budget circuit breakers | Disable the provider secret/enqueue path without bulk retry or media exposure |
-| Optional image cleanup provider | If required, representative cleanup, deletion, original-image preservation, cost, timeout, and provider-failure evidence; otherwise the approved exclusion/defer receipt | Remove the provider secret and preserve the original private garment image/state |
+| Optional image cleanup provider | If `required`, representative cleanup, deletion, original-image preservation, cost, timeout, and provider-failure evidence; if `deferred`/`excluded`, the approved current decision-only receipt replaces both provider stages | When required, remove the provider secret and preserve the original private garment image/state; otherwise confirm that no provider credential/data transfer exists |
 | Production SMTP | SPF/DKIM/DMARC result, reviewed templates, production confirmation enabled, delivery/bounce evidence, account recovery, and provider failure behavior | Disable/rotate the provider credential, revert configuration/templates, and preserve account access/support |
 | Approved crash/error provider | C23 allowlist deployed, synthetic redacted event and alert, retention behavior, deletion/export test, and provider outage behavior | Disable the adapter and credential without preventing app startup or first-party diagnostics |
 | Apple and Google OAuth | Physical-device sign-in, link, redirect, revoke, collision, fallback email login, and strong reauthentication evidence | Revoke provider credentials while preserving email login and safe reauthentication |
@@ -196,7 +222,7 @@ because least-privilege access and dual approval cannot be tested without them.
 | C11 marketplace notifications | C07, C10, and C15; EAS/APNs/FCM `access-ready` approval is required before physical delivery/deep-link acceptance begins |
 | C13-C15 moderation/block/dispute | Gate B takedown, report, evidence, appeal, retention, and resolution policies approved |
 | C16 ratings/operator tools | C15 plus Gate E moderator/support owner and dual-approval operators |
-| C17 real-provider AI | Hosted Supabase staging and Gemini `access-ready` approved; optional cleanup `access-ready` decision recorded |
+| C17 real-provider AI | Hosted Supabase staging and Gemini `access-ready` approved; optional cleanup is either `required` with its own `access-ready` receipt or has an approved current `decision-only` defer/exclude receipt |
 | C18A/B final language/accessibility | Its upstream user-visible stories are implemented and final copy exists |
 | C19 entitlement lifecycle | Signed Gates A-C contract and issue #27 contract reconciled |
 | C20 store billing | C19, the signed Gate C rail, hosted Supabase staging `access-ready`, and every corresponding web/StoreKit/Play `access-ready` row approved |
