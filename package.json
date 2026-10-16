@@ -57,6 +57,7 @@
     "typecheck": "tsc --noEmit",
     "build:web": "expo export --platform web",
     "check:gate-drafts": "node scripts/check-gate-submission-hashes.js",
+    "validate:gate-receipt": "node scripts/check-gate-readiness-receipt.js",
     "check:pii": "node scripts/check-pii.js",
     "e2e:seed": "node scripts/seed-e2e-accounts.js",
     "quality": "node scripts/run-quality.js",

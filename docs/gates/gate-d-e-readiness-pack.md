@@ -94,6 +94,36 @@ rejected, conditional, expired, inaccessible, or partially completed receipt
 leaves its stage open. Editing the provider configuration invalidates both
 stages affected by the change.
 
+### Private receipt validator
+
+The repository includes a fail-closed structural validator for the three
+receipt types in this pack. Keep the receipt JSON in an approved private
+register or a temporary local directory outside the repository, then run:
+
+```bash
+npm run validate:gate-receipt -- /absolute/private/path/receipt.json
+```
+
+Multiple paths may be supplied in one run. Exit code `0` means every supplied
+receipt passed the structural contract; `1` means at least one receipt has a
+finding; `2` means no receipt path was supplied. Output contains only each file
+index plus finding type and field name. It never intentionally prints a path,
+filename, field value, or receipt body.
+
+The validator requires schema version `1`, exact stage/capability identifiers,
+timezone-qualified ISO-8601 timestamps, current review dates, approved/no-open-
+finding state, passed stage checks, and no unknown fields. It rejects common
+secret patterns, personal email/phone values, user home paths, and private
+storage URLs. Access and acceptance checks are objects containing only `name`
+and `result`; acceptance reconciliation contains only `result` and optional
+`rationale`; decision reconsideration uses exactly one of the documented forms.
+
+This command validates the receipt's shape and declared results. It cannot
+prove that a provider fact is true, that an approver has authority, or that a
+private evidence reference is accessible/current. The independent reviewer
+must inspect the referenced source and establish those facts before approval.
+Passing the validator alone never closes a gate or authorizes provider use.
+
 ### Decision-only exception for optional image cleanup
 
 If product/privacy decides that the optional image-cleanup provider is

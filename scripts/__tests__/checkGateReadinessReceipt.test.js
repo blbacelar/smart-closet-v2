@@ -1,7 +1,12 @@
 const {
   capabilityIds,
+  validateFile,
   validateReceipt,
 } = require('../check-gate-readiness-receipt');
+const { mkdtempSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const now = new Date('2026-10-16T12:00:00.000Z');
 
@@ -199,5 +204,156 @@ describe('Gate D/E readiness receipt validator', () => {
     expect(validateReceipt(accessReceipt({ verifiedAt: '2026-10-17T12:00:00.000Z' }), { now })).toEqual(
       expect.arrayContaining([expect.objectContaining({ kind: 'future-evidence', field: 'verifiedAt' })]),
     );
+  });
+
+  it('requires exact ISO-8601 timestamps rather than locale-dependent dates', () => {
+    expect(validateReceipt(accessReceipt({ verifiedAt: '10/16/2026 10:00' }), { now })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'invalid-date', field: 'verifiedAt' })]),
+    );
+    expect(validateReceipt(accessReceipt({ verifiedAt: '2026-02-31T10:00:00.000Z' }), { now })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'invalid-date', field: 'verifiedAt' })]),
+    );
+  });
+
+  it('rejects wrong or blank types for required references and plans', () => {
+    const findings = validateReceipt(accessReceipt({
+      accountOwnerReference: [],
+      reviewerReference: '   ',
+      revocationPlan: 42,
+      verifiedAt: 123,
+    }), { now });
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-field', field: 'accountOwnerReference' }),
+      expect.objectContaining({ kind: 'invalid-field', field: 'reviewerReference' }),
+      expect.objectContaining({ kind: 'invalid-field', field: 'revocationPlan' }),
+      expect.objectContaining({ kind: 'invalid-date', field: 'verifiedAt' }),
+    ]));
+  });
+
+  it('rejects wrong acceptance and decision text types', () => {
+    expect(validateReceipt(acceptanceReceipt({
+      accessReceiptReference: {},
+      commitSha: 123,
+    }), { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-field', field: 'accessReceiptReference' }),
+      expect.objectContaining({ kind: 'invalid-commit', field: 'commitSha' }),
+    ]));
+    expect(validateReceipt(decisionOnlyReceipt({
+      releaseScope: [],
+      rationale: '   ',
+    }), { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-field', field: 'releaseScope' }),
+      expect.objectContaining({ kind: 'invalid-field', field: 'rationale' }),
+    ]));
+  });
+
+  it('rejects unexpected fields inside checks and reconciliation objects', () => {
+    const accessFindings = validateReceipt(accessReceipt({
+      accessChecks: [{ name: 'terms', result: 'passed', note: 'ambiguous free text' }],
+    }), { now });
+    const acceptanceFindings = validateReceipt(acceptanceReceipt({
+      reconciliationCheck: {
+        result: 'not-applicable',
+        rationale: 'This capability does not mutate credits.',
+        assertion: 'unreviewed extension',
+      },
+    }), { now });
+
+    expect(accessFindings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'unexpected-field', field: 'accessChecks[0].note' }),
+    ]));
+    expect(acceptanceFindings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'unexpected-field', field: 'reconciliationCheck.assertion' }),
+    ]));
+  });
+
+  it('rejects unexpected fields inside decision reconsideration objects', () => {
+    const findings = validateReceipt(decisionOnlyReceipt({
+      reconsideration: {
+        kind: 'date',
+        reviewAt: '2027-01-16T11:00:00.000Z',
+        statement: 'Conflicts with date reconsideration.',
+      },
+    }), { now });
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'unexpected-field', field: 'reconsideration.statement' }),
+    ]));
+  });
+
+  it('rejects unsupported schema, environment, stage, commit, and reconciliation forms', () => {
+    expect(validateReceipt(accessReceipt({ schemaVersion: 2, environment: 'local' }), { now })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'unsupported-schema' }),
+        expect.objectContaining({ kind: 'invalid-environment' }),
+      ]),
+    );
+    expect(validateReceipt({ stage: 'draft' }, { now })).toEqual([
+      expect.objectContaining({ kind: 'invalid-stage' }),
+    ]);
+    expect(validateReceipt(acceptanceReceipt({
+      commitSha: 'working-tree',
+      reconciliationCheck: { result: 'failed' },
+    }), { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-commit' }),
+      expect.objectContaining({ kind: 'failed-check', field: 'reconciliationCheck' }),
+    ]));
+  });
+
+  it('rejects invalid decision values and expired or malformed reconsideration', () => {
+    expect(validateReceipt(decisionOnlyReceipt({
+      providerDecision: 'required',
+      reconsideration: { kind: 'date', reviewAt: '2026-10-15T11:00:00.000Z' },
+    }), { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-provider-decision' }),
+      expect.objectContaining({ kind: 'expired-evidence', field: 'reconsideration.reviewAt' }),
+    ]));
+    expect(validateReceipt(decisionOnlyReceipt({
+      reconsideration: { kind: 'later' },
+    }), { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-reconsideration' }),
+    ]));
+  });
+
+  it('validates JSON files without exposing their content', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fitly-gate-receipt-'));
+    const validPath = join(directory, 'valid.json');
+    const malformedPath = join(directory, 'malformed.json');
+    writeFileSync(validPath, JSON.stringify(accessReceipt()));
+    writeFileSync(malformedPath, '{not-json');
+
+    expect(validateFile(validPath, { now })).toEqual([]);
+    expect(validateFile(malformedPath, { now })).toEqual([
+      expect.objectContaining({ kind: 'unreadable-or-invalid-json' }),
+    ]);
+  });
+
+  it('uses stable CLI exit codes and never echoes secret-like receipt values', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fitly-gate-cli-'));
+    const validPath = join(directory, 'owner@example.test.json');
+    const invalidPath = join(directory, 'private-owner-phone-555-555-1212.json');
+    const secret = 'sk-' + 'z'.repeat(30);
+    const currentTime = Date.now();
+    const cliDates = {
+      verifiedAt: new Date(currentTime - 120_000).toISOString(),
+      decisionAt: new Date(currentTime - 60_000).toISOString(),
+      nextReviewAt: new Date(currentTime + 86_400_000).toISOString(),
+    };
+    writeFileSync(validPath, JSON.stringify(accessReceipt(cliDates)));
+    writeFileSync(invalidPath, JSON.stringify(accessReceipt({ ...cliDates, apiKey: secret })));
+    const scriptPath = join(__dirname, '..', 'check-gate-readiness-receipt.js');
+
+    const usage = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8' });
+    const valid = spawnSync(process.execPath, [scriptPath, validPath], { encoding: 'utf8' });
+    const invalid = spawnSync(process.execPath, [scriptPath, invalidPath], { encoding: 'utf8' });
+
+    expect(usage.status).toBe(2);
+    expect(usage.stderr).toContain('Usage:');
+    expect(valid.status).toBe(0);
+    expect(valid.stdout).toContain('receipt[1]: receipt verified.');
+    expect(valid.stdout).not.toContain('owner@example.test.json');
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain('receipt[1]: apiKey [sensitive-value]');
+    expect(invalid.stderr).not.toContain('private-owner-phone-555-555-1212.json');
+    expect(invalid.stderr).not.toContain(secret);
   });
 });

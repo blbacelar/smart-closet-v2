@@ -1,5 +1,5 @@
 const { readFileSync } = require('node:fs');
-const { basename, resolve } = require('node:path');
+const { resolve } = require('node:path');
 
 const capabilityIds = Object.freeze({
   appleStore: 'apple-developer-app-store-connect',
@@ -93,6 +93,7 @@ const personalValuePatterns = [
   /(?:^|[='"`\s])\/(?:Users|home)\/[^/\s]+\//,
   /https?:\/\/[^\s'"`]+\/storage\/v1\/object\/(?:authenticated|sign)\//i,
 ];
+const iso8601Pattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -110,10 +111,27 @@ function requireFields(receipt, fields, findings) {
   }
 }
 
+function checkNonEmptyStrings(receipt, fields, findings) {
+  for (const field of fields) {
+    if (receipt[field] !== undefined && !isNonEmptyString(receipt[field])) {
+      findings.push(finding('invalid-field', field));
+    }
+  }
+}
+
 function rejectUnexpectedFields(receipt, allowedFields, findings) {
   for (const field of Object.keys(receipt)) {
     if (!allowedFields.has(field)) {
       findings.push(finding('unexpected-field', field));
+    }
+  }
+}
+
+function rejectUnexpectedObjectFields(value, allowedFields, path, findings) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  for (const field of Object.keys(value)) {
+    if (!allowedFields.has(field)) {
+      findings.push(finding('unexpected-field', `${path}.${field}`));
     }
   }
 }
@@ -149,7 +167,22 @@ function checkSensitiveValues(receipt, findings) {
 }
 
 function parseDate(value, field, findings) {
-  if (!isNonEmptyString(value)) return null;
+  if (value === undefined || value === null || value === '') return null;
+  if (!isNonEmptyString(value) || !iso8601Pattern.test(value)) {
+    findings.push(finding('invalid-date', field));
+    return null;
+  }
+  const [, yearText, monthText, dayText] = value.match(/^(\d{4})-(\d{2})-(\d{2})/) || [];
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const daysInMonth = month >= 1 && month <= 12
+    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
+    : 0;
+  if (day < 1 || day > daysInMonth) {
+    findings.push(finding('invalid-date', field));
+    return null;
+  }
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) {
     findings.push(finding('invalid-date', field));
@@ -194,6 +227,12 @@ function checkList(receipt, field, findings) {
     return;
   }
   checks.forEach((check, index) => {
+    rejectUnexpectedObjectFields(
+      check,
+      new Set(['name', 'result']),
+      `${field}[${index}]`,
+      findings,
+    );
     if (!check || !isNonEmptyString(check.name) || check.result !== 'passed') {
       findings.push(finding('failed-check', `${field}[${index}]`));
     }
@@ -222,6 +261,13 @@ function validateCommon(receipt, now, findings) {
   if (!['staging', 'sandbox', 'production'].includes(receipt.environment)) {
     findings.push(finding('invalid-environment', 'environment'));
   }
+  checkNonEmptyStrings(receipt, [
+    'accountOwnerReference',
+    'authorizedApproverReference',
+    'operatorRole',
+    'evidenceReference',
+    'reviewerReference',
+  ], findings);
   checkApproval(receipt, findings);
   checkPastDate(receipt, 'verifiedAt', now, findings);
   checkPastDate(receipt, 'decisionAt', now, findings);
@@ -238,6 +284,7 @@ function validateAccess(receipt, now, findings) {
     'minimumConnectivity',
     'revocationPlan',
   ], findings);
+  checkNonEmptyStrings(receipt, ['revocationPlan'], findings);
   checkList(receipt, 'accessChecks', findings);
   checkPassed(receipt, 'termsFundingEntitlement', findings);
   checkPassed(receipt, 'secretBoundary', findings);
@@ -255,12 +302,22 @@ function validateAcceptance(receipt, now, findings) {
     'disableRollbackCheck',
     'reconciliationCheck',
   ], findings);
-  if (isNonEmptyString(receipt.commitSha) && !/^[a-f0-9]{7,40}$/i.test(receipt.commitSha)) {
+  checkNonEmptyStrings(receipt, ['accessReceiptReference'], findings);
+  if (receipt.buildIdentifier !== undefined) {
+    checkNonEmptyStrings(receipt, ['buildIdentifier'], findings);
+  }
+  if (!isNonEmptyString(receipt.commitSha) || !/^[a-f0-9]{7,40}$/i.test(receipt.commitSha)) {
     findings.push(finding('invalid-commit', 'commitSha'));
   }
   checkList(receipt, 'acceptanceChecks', findings);
   checkList(receipt, 'endToEndChecks', findings);
   checkPassed(receipt, 'disableRollbackCheck', findings);
+  rejectUnexpectedObjectFields(
+    receipt.reconciliationCheck,
+    new Set(['result', 'rationale']),
+    'reconciliationCheck',
+    findings,
+  );
   const reconciliationResult = receipt.reconciliationCheck?.result;
   if (billingCapabilities.has(receipt.capability) && reconciliationResult !== 'passed') {
     findings.push(finding('reconciliation-required', 'reconciliationCheck'));
@@ -306,16 +363,36 @@ function validateDecisionOnly(receipt, now, findings) {
   if (receipt.noProviderAccountCredentialOrData !== 'confirmed') {
     findings.push(finding('provider-use-not-excluded', 'noProviderAccountCredentialOrData'));
   }
+  checkNonEmptyStrings(receipt, [
+    'releaseScope',
+    'decisionOwnerReference',
+    'authorizedApproverReference',
+    'rationale',
+    'evidenceReference',
+    'reviewerReference',
+  ], findings);
   checkApproval(receipt, findings);
   checkPastDate(receipt, 'decidedAt', now, findings);
 
   const reconsideration = receipt.reconsideration;
   if (reconsideration?.kind === 'date') {
+    rejectUnexpectedObjectFields(
+      reconsideration,
+      new Set(['kind', 'reviewAt']),
+      'reconsideration',
+      findings,
+    );
     const timestamp = parseDate(reconsideration.reviewAt, 'reconsideration.reviewAt', findings);
     if (timestamp !== null && timestamp <= now.getTime()) {
       findings.push(finding('expired-evidence', 'reconsideration.reviewAt'));
     }
   } else if (reconsideration?.kind === 'permanent-for-release') {
+    rejectUnexpectedObjectFields(
+      reconsideration,
+      new Set(['kind', 'statement']),
+      'reconsideration',
+      findings,
+    );
     if (!isNonEmptyString(reconsideration.statement)) {
       findings.push(finding('missing-field', 'reconsideration.statement'));
     }
@@ -363,15 +440,16 @@ if (require.main === module) {
     process.exitCode = 2;
   } else {
     let hasFindings = false;
-    filePaths.forEach((filePath) => {
+    filePaths.forEach((filePath, index) => {
+      const receiptLabel = `receipt[${index + 1}]`;
       const findings = validateFile(filePath);
       if (findings.length === 0) {
-        process.stdout.write(`${basename(filePath)}: receipt verified.\n`);
+        process.stdout.write(`${receiptLabel}: receipt verified.\n`);
         return;
       }
       hasFindings = true;
       findings.forEach(({ kind, field = 'receipt' }) => {
-        process.stderr.write(`${basename(filePath)}: ${field} [${kind}]\n`);
+        process.stderr.write(`${receiptLabel}: ${field} [${kind}]\n`);
       });
     });
     if (hasFindings) process.exitCode = 1;
