@@ -50,6 +50,55 @@ describe('Expo push provider adapter', () => {
     ]);
   });
 
+  it('does not retry permanent Expo payload or credential errors', async () => {
+    const fetch = jest.fn().mockResolvedValue(response(true, 200, {
+      data: [
+        { status: 'error', details: { error: 'MessageTooBig' } },
+        { status: 'error', details: { error: 'MismatchSenderId' } },
+      ],
+    }));
+    const provider = createExpoPushProvider({ accessToken: '', fetch });
+
+    await expect(provider.send([
+      { deliveryId: 'large', token: 'ExpoPushToken[large]', kind: 'account_update', route: null },
+      { deliveryId: 'mismatch', token: 'ExpoPushToken[mismatch]', kind: 'account_update', route: null },
+    ])).resolves.toEqual([
+      { deliveryId: 'large', state: 'permanent-failure', code: 'MessageTooBig' },
+      { deliveryId: 'mismatch', state: 'permanent-failure', code: 'MismatchSenderId' },
+    ]);
+  });
+
+  it.each([
+    [400, 'permanent-failure'],
+    [403, 'permanent-failure'],
+    [429, 'transient-failure'],
+    [503, 'transient-failure'],
+  ] as const)('classifies HTTP %s without retrying permanent requests', async (status, state) => {
+    const provider = createExpoPushProvider({
+      accessToken: '',
+      fetch: jest.fn().mockResolvedValue(response(false, status, {})),
+    });
+
+    await expect(provider.send([{
+      deliveryId: 'delivery-1', token: 'ExpoPushToken[token-1]', kind: 'account_update', route: null,
+    }])).resolves.toEqual([{
+      deliveryId: 'delivery-1', state, code: `provider_http_${status}`,
+    }]);
+  });
+
+  it('marks a lost POST response as ambiguous so the delivery is never resent', async () => {
+    const provider = createExpoPushProvider({
+      accessToken: '',
+      fetch: jest.fn().mockRejectedValue(new Error('response lost after POST')),
+    });
+
+    await expect(provider.send([{
+      deliveryId: 'delivery-1', token: 'ExpoPushToken[token-1]', kind: 'account_update', route: null,
+    }])).resolves.toEqual([{
+      deliveryId: 'delivery-1', state: 'ambiguous-failure', code: 'provider_transport_error',
+    }]);
+  });
+
   it('rejects malformed routes before contacting the provider', async () => {
     const fetch = jest.fn();
     const provider = createExpoPushProvider({ accessToken: '', fetch });
@@ -127,7 +176,7 @@ describe('Expo push provider adapter', () => {
       })),
       {
         deliveryId: 'delivery-100',
-        state: 'transient-failure',
+        state: 'ambiguous-failure',
         code: 'provider_transport_error',
       },
     ]);

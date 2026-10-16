@@ -9,6 +9,7 @@ function dependencies() {
       kind: 'marketplace_update' as const,
       route: { kind: 'marketplace_inbox' as const },
     }]),
+    authorize: jest.fn(async (_outboxId, deliveries) => deliveries),
     send: jest.fn().mockResolvedValue([{
       deliveryId: 'delivery-1',
       state: 'ticketed' as const,
@@ -30,7 +31,18 @@ describe('notification outbox processor', () => {
       .resolves.toEqual({ claimed: 1, attempted: 1 });
     expect(deps.claim).toHaveBeenCalledWith('worker-1');
     expect(deps.prepare).toHaveBeenCalledWith('outbox-1');
+    expect(deps.authorize).toHaveBeenCalledWith('outbox-1', expect.any(Array));
     expect(deps.recordTickets).toHaveBeenCalledWith('outbox-1', expect.any(Array));
+  });
+
+  it('does not POST a delivery invalidated between prepare and send', async () => {
+    const deps = dependencies();
+    deps.authorize.mockResolvedValue([]);
+
+    await expect(processNotificationBatch({ workerId: 'worker-1', providerConfigured: true }, deps))
+      .resolves.toEqual({ claimed: 1, attempted: 0 });
+    expect(deps.send).not.toHaveBeenCalled();
+    expect(deps.recordTickets).toHaveBeenCalledWith('outbox-1', []);
   });
 
   it('uses a safe no-credential mode without consuming retry attempts', async () => {

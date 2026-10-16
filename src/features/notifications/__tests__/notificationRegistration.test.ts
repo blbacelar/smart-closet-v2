@@ -1,7 +1,10 @@
+import { waitFor } from '@testing-library/react-native';
 import {
   disablePushNotifications,
   enablePushNotifications,
+  maintainPushNotifications,
   signOutAfterPushDisable,
+  syncPushNotifications,
   type NotificationRegistrationDependencies,
 } from '../notificationRegistration';
 
@@ -20,6 +23,7 @@ function dependencies(
     getExpoPushToken: jest.fn().mockResolvedValue('ExpoPushToken[token-1]'),
     register: jest.fn().mockResolvedValue(undefined),
     disable: jest.fn().mockResolvedValue(undefined),
+    subscribeToTokenChanges: jest.fn().mockReturnValue(() => undefined),
     ...overrides,
   };
 }
@@ -77,6 +81,36 @@ describe('notification registration', () => {
     await expect(enablePushNotifications(deps)).resolves.toEqual({ state: 'denied' });
     expect(deps.getExpoPushToken).not.toHaveBeenCalled();
     expect(deps.register).not.toHaveBeenCalled();
+  });
+
+  it('silently refreshes an already-authorized registration at session startup', async () => {
+    const deps = dependencies({
+      getPermissions: jest.fn().mockResolvedValue({ granted: true, iosStatus: 'authorized' }),
+    });
+
+    await expect(syncPushNotifications(deps)).resolves.toEqual({ state: 'enabled' });
+    expect(deps.requestPermissions).not.toHaveBeenCalled();
+    expect(deps.register).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-registers the Expo token when the native push token rotates', async () => {
+    let tokenChanged: (() => void) | undefined;
+    const remove = jest.fn();
+    const deps = dependencies({
+      getPermissions: jest.fn().mockResolvedValue({ granted: true, iosStatus: 'authorized' }),
+      subscribeToTokenChanges: jest.fn((listener) => {
+        tokenChanged = listener;
+        return remove;
+      }),
+    });
+
+    const stop = maintainPushNotifications(deps, jest.fn());
+    await waitFor(() => expect(deps.register).toHaveBeenCalledTimes(1));
+    tokenChanged?.();
+    await waitFor(() => expect(deps.register).toHaveBeenCalledTimes(2));
+
+    stop();
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it('disables the current installation before logout and is idempotent without an installation', async () => {
