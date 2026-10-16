@@ -103,7 +103,7 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 | --- | --- | --- | --- | --- |
 | C01 | CI/advisory remediation, deterministic Supabase CI, marketplace coverage ownership; `.github/workflows`, `package*.json` | none | #67 | Two consecutive green CI runs; marketplace included in coverage |
 | C02 | Minimal EAS dev-client/staging profiles and seeded two-account device harness; `app.json`, `eas.json`, E2E config | C01, Gate D for signed builds | #34 rewrite | Verified in an installed SDK 57 iOS simulator build with an idempotent two-account seed and Maestro smoke; signed physical build remains Gate D/C24 |
-| C03 | Pseudonymous marketplace party identity and FK migration; `supabase/migrations` | C01 | #48 + new retention issue | Forward migration/RLS tests; old data backfilled |
+| C03 | Pseudonymous marketplace party identity and FK migration; `supabase/migrations` | C01 | #48 + #71 | Forward migration/RLS tests; old data backfilled |
 | C04 | Double-entry account/journal/posting/cohort/reversal foundation and reconciliation | C03, Gate A for final cohort policy | #48 rewrite | Balanced journal and concurrency pgTAP tests |
 | C05 | Deletion tombstone, write barrier, durable checkpoints, private-media purge | C03, C04, Gate B retention rules | #30 replacement/new issue | Deletion races with uploads/workers safely |
 | C06 | Retention expiry/hold release, backup re-deletion, purge evidence | C05, Gate B | same as C05 | Scheduled purge and restore/re-delete drill |

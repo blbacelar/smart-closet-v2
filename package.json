@@ -59,7 +59,8 @@
     "quality": "node scripts/run-quality.js",
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage --runInBand",
-    "test:db": "supabase test db"
+    "test:db": "supabase test db",
+    "test:db:upgrade": "node scripts/test-marketplace-party-upgrade.js"
   },
   "jest": {
     "preset": "jest-expo",
