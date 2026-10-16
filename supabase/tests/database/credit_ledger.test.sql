@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(34);
+select plan(35);
 
 select has_table('private', 'marketplace_grant_cohorts', 'grant cohorts are restricted records');
 select has_table('private', 'marketplace_ledger_accounts', 'double-entry accounts exist');
@@ -193,6 +193,12 @@ select is(
    where external_event_key = 'provider-event-one'),
   1::bigint,
   'external event uniqueness prevents duplicate value creation'
+);
+select is(
+  (select count(*) from private.marketplace_grant_cohorts
+   where source_event_key = 'provider-event-one'),
+  1::bigint,
+  'a credit issuance event owns one immutable grant cohort'
 );
 select is(
   (select count(*) from public.marketplace_reconcile_credit_ledger() where not balanced),

@@ -8,8 +8,8 @@ create table private.marketplace_grant_cohorts (
   source_event_key text not null unique,
   terms_version text not null,
   units bigint not null check (units > 0),
-  state text not null default 'available'
-    check (state in ('pending', 'available', 'partially_spent', 'spent', 'reversed')),
+  initial_state text not null default 'available'
+    check (initial_state in ('pending', 'available')),
   granted_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
@@ -205,8 +205,40 @@ begin
 
   select id into v_journal_id
   from private.marketplace_ledger_journals
-  where idempotency_key = p_idempotency_key;
+  where idempotency_key = p_idempotency_key
+     or (p_external_event_key is not null and external_event_key = p_external_event_key)
+  order by created_at, id
+  limit 1;
   if found then return v_journal_id; end if;
+
+  if p_operation in ('grant_pending', 'grant_available') and p_grant_cohort_id is null then
+    if p_external_event_key is null then
+      raise exception 'A grant cohort or external event key is required for credit issuance';
+    end if;
+    insert into private.marketplace_grant_cohorts (
+      party_id, source_event_key, terms_version, units, initial_state
+    ) values (
+      p_party_id,
+      p_external_event_key,
+      p_terms_version,
+      p_units,
+      case when p_operation = 'grant_pending' then 'pending' else 'available' end
+    )
+    on conflict (source_event_key) do nothing
+    returning id into p_grant_cohort_id;
+
+    if p_grant_cohort_id is null then
+      select id into p_grant_cohort_id
+      from private.marketplace_grant_cohorts
+      where source_event_key = p_external_event_key
+        and party_id = p_party_id
+        and terms_version = p_terms_version
+        and units = p_units;
+      if p_grant_cohort_id is null then
+        raise exception 'External grant event conflicts with its existing cohort';
+      end if;
+    end if;
+  end if;
 
   case p_operation
     when 'grant_pending' then

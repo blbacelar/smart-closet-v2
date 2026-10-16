@@ -276,6 +276,11 @@ async function main() {
     );
     run(
       'supabase',
+      withWorkdir(['db', 'lint', '--local'], workspace),
+      'Lint the isolated upgraded database',
+    );
+    run(
+      'supabase',
       withWorkdir([
         'test',
         'db',
