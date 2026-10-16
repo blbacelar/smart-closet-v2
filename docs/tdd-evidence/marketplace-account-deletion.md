@@ -19,7 +19,7 @@
 | Database RED 2 | same command | Expected FAIL | A deliberately unjournaled reserved-balance fixture correctly failed reconciliation; fixture replaced with balanced opening/reservation evidence. |
 | Database GREEN | same command | PASS | Legacy upgrade 15/15; ledger 43/43; concurrency 10/10; deletion lifecycle 25/25; RLS 77/77; DB lint clean. |
 | Review RED | focused Jest plus `npm run test:db:upgrade` | Expected FAIL | Independent review found an upload/tombstone serialization race, an Auth-delete bypass, missing analytics cleanup, unsafe retained-history projection, and dual-deletion interference. Regression checkpoint `2e26e52`. |
-| Review GREEN | `node scripts/test-marketplace-party-upgrade.js` | PASS | Legacy upgrade 15/15; ledger 43/43; credit concurrency 10/10; two-connection deletion fence 3/3; deletion lifecycle 30/30; RLS 77/77; DB lint clean. |
+| Review GREEN | `node scripts/test-marketplace-party-upgrade.js` | PASS | Legacy upgrade 15/15; ledger 43/43; credit concurrency 10/10; cross-transaction deletion 5/5; deletion lifecycle 30/30; RLS 77/77; DB lint clean. |
 
 ## Guarantees
 
@@ -37,6 +37,7 @@
 | Analytics events cannot be recreated and are explicitly purged | lifecycle write-barrier and purge assertions |
 | A surviving counterparty retains a redacted completed-transaction projection | nullable/party-based history RPC assertion |
 | Two deleting counterparties can purge shared terminal rows without blocking each other | dual-deletion lifecycle assertions |
+| Auth deletion succeeds in a separate transaction after purge commits | committed-purge harness and retained-ledger assertions |
 
 ## Rollback
 

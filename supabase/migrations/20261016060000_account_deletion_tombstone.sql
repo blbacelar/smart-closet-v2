@@ -670,6 +670,13 @@ begin
     raise exception 'Account deletion purge is incomplete';
   end if;
 
+  -- Auth deletion runs after the purge RPC has committed. Re-establish the
+  -- narrowly validated request scope for ON DELETE cascades in this new
+  -- transaction; otherwise their compatibility-column updates hit the write
+  -- barrier for the same awaiting deletion request.
+  perform set_config('app.account_deletion_request_id', v_request_id::text, true);
+  perform set_config('app.account_deletion_internal_cleanup', 'on', true);
+
   return old;
 end;
 $$;
