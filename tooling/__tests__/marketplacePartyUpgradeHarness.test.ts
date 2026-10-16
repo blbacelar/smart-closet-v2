@@ -32,6 +32,9 @@ describe('marketplace party legacy-upgrade harness', () => {
     expect(runner).toContain('marketplace-parties-legacy.sql');
     expect(runner).toContain("['migration', 'up', '--local']");
     expect(runner).toContain('marketplace-parties-backfill.test.sql');
+    expect(runner).toContain('credit-ledger-concurrency.test.sql');
+    expect(runner).toContain("withWorkdir(['db', 'reset', '--local'], workspace)");
+    expect(runner).toContain('rls.test.sql');
     expect(runner).toContain("['stop', '--no-backup']");
     expect(runner).toContain('isolatedStackAttempted = true');
     expect(runner).toContain('if (cleanupFailure && !failure)');

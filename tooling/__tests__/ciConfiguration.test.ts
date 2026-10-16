@@ -93,7 +93,7 @@ describe('dependency automation', () => {
       'npm exec --offline expo-doctor',
       'npm run build:web',
       'npm audit --omit=dev --audit-level=critical',
-      'npm run test:db',
+      'npm run test:db:upgrade',
     ]) {
       expect(qualityRunner).toContain(command);
     }
@@ -103,20 +103,20 @@ describe('dependency automation', () => {
     expect(packageJson.devDependencies?.['expo-doctor']).toBe('1.20.4');
   });
 
-  it('starts only the local services required by the pgTAP database suite', () => {
-    expect(read('.github/workflows/ci.yml')).toContain(
-      'supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor',
-    );
+  it('delegates database startup to the isolated upgrade and pgTAP harness', () => {
+    const workflow = read('.github/workflows/ci.yml');
+    expect(workflow).toContain('run: npm run test:db:upgrade');
+    expect(workflow).not.toContain('run: supabase start');
+    expect(workflow).not.toContain('run: supabase stop');
   });
 
-  it('makes the local quality command own and clean up a missing database stack', () => {
+  it('never mutates or stops an existing developer database stack', () => {
     const qualityRunner = read('scripts/run-quality.js');
-    expect(qualityRunner).toContain("args: ['status']");
-    expect(qualityRunner).toContain("args: ['start', '-x', SUPABASE_DB_EXCLUSIONS]");
-    expect(qualityRunner).toContain("args: ['stop', '--no-backup']");
-    expect(qualityRunner).toContain("args: ['migration', 'up', '--local']");
-    expect(qualityRunner).toContain('databaseStartedByRunner');
-    expect(qualityRunner).toContain('finally');
+    expect(qualityRunner).toContain('npm run test:db:upgrade');
+    expect(qualityRunner).not.toContain("args: ['status']");
+    expect(qualityRunner).not.toContain("args: ['start'");
+    expect(qualityRunner).not.toContain("args: ['stop'");
+    expect(qualityRunner).not.toContain("args: ['migration', 'up', '--local']");
   });
 });
 
