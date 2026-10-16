@@ -272,7 +272,7 @@ rails leave Gate C open.
 
 - [ ] **Selected topology:** consumption-only mobile + web membership
 - [ ] **Selected topology:** StoreKit + Play subscription + approved web equivalent
-- [ ] **Selected topology:** paid membership unbundled from independently awarded/earned credits; this selection reopens Gate A and requires a replacement grant/economy contract signed before C19
+- [ ] **Selected topology:** paid membership unbundled from independently awarded/earned credits; this selection reopens Gate A and requires both a replacement economy contract and a rewritten/reapproved C19 contract and issue #27 before implementation
 - [ ] **Selected topology:** no paid membership; no-charge invite-only pilot; this selection leaves C19 and C20 blocked
 
 Exactly one box above must be selected.
@@ -296,25 +296,29 @@ finance, the final customer disclosures are attached, and each provider has an
 executable stop-sale/stop-renewal/wind-down action. Provider credentials and
 live SKU identifiers may remain Gate D, but their topology and operational
 actions may not remain undecided. Selecting the unbundled topology invalidates
-the proposed paid-period 60/30 grant contract and therefore reopens Gate A until
-a replacement is signed. Selecting the no-paid topology can close Gate C only
-for the no-charge pilot; it does not authorize C19 or C20.
+the proposed paid-period 60/30 grant contract and the current C19/#27 grant
+contract. It therefore reopens Gate A and requires C19 and issue #27 to be
+rewritten and reapproved before implementation. Selecting the no-paid topology
+can close Gate C only for the no-charge pilot; it does not authorize C19 or C20.
 
 ## Provider-neutral engineering contract after approval
 
 Only a fully completed and signed Gate A paid product contract, Gate B lifecycle
 and retention conclusions, and a Gate C paid storefront matrix authorize C19.
 The no-paid topology leaves C19 and C20 blocked. The unbundled topology requires
-a replacement Gate A contract before C19. C20 additionally requires the Gate D
-provider accounts and credentials:
+a replacement Gate A contract plus a rewritten and reapproved C19 contract and
+issue #27 before C19. C20 additionally requires the Gate D provider accounts
+and credentials:
 
 1. Store immutable normalized provider events with provider, event ID, product,
    original transaction/customer ownership, effective period, status, and a
    redacted raw-event reference.
 2. Derive `marketplace_member` entitlement periods on the server. Clients never
    activate membership or grants directly.
-3. Issue the cohort grant once for a successful first or renewal period using a
-   stable provider-period idempotency key.
+3. When—and only when—the selected topology includes membership-linked grants,
+   issue the cohort grant once for a successful first or renewal period using a
+   stable provider-period idempotency key. An unbundled topology must replace
+   this step through the separately reapproved C19 contract.
 4. Treat duplicate, delayed, and reordered purchase, renewal, grace, refund,
    revocation, and chargeback events as replayable inputs to the same result.
 5. Never delete or mutate journal history; correct with balanced reversals.
