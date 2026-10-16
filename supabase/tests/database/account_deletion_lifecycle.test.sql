@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(31);
+select plan(30);
 
 select has_table('private', 'account_deletion_requests', 'deletion tombstones are restricted records');
 select has_table('private', 'account_deletion_checkpoints', 'deletion progress has durable checkpoints');

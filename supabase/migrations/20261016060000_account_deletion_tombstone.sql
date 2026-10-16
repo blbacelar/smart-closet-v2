@@ -73,6 +73,42 @@ as $$
   limit 1;
 $$;
 
+-- Every personal-data writer and deletion start takes the same transaction lock.
+-- A writer that arrived first must commit before the tombstone is created; a
+-- writer that arrived second observes the tombstone and is rejected. Party
+-- subjects are resolved to both their live Auth user and durable deletion
+-- subject, and locks are sorted to avoid cross-party deadlocks.
+create or replace function private.account_deletion_lock_subjects(
+  p_user_ids uuid[] default '{}'::uuid[],
+  p_party_ids uuid[] default '{}'::uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid;
+begin
+  for v_user_id in
+    with subjects as (
+      select unnest(coalesce(p_user_ids, '{}'::uuid[])) as user_id
+      union
+      select party.user_id
+      from private.marketplace_parties party
+      where party.id = any(coalesce(p_party_ids, '{}'::uuid[]))
+      union
+      select request.auth_user_id
+      from private.account_deletion_requests request
+      where request.party_id = any(coalesce(p_party_ids, '{}'::uuid[]))
+    )
+    select user_id from subjects where user_id is not null order by user_id::text
+  loop
+    perform pg_advisory_xact_lock(hashtextextended(v_user_id::text, 6042026));
+  end loop;
+end;
+$$;
+
 create or replace function public.account_deletion_write_allowed()
 returns boolean
 language sql
@@ -95,10 +131,44 @@ declare
   v_value text;
   v_request_id uuid;
   v_bypass_request_id text := current_setting('app.account_deletion_request_id', true);
+  v_internal_cleanup boolean :=
+    current_setting('app.account_deletion_internal_cleanup', true) = 'on';
   v_row jsonb := to_jsonb(new);
+  v_user_ids uuid[] := '{}'::uuid[];
+  v_party_ids uuid[] := '{}'::uuid[];
 begin
   foreach v_argument in array tg_argv
   loop
+    if v_argument like 'party:%' then
+      v_column := substring(v_argument from 7);
+      v_value := v_row ->> v_column;
+      if v_value is not null and v_value <> '' then
+        v_party_ids := array_append(v_party_ids, v_value::uuid);
+      end if;
+    elsif v_argument like 'user:%' then
+      v_column := substring(v_argument from 6);
+      v_value := v_row ->> v_column;
+      if v_value is not null and v_value <> '' then
+        v_user_ids := array_append(v_user_ids, v_value::uuid);
+      end if;
+    else
+      raise exception 'Unsupported account deletion barrier argument';
+    end if;
+  end loop;
+
+  perform private.account_deletion_lock_subjects(v_user_ids, v_party_ids);
+
+  if v_internal_cleanup and exists (
+    select 1 from private.account_deletion_requests request
+    where request.id::text = v_bypass_request_id
+      and request.status in ('purging', 'awaiting_auth_delete')
+  ) then
+    return new;
+  end if;
+
+  foreach v_argument in array tg_argv
+  loop
+    v_request_id := null;
     if v_argument like 'party:%' then
       v_column := substring(v_argument from 7);
       v_value := v_row ->> v_column;
@@ -143,6 +213,9 @@ begin
     return new;
   end if;
 
+  perform private.account_deletion_lock_subjects(
+    array[v_user_segment::uuid], '{}'::uuid[]
+  );
   v_request_id := private.account_deletion_active_request(v_user_segment::uuid, null);
   if v_request_id is not null
      and v_bypass_request_id is distinct from v_request_id::text then
@@ -174,6 +247,10 @@ for each row execute function private.account_deletion_reject_write('user:user_i
 
 create trigger account_deletion_write_barrier
 before insert or update on public.ai_cost_ledger
+for each row execute function private.account_deletion_reject_write('user:user_id');
+
+create trigger account_deletion_write_barrier
+before insert or update on public.analytics_events
 for each row execute function private.account_deletion_reject_write('user:user_id');
 
 create trigger account_deletion_write_barrier
@@ -305,6 +382,47 @@ as $$
     );
 $$;
 
+create or replace function public.marketplace_my_transactions()
+returns table (
+  id uuid, listing_id uuid, listing_name text, image_path text,
+  buyer_id uuid, seller_id uuid, mode text, credit_amount integer,
+  swap_listing_id uuid, swap_listing_name text, status text,
+  buyer_confirmed_at timestamptz, seller_confirmed_at timestamptz,
+  completed_at timestamptz, created_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select
+    transaction_record.id,
+    transaction_record.listing_id,
+    coalesce(garment.name,
+      case when listing.deleted_at is not null then 'Deleted item' else 'Untitled piece' end),
+    coalesce(garment.clean_path, garment.original_path),
+    transaction_record.buyer_id,
+    transaction_record.seller_id,
+    transaction_record.mode,
+    transaction_record.credit_amount,
+    transaction_record.swap_listing_id,
+    swap_garment.name,
+    transaction_record.status,
+    transaction_record.buyer_confirmed_at,
+    transaction_record.seller_confirmed_at,
+    transaction_record.completed_at,
+    transaction_record.created_at
+  from public.marketplace_transactions transaction_record
+  join public.marketplace_listings listing on listing.id = transaction_record.listing_id
+  left join public.garments garment on garment.id = listing.garment_id
+  left join public.marketplace_listings swap_listing
+    on swap_listing.id = transaction_record.swap_listing_id
+  left join public.garments swap_garment on swap_garment.id = swap_listing.garment_id
+  where public.marketplace_party_matches(transaction_record.buyer_party_id)
+     or public.marketplace_party_matches(transaction_record.seller_party_id)
+  order by transaction_record.created_at desc;
+$$;
+
 create or replace function public.account_deletion_start(p_user_id uuid)
 returns table (request_id uuid, status text, completed_steps text[])
 language plpgsql
@@ -315,6 +433,8 @@ declare
   v_request private.account_deletion_requests%rowtype;
   v_party_id uuid;
 begin
+  perform private.account_deletion_lock_subjects(array[p_user_id], '{}'::uuid[]);
+
   if p_user_id is null or not exists (
     select 1 from public.profiles where id = p_user_id
   ) then
@@ -355,7 +475,17 @@ begin
     ) or exists (
       select 1 from public.marketplace_offers offer
       where (offer.buyer_party_id = v_party_id or offer.seller_party_id = v_party_id)
-        and offer.status in ('pending', 'accepted')
+        and (
+          offer.status = 'pending'
+          or (
+            offer.status = 'accepted'
+            and not exists (
+              select 1 from public.marketplace_transactions transaction_record
+              where transaction_record.offer_id = offer.id
+                and transaction_record.status in ('completed', 'cancelled')
+            )
+          )
+        )
     ) or exists (
       select 1 from public.marketplace_transactions transaction_record
       where (
@@ -453,7 +583,17 @@ begin
     ) or exists (
       select 1 from public.marketplace_offers
       where (buyer_party_id = v_request.party_id or seller_party_id = v_request.party_id)
-        and status in ('pending', 'accepted')
+        and (
+          marketplace_offers.status = 'pending'
+          or (
+            marketplace_offers.status = 'accepted'
+            and not exists (
+              select 1 from public.marketplace_transactions transaction_record
+              where transaction_record.offer_id = marketplace_offers.id
+                and transaction_record.status in ('completed', 'cancelled')
+            )
+          )
+        )
     ) or exists (
       select 1 from public.marketplace_transactions
       where (buyer_party_id = v_request.party_id or seller_party_id = v_request.party_id)
@@ -466,6 +606,7 @@ begin
   end if;
 
   perform set_config('app.account_deletion_request_id', p_request_id::text, true);
+  perform set_config('app.account_deletion_internal_cleanup', 'on', true);
 
   delete from public.marketplace_messages
   where sender_id = v_request.auth_user_id;
@@ -488,6 +629,7 @@ begin
   delete from public.garments where user_id = v_request.auth_user_id;
   delete from public.usage_daily where user_id = v_request.auth_user_id;
   delete from public.ai_cost_ledger where user_id = v_request.auth_user_id;
+  delete from public.analytics_events where user_id = v_request.auth_user_id;
 
   update private.account_deletion_checkpoints
   set status = 'completed', attempts = attempts + 1,
@@ -497,6 +639,38 @@ begin
   update private.account_deletion_requests
   set status = 'awaiting_auth_delete', updated_at = now()
   where id = p_request_id;
+end;
+$$;
+
+create or replace function private.guard_account_deletion_before_auth_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_request_id uuid;
+begin
+  perform private.account_deletion_lock_subjects(array[old.id], '{}'::uuid[]);
+
+  select request.id into v_request_id
+  from private.account_deletion_requests request
+  where request.auth_user_id = old.id
+    and request.status = 'awaiting_auth_delete'
+    and not exists (
+      select 1
+      from private.account_deletion_checkpoints checkpoint
+      where checkpoint.request_id = request.id
+        and checkpoint.step <> 'auth_delete'
+        and checkpoint.status <> 'completed'
+    )
+  for update;
+
+  if v_request_id is null then
+    raise exception 'Account deletion purge is incomplete';
+  end if;
+
+  return old;
 end;
 $$;
 
@@ -530,13 +704,19 @@ begin
 end;
 $$;
 
+create trigger guard_account_deletion_before_auth_delete
+before delete on auth.users
+for each row execute function private.guard_account_deletion_before_auth_delete();
+
 create trigger complete_account_deletion_after_auth_delete
 after delete on auth.users
 for each row execute function private.complete_account_deletion_after_auth_delete();
 
 revoke all on function private.account_deletion_active_request(uuid, uuid) from public, anon, authenticated;
+revoke all on function private.account_deletion_lock_subjects(uuid[], uuid[]) from public, anon, authenticated;
 revoke all on function private.account_deletion_reject_write() from public, anon, authenticated;
 revoke all on function private.account_deletion_reject_storage_write() from public, anon, authenticated;
+revoke all on function private.guard_account_deletion_before_auth_delete() from public, anon, authenticated;
 revoke all on function private.complete_account_deletion_after_auth_delete() from public, anon, authenticated;
 revoke all on function public.account_deletion_write_allowed() from public, anon;
 revoke all on function public.account_deletion_start(uuid) from public, anon, authenticated;
