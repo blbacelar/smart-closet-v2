@@ -110,6 +110,13 @@ select public.marketplace_confirm_handoff(id)
 from acquisition_transactions where mode <> 'credits';
 reset role;
 
+create temporary table pending_credit_destination as
+select destination_path
+from public.marketplace_acquisition_manifest(
+  (select id from acquisition_transactions where mode = 'credits')
+);
+grant select on pending_credit_destination to authenticated;
+
 select is(
   (select count(*) from private.marketplace_acquisitions),
   5::bigint,
@@ -183,10 +190,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000072', true);
 select is(
   public.marketplace_can_mutate_garment_object(
-    (select destination_path
-     from public.marketplace_acquisition_manifest(
-       (select id from acquisition_transactions where mode = 'credits')
-     ))
+    (select destination_path from pending_credit_destination)
   ),
   false,
   'a pending recipient destination cannot be deleted or replaced'
@@ -195,10 +199,7 @@ select throws_ok(
   format(
     'insert into storage.objects (id, bucket_id, name) values (gen_random_uuid(), %L, %L)',
     'garments',
-    (select destination_path
-     from public.marketplace_acquisition_manifest(
-       (select id from acquisition_transactions where mode = 'credits')
-     ))
+    (select destination_path from pending_credit_destination)
   ),
   '42501',
   'new row violates row-level security policy for table "objects"',

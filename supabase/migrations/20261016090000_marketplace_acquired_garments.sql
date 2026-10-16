@@ -491,34 +491,63 @@ as $$
     );
 $$;
 
-create or replace function public.marketplace_can_delete_garment_object(p_name text)
+create or replace function public.marketplace_can_mutate_garment_object(p_name text)
 returns boolean
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select not exists (
-    select 1
-    from public.marketplace_listings listing
-    join public.garments garment on garment.id = listing.garment_id
-    where p_name in (garment.original_path, garment.clean_path)
-      and (
-        listing.status in ('active', 'reserved')
-        or exists (
-          select 1 from public.marketplace_transactions transaction_record
-          where (
-              transaction_record.listing_id = listing.id
-              or transaction_record.swap_listing_id = listing.id
-            )
-            and transaction_record.status in ('awaiting_handoff', 'disputed')
+  select
+    not exists (
+      select 1
+      from public.marketplace_listings listing
+      join public.garments garment on garment.id = listing.garment_id
+      where p_name in (garment.original_path, garment.clean_path)
+        and (
+          listing.status in ('active', 'reserved')
+          or exists (
+            select 1 from public.marketplace_transactions transaction_record
+            where (
+                transaction_record.listing_id = listing.id
+                or transaction_record.swap_listing_id = listing.id
+              )
+              and transaction_record.status in ('awaiting_handoff', 'disputed')
+          )
         )
-      )
-  );
+    )
+    and not exists (
+      select 1
+      from private.marketplace_acquisitions acquisition
+      join private.marketplace_parties party
+        on party.id = acquisition.recipient_party_id
+      where acquisition.completed_at is null
+        and party.user_id is not null
+        and p_name = private.marketplace_acquisition_path(
+          party.user_id, acquisition.planned_garment_id, 'asset'
+        )
+    );
 $$;
 
-revoke all on function public.marketplace_can_delete_garment_object(text) from public, anon;
-grant execute on function public.marketplace_can_delete_garment_object(text) to authenticated;
+revoke all on function public.marketplace_can_mutate_garment_object(text) from public, anon;
+grant execute on function public.marketplace_can_mutate_garment_object(text) to authenticated;
+
+drop policy if exists "private_source_image_insert" on storage.objects;
+create policy "private_source_image_insert" on storage.objects for insert to authenticated
+with check (
+  bucket_id in ('body', 'garments')
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+  and exists (
+    select 1 from public.profiles
+    where id = (select auth.uid())
+      and adult_confirmed_at is not null
+  )
+  and public.account_deletion_write_allowed()
+  and (
+    bucket_id <> 'garments'
+    or public.marketplace_can_mutate_garment_object(name)
+  )
+);
 
 drop policy if exists "private_image_delete" on storage.objects;
 create policy "private_image_delete" on storage.objects for delete to authenticated
@@ -531,7 +560,7 @@ using (
   and public.account_deletion_write_allowed()
   and (
     bucket_id <> 'garments'
-    or public.marketplace_can_delete_garment_object(name)
+    or public.marketplace_can_mutate_garment_object(name)
   )
 );
 
