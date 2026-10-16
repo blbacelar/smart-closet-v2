@@ -267,6 +267,175 @@ async function verifyConcurrentOfferAcceptance(databaseUrl) {
   }
 }
 
+async function verifyAcceptanceDeletionLockOrder(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email) values
+        ('00000000-0000-4000-8000-000000000042', 'accept-delete-seller@example.com'),
+        ('00000000-0000-4000-8000-000000000043', 'accept-delete-buyer@example.com');
+      insert into public.marketplace_memberships (user_id, expires_at) values
+        ('00000000-0000-4000-8000-000000000042', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000043', now() + interval '1 year');
+      insert into public.garments (
+        id, user_id, original_path, image_hash, name, category, status
+      ) values (
+        '20000000-0000-4000-8000-000000000042',
+        '00000000-0000-4000-8000-000000000042',
+        '00000000-0000-4000-8000-000000000042/delete-race.jpg',
+        'accept-delete-race', 'Acceptance deletion race', 'top', 'ready'
+      );
+      insert into public.marketplace_listings (
+        id, garment_id, seller_id, accepts_credits, accepts_swap,
+        is_giveaway, pickup_area
+      ) values (
+        '40000000-0000-4000-8000-000000000042',
+        '20000000-0000-4000-8000-000000000042',
+        '00000000-0000-4000-8000-000000000042',
+        false, false, true, 'Deletion race area'
+      );
+      insert into public.marketplace_offers (
+        id, listing_id, buyer_id, seller_id, mode
+      ) values (
+        '50000000-0000-4000-8000-000000000043',
+        '40000000-0000-4000-8000-000000000042',
+        '00000000-0000-4000-8000-000000000043',
+        '00000000-0000-4000-8000-000000000042', 'giveaway'
+      );
+    `,
+    'Create the acceptance-versus-deletion fixture',
+  );
+
+  const deletion = `
+    begin;
+    select private.account_deletion_lock_subjects(
+      array['00000000-0000-4000-8000-000000000043'::uuid],
+      '{}'::uuid[]
+    );
+    select pg_sleep(0.5);
+    select * from public.account_deletion_start(
+      '00000000-0000-4000-8000-000000000043'
+    );
+    commit;
+  `;
+  const acceptance = `
+    begin;
+    set local role authenticated;
+    select set_config(
+      'request.jwt.claim.sub',
+      '00000000-0000-4000-8000-000000000042',
+      true
+    );
+    select public.marketplace_respond_to_offer(
+      '50000000-0000-4000-8000-000000000043', true
+    );
+    commit;
+  `;
+  const [deletionResult, acceptanceResult] = await Promise.all([
+    concurrentQuery(databaseUrl, deletion),
+    concurrentQuery(databaseUrl, acceptance),
+  ]);
+  const diagnostics = `${deletionResult.stderr}\n${acceptanceResult.stderr}`;
+  if (diagnostics.toLowerCase().includes('deadlock detected')) {
+    throw new UpgradeTestError(
+      'Offer acceptance deadlocked with the account-deletion fence.',
+    );
+  }
+  if (acceptanceResult.code !== 0
+    || !deletionResult.stderr.includes('unresolved marketplace activity')) {
+    throw new UpgradeTestError(
+      'Acceptance and deletion did not serialize to a deterministic accepted-or-blocked result.',
+    );
+  }
+}
+
+async function verifyCrossedSwapCreation(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email) values
+        ('00000000-0000-4000-8000-000000000040', 'swap-race-one@example.com'),
+        ('00000000-0000-4000-8000-000000000041', 'swap-race-two@example.com');
+      insert into public.marketplace_memberships (user_id, expires_at) values
+        ('00000000-0000-4000-8000-000000000040', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000041', now() + interval '1 year');
+      insert into public.garments (
+        id, user_id, original_path, image_hash, name, category, status
+      ) values
+        ('20000000-0000-4000-8000-000000000040',
+         '00000000-0000-4000-8000-000000000040',
+         '00000000-0000-4000-8000-000000000040/swap.jpg',
+         'swap-race-one', 'Swap race one', 'top', 'ready'),
+        ('20000000-0000-4000-8000-000000000041',
+         '00000000-0000-4000-8000-000000000041',
+         '00000000-0000-4000-8000-000000000041/swap.jpg',
+         'swap-race-two', 'Swap race two', 'top', 'ready');
+      insert into public.marketplace_listings (
+        id, garment_id, seller_id, accepts_credits, accepts_swap,
+        is_giveaway, pickup_area
+      ) values
+        ('40000000-0000-4000-8000-000000000040',
+         '20000000-0000-4000-8000-000000000040',
+         '00000000-0000-4000-8000-000000000040',
+         false, true, false, 'Swap race area'),
+        ('40000000-0000-4000-8000-000000000041',
+         '20000000-0000-4000-8000-000000000041',
+         '00000000-0000-4000-8000-000000000041',
+         false, true, false, 'Swap race area');
+    `,
+    'Create the crossed-swap fixture',
+  );
+
+  const createSwap = (buyerId, targetId, offeredId) => `
+    begin;
+    set local role authenticated;
+    select set_config('request.jwt.claim.sub', '${buyerId}', true);
+    select public.marketplace_create_offer(
+      '${targetId}', 'swap', '${offeredId}', 'Crossed swap'
+    );
+    commit;
+  `;
+  const results = await Promise.all([
+    concurrentQuery(
+      databaseUrl,
+      createSwap(
+        '00000000-0000-4000-8000-000000000040',
+        '40000000-0000-4000-8000-000000000041',
+        '40000000-0000-4000-8000-000000000040',
+      ),
+    ),
+    concurrentQuery(
+      databaseUrl,
+      createSwap(
+        '00000000-0000-4000-8000-000000000041',
+        '40000000-0000-4000-8000-000000000040',
+        '40000000-0000-4000-8000-000000000041',
+      ),
+    ),
+  ]);
+  if (results.some((result) => result.code !== 0)) {
+    const diagnostics = results.map((result) => result.stderr).join('\n');
+    throw new UpgradeTestError(
+      `Crossed swap creation did not serialize safely: ${diagnostics}`,
+    );
+  }
+  const pendingCount = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-c',
+      `select count(*) from public.marketplace_offers
+       where buyer_id in (
+         '00000000-0000-4000-8000-000000000040',
+         '00000000-0000-4000-8000-000000000041'
+       ) and status = 'pending';`,
+    ],
+    'Read crossed-swap result',
+  ).trim();
+  if (pendingCount !== '2') {
+    throw new UpgradeTestError('Crossed swap creation did not persist both offers.');
+  }
+}
+
 async function verifyConcurrentReservation(databaseUrl) {
   psql(
     databaseUrl,
@@ -575,6 +744,8 @@ async function main() {
       ], workspace),
       'Verify competing marketplace acceptance serialization',
     );
+    await verifyAcceptanceDeletionLockOrder(latestDatabaseUrl);
+    await verifyCrossedSwapCreation(latestDatabaseUrl);
     await verifyDeletionWriteFence(latestDatabaseUrl);
     await verifyCommittedAuthDeletion(latestDatabaseUrl);
     run(

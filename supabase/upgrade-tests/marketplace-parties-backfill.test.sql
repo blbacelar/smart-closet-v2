@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(18);
 
 select is(
   (select count(*) from private.marketplace_parties),
@@ -64,6 +64,21 @@ select is(
    where terms.transaction_id = '95000000-0000-4000-8000-000000000001'),
   1::bigint,
   'legacy accepted transactions receive one immutable terms snapshot'
+);
+select is(
+  (select terms_version
+   from private.marketplace_transaction_terms
+   where transaction_id = '95000000-0000-4000-8000-000000000001'),
+  'legacy-pre-c07',
+  'legacy terms are not mislabeled as current-version acceptance'
+);
+select ok(
+  (select target_accepts_credits is null
+      and target_accepts_swap is null
+      and target_is_giveaway is null
+   from private.marketplace_transaction_terms
+   where transaction_id = '95000000-0000-4000-8000-000000000001'),
+  'legacy terms do not invent unrecoverable listing flags'
 );
 select is(
   (select count(*)

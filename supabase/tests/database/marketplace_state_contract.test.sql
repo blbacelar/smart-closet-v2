@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(28);
+select plan(38);
 
 select has_table('private', 'marketplace_transaction_terms', 'accepted terms have a restricted snapshot');
 select is(
@@ -22,12 +22,16 @@ values
   ('00000000-0000-4000-8000-000000000031', 'state-seller@example.com'),
   ('00000000-0000-4000-8000-000000000032', 'state-buyer@example.com'),
   ('00000000-0000-4000-8000-000000000033', 'state-deleting@example.com'),
-  ('00000000-0000-4000-8000-000000000034', 'state-grant@example.com');
+  ('00000000-0000-4000-8000-000000000034', 'state-grant@example.com'),
+  ('00000000-0000-4000-8000-000000000038', 'state-expired-seller@example.com'),
+  ('00000000-0000-4000-8000-000000000039', 'state-expired-buyer@example.com');
 
 insert into public.marketplace_memberships (user_id, expires_at)
 values
   ('00000000-0000-4000-8000-000000000031', now() + interval '1 year'),
-  ('00000000-0000-4000-8000-000000000032', now() + interval '1 year');
+  ('00000000-0000-4000-8000-000000000032', now() + interval '1 year'),
+  ('00000000-0000-4000-8000-000000000038', now() + interval '1 year'),
+  ('00000000-0000-4000-8000-000000000039', now() + interval '1 year');
 insert into public.marketplace_credit_accounts (user_id, available_balance)
 values ('00000000-0000-4000-8000-000000000032', 100);
 insert into public.marketplace_credit_ledger (
@@ -48,7 +52,15 @@ values
   ('20000000-0000-4000-8000-000000000032', '00000000-0000-4000-8000-000000000032',
    '00000000-0000-4000-8000-000000000032/swap.jpg', 'state-32', 'Buyer piece', 'top', 'ready'),
   ('20000000-0000-4000-8000-000000000033', '00000000-0000-4000-8000-000000000033',
-   '00000000-0000-4000-8000-000000000033/delete.jpg', 'state-33', 'Deleting piece', 'top', 'ready');
+   '00000000-0000-4000-8000-000000000033/delete.jpg', 'state-33', 'Deleting piece', 'top', 'ready'),
+  ('20000000-0000-4000-8000-000000000331', '00000000-0000-4000-8000-000000000031',
+   '00000000-0000-4000-8000-000000000031/four.jpg', 'state-31-4', 'Partial buyer', 'top', 'ready'),
+  ('20000000-0000-4000-8000-000000000431', '00000000-0000-4000-8000-000000000031',
+   '00000000-0000-4000-8000-000000000031/five.jpg', 'state-31-5', 'Partial seller', 'top', 'ready'),
+  ('20000000-0000-4000-8000-000000000531', '00000000-0000-4000-8000-000000000031',
+   '00000000-0000-4000-8000-000000000031/six.jpg', 'state-31-6', 'Retry target', 'top', 'ready'),
+  ('20000000-0000-4000-8000-000000000038', '00000000-0000-4000-8000-000000000038',
+   '00000000-0000-4000-8000-000000000038/expired.jpg', 'state-38', 'Expired target', 'top', 'ready');
 
 insert into public.marketplace_listings (
   id, garment_id, seller_id, accepts_credits, accepts_swap, is_giveaway,
@@ -63,7 +75,15 @@ insert into public.marketplace_listings (
   ('40000000-0000-4000-8000-000000000032', '20000000-0000-4000-8000-000000000032',
    '00000000-0000-4000-8000-000000000032', false, true, false, null, 'Buyer area'),
   ('40000000-0000-4000-8000-000000000033', '20000000-0000-4000-8000-000000000033',
-   '00000000-0000-4000-8000-000000000033', false, false, true, null, 'Delete area');
+   '00000000-0000-4000-8000-000000000033', false, false, true, null, 'Delete area'),
+  ('40000000-0000-4000-8000-000000000331', '20000000-0000-4000-8000-000000000331',
+   '00000000-0000-4000-8000-000000000031', false, false, true, null, 'State area'),
+  ('40000000-0000-4000-8000-000000000431', '20000000-0000-4000-8000-000000000431',
+   '00000000-0000-4000-8000-000000000031', false, false, true, null, 'State area'),
+  ('40000000-0000-4000-8000-000000000531', '20000000-0000-4000-8000-000000000531',
+   '00000000-0000-4000-8000-000000000031', true, false, true, 15, 'State area'),
+  ('40000000-0000-4000-8000-000000000038', '20000000-0000-4000-8000-000000000038',
+   '00000000-0000-4000-8000-000000000038', false, false, true, null, 'Expired area');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000032', true);
@@ -116,6 +136,114 @@ select is(
   'acceptance retries return the original transaction'
 );
 reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000032', true);
+create temporary table buyer_partial_offer as
+select public.marketplace_create_offer(
+  '40000000-0000-4000-8000-000000000331', 'giveaway', null, null
+) as id;
+create temporary table seller_partial_offer as
+select public.marketplace_create_offer(
+  '40000000-0000-4000-8000-000000000431', 'giveaway', null, null
+) as id;
+create temporary table retry_offer as
+select public.marketplace_create_offer(
+  '40000000-0000-4000-8000-000000000531', 'credits', null, 'same request'
+) as id;
+select is(
+  public.marketplace_create_offer(
+    '40000000-0000-4000-8000-000000000531', 'credits', null, 'same request'
+  ),
+  (select id from retry_offer),
+  'an identical offer retry returns the existing pending offer'
+);
+select throws_ok(
+  $$select public.marketplace_create_offer(
+      '40000000-0000-4000-8000-000000000531', 'giveaway', null, 'same request'
+    )$$,
+  'P0001', 'Pending offer payload conflicts with existing offer',
+  'a retry cannot silently change the economic offer mode'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000031', true);
+create temporary table buyer_partial_transaction as
+select public.marketplace_respond_to_offer((select id from buyer_partial_offer), true) as id;
+create temporary table seller_partial_transaction as
+select public.marketplace_respond_to_offer((select id from seller_partial_offer), true) as id;
+select is(
+  public.marketplace_confirm_handoff((select id from seller_partial_transaction)),
+  'awaiting_handoff',
+  'a seller can record the first handoff confirmation'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000032', true);
+select is(
+  public.marketplace_confirm_handoff((select id from buyer_partial_transaction)),
+  'awaiting_handoff',
+  'a buyer can record the first handoff confirmation'
+);
+select throws_ok(
+  format('select public.marketplace_cancel_transaction(%L)', (select id from buyer_partial_transaction)),
+  'P0001', 'A confirmed handoff cannot be cancelled',
+  'the buyer cannot cancel after confirming handoff'
+);
+select throws_ok(
+  format('select public.marketplace_cancel_transaction(%L)', (select id from seller_partial_transaction)),
+  'P0001', 'A confirmed handoff cannot be cancelled',
+  'the buyer cannot cancel after the seller confirms handoff'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000031', true);
+select throws_ok(
+  format('select public.marketplace_cancel_transaction(%L)', (select id from buyer_partial_transaction)),
+  'P0001', 'A confirmed handoff cannot be cancelled',
+  'the seller cannot cancel after the buyer confirms handoff'
+);
+select throws_ok(
+  format('select public.marketplace_cancel_transaction(%L)', (select id from seller_partial_transaction)),
+  'P0001', 'A confirmed handoff cannot be cancelled',
+  'the seller cannot cancel after confirming handoff'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000039', true);
+create temporary table expired_offer as
+select public.marketplace_create_offer(
+  '40000000-0000-4000-8000-000000000038', 'giveaway', null, null
+) as id;
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000038', true);
+create temporary table expired_transaction as
+select public.marketplace_respond_to_offer((select id from expired_offer), true) as id;
+reset role;
+update public.marketplace_transactions
+set status = 'expired', updated_at = now()
+where id = (select id from expired_transaction);
+update public.marketplace_listings
+set status = 'active', updated_at = now()
+where id = '40000000-0000-4000-8000-000000000038';
+select lives_ok(
+  $$create temporary table expired_deletion_request as
+    select * from public.account_deletion_start('00000000-0000-4000-8000-000000000039')$$,
+  'an expired handoff does not block account deletion start'
+);
+select public.account_deletion_mark_storage_step(request_id, step)
+from expired_deletion_request,
+  unnest(array['body', 'garments', 'results']) step;
+select lives_ok(
+  format('select public.account_deletion_purge_database(%L)',
+    (select request_id from expired_deletion_request)),
+  'an expired handoff does not block the deletion purge recheck'
+);
 
 select throws_ok(
   format('update private.marketplace_transaction_terms set terms_version = %L where transaction_id = %L',
