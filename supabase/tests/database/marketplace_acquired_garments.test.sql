@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(36);
+select plan(39);
 
 select has_table('private', 'marketplace_acquisitions', 'acquisition provenance is private');
 select is(
@@ -164,18 +164,45 @@ insert into storage.objects (id, bucket_id, name) values
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000071', true);
 select is(
-  public.marketplace_can_delete_garment_object(
+  public.marketplace_can_mutate_garment_object(
     '00000000-0000-4000-8000-000000000071/credit-clean.png'
   ),
   false,
   'a seller cannot delete the safe asset while settlement is pending'
 );
 select is(
-  public.marketplace_can_delete_garment_object(
+  public.marketplace_can_mutate_garment_object(
     '00000000-0000-4000-8000-000000000071/unlisted-delete.jpg'
   ),
   true,
   'a seller can still delete an unlisted garment asset'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000072', true);
+select is(
+  public.marketplace_can_mutate_garment_object(
+    (select destination_path
+     from public.marketplace_acquisition_manifest(
+       (select id from acquisition_transactions where mode = 'credits')
+     ))
+  ),
+  false,
+  'a pending recipient destination cannot be deleted or replaced'
+);
+select throws_ok(
+  format(
+    'insert into storage.objects (id, bucket_id, name) values (gen_random_uuid(), %L, %L)',
+    'garments',
+    (select destination_path
+     from public.marketplace_acquisition_manifest(
+       (select id from acquisition_transactions where mode = 'credits')
+     ))
+  ),
+  '42501',
+  'new row violates row-level security policy for table "objects"',
+  'the recipient cannot preempt or re-upload a pending acquisition object'
 );
 reset role;
 
@@ -188,6 +215,19 @@ where transaction_record.mode <> 'missing';
 select is(
   public.marketplace_finalize_handoff((select id from acquisition_transactions where mode = 'credits')),
   'completed', 'credit settlement completes after storage copies exist'
+);
+
+select is(
+  public.marketplace_can_mutate_garment_object(
+    (select original_path from public.garments garment
+     join private.marketplace_acquisitions acquisition
+       on acquisition.acquired_garment_id = garment.id
+     where acquisition.transaction_id = (
+       select id from acquisition_transactions where mode = 'credits'
+     ))
+  ),
+  true,
+  'after finalization the recipient asset returns to normal closet mutation rules'
 );
 select is(
   public.marketplace_finalize_handoff((select id from acquisition_transactions where mode = 'giveaway')),

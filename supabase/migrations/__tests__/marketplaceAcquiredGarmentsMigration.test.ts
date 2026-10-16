@@ -48,11 +48,13 @@ describe('marketplace acquired garments migration', () => {
     expect(sql).not.toContain('source_clean_path');
   });
 
-  it('prevents members from deleting media needed by a non-terminal exchange', () => {
-    expect(sql).toContain('marketplace_can_delete_garment_object');
+  it('prevents members from mutating media needed by a non-terminal exchange', () => {
+    expect(sql).toContain('marketplace_can_mutate_garment_object');
     expect(sql).toMatch(/status in \('active', 'reserved'\)/);
     expect(sql).toMatch(/status in \('awaiting_handoff', 'disputed'\)/);
-    expect(sql).toMatch(/private_image_delete[\s\S]*marketplace_can_delete_garment_object/);
+    expect(sql).toContain('acquisition.completed_at is null');
+    expect(sql).toMatch(/private_source_image_insert[\s\S]*marketplace_can_mutate_garment_object/);
+    expect(sql).toMatch(/private_image_delete[\s\S]*marketplace_can_mutate_garment_object/);
   });
 
   it('creates one recipient copy per listing and two for swaps', () => {
