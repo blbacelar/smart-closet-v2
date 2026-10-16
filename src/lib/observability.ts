@@ -15,8 +15,18 @@ export type AnalyticsEvent =
   | 'account_deleted';
 
 export type ObservabilityErrorContext = {
-  operation: 'react_render' | 'auth_session_restore' | 'tryon_enqueue' | 'render';
-  code: 'unexpected_render_error' | 'session_restore_failed' | 'request_failed' | 'unexpected';
+  operation:
+    | 'react_render'
+    | 'auth_session_restore'
+    | 'tryon_enqueue'
+    | 'notification_registration_refresh'
+    | 'render';
+  code:
+    | 'unexpected_render_error'
+    | 'session_restore_failed'
+    | 'notification_registration_refresh_failed'
+    | 'request_failed'
+    | 'unexpected';
   fatal: boolean;
 };
 

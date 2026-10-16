@@ -12,12 +12,14 @@
     "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.22",
     "expo-dev-client": "~57.0.20",
+    "expo-device": "~57.0.2",
     "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
     "expo-image-picker": "~57.0.20",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.13",
     "expo-localization": "~57.0.2",
+    "expo-notifications": "~57.0.23",
     "expo-router": "~57.0.28",
     "expo-sharing": "~57.0.23",
     "expo-sqlite": "~57.0.4",
@@ -77,6 +79,7 @@
       "src/features/body-photos/**/*.{ts,tsx}",
       "src/features/garments/**/*.{ts,tsx}",
       "src/features/marketplace/**/*.{ts,tsx}",
+      "src/features/notifications/notificationRegistration.ts",
       "src/features/tryon/**/*.{ts,tsx}",
       "src/i18n/**/*.{ts,tsx}",
       "src/lib/observability.ts",
@@ -89,7 +92,8 @@
       "supabase/functions/validate-body-photo/{handler,processor,geminiModerationProvider}.ts",
       "supabase/functions/delete-account/{handler,deleteAccount}.ts",
       "supabase/functions/delete-body-photo/{handler,deleteBodyPhoto}.ts",
-      "supabase/functions/confirm-marketplace-handoff/{handler,settleHandoff}.ts"
+      "supabase/functions/confirm-marketplace-handoff/{handler,settleHandoff}.ts",
+      "supabase/functions/process-notification-outbox/{expoPushProvider,processor}.ts"
     ],
     "coverageThreshold": {
       "global": {

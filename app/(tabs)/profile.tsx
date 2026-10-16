@@ -12,6 +12,10 @@ import {
 import { colors, fonts } from '../../src/theme';
 import { useTryOnQuota } from '../../src/features/tryon/useTryOns';
 import { getProfileSettingNotice } from '../../src/features/profile/profileSettings';
+import {
+  enableNotificationsForCurrentInstallation,
+  signOutWithNotificationCleanup,
+} from '../../src/features/notifications/notificationClient';
 
 const settings = [
   { Icon: Shield, label: 'Privacy & visibility' },
@@ -44,6 +48,26 @@ export default function ProfileScreen() {
       router.push('/copyright-report');
       return;
     }
+    if (label === 'Notifications') {
+      try {
+        const result = await enableNotificationsForCurrentInstallation();
+        if (result.state === 'enabled') {
+          Alert.alert('Notifications enabled', 'Fitly can now send private account and marketplace updates.');
+        } else if (result.state === 'denied') {
+          Alert.alert('Notifications are off', 'Allow notifications in your device settings, then try again.');
+        } else {
+          const message = result.reason === 'development-build-required'
+            ? 'Remote push requires the Fitly development build, not Expo Go.'
+            : result.reason === 'physical-device-required'
+              ? 'Remote push must be enabled on a physical device.'
+              : 'This build is missing its Expo project identifier.';
+          Alert.alert('Notifications unavailable', message);
+        }
+      } catch (error) {
+        Alert.alert('Could not enable notifications', error instanceof Error ? error.message : 'Try again.');
+      }
+      return;
+    }
     const notice = getProfileSettingNotice(label);
     if (notice) {
       Alert.alert(notice.title, notice.message);
@@ -54,7 +78,7 @@ export default function ProfileScreen() {
     }
 
     try {
-      await signOut();
+      await signOutWithNotificationCleanup(signOut);
     } catch (error) {
       Alert.alert('Could not sign out', error instanceof Error ? error.message : 'Try again.');
     }

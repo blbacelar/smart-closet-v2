@@ -573,6 +573,157 @@ async function verifyAcquiredGarmentFinalization(databaseUrl) {
   );
 }
 
+async function verifyConcurrentNotificationClaims(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email, raw_user_meta_data) values (
+        '00000000-0000-4000-8000-000000000093',
+        'notification-claim-race@example.com',
+        '{"adult_confirmed":true}'
+      );
+      insert into private.notification_push_tokens (
+        user_id, installation_id, expo_token, platform
+      ) values (
+        '00000000-0000-4000-8000-000000000093',
+        '10000000-0000-4000-8000-000000000093',
+        'ExpoPushToken[claim-race]',
+        'ios'
+      );
+      select public.notification_enqueue(
+        'notification-claim-race',
+        '00000000-0000-4000-8000-000000000093',
+        'account_update',
+        null
+      );
+    `,
+    'Create the concurrent notification-claim fixture',
+  );
+
+  const claim = (workerId) => `
+    begin;
+    set local role service_role;
+    select id from public.notification_claim_outbox(
+      '${workerId}', 1, interval '1 minute'
+    );
+    select pg_sleep(0.4);
+    commit;
+  `;
+  const results = await Promise.all([
+    concurrentQuery(databaseUrl, claim('notification-worker-one')),
+    concurrentQuery(databaseUrl, claim('notification-worker-two')),
+  ]);
+  if (results.some((result) => result.code !== 0)) {
+    throw new UpgradeTestError(
+      `Concurrent notification claims failed: ${results.map((result) => result.stderr).join('\n')}`,
+    );
+  }
+  const claimedIds = results
+    .flatMap((result) => result.stdout.split('\n'))
+    .filter((value) => /^[0-9a-f-]{36}$/i.test(value.trim()));
+  if (claimedIds.length !== 1) {
+    throw new UpgradeTestError(
+      `Overlapping notification workers claimed ${claimedIds.length} copies of one event.`,
+    );
+  }
+
+  const state = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-F', '|', '-c',
+      `select status, attempts, claimed_by is not null
+       from private.notification_outbox
+       where event_key = 'notification-claim-race';`,
+    ],
+    'Read the concurrent notification-claim result',
+  ).trim();
+  if (state !== 'processing|0|t') {
+    throw new UpgradeTestError(`Notification lease state was invalid after claim: ${state}`);
+  }
+
+}
+
+async function verifyNotificationDeletionAuthorizationFence(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email, raw_user_meta_data) values (
+        '00000000-0000-4000-8000-000000000096',
+        'notification-deletion-race@example.com',
+        '{"adult_confirmed":true}'
+      );
+      insert into private.notification_push_tokens (
+        id, user_id, installation_id, expo_token, platform
+      ) values (
+        '20000000-0000-4000-8000-000000000096',
+        '00000000-0000-4000-8000-000000000096',
+        '10000000-0000-4000-8000-000000000096',
+        'ExpoPushToken[deletion-race]',
+        'ios'
+      );
+      insert into private.notification_outbox (
+        id, event_key, recipient_user_id, kind
+      ) values (
+        '30000000-0000-4000-8000-000000000096',
+        'notification-deletion-race',
+        '00000000-0000-4000-8000-000000000096',
+        'account_update'
+      );
+      set local role service_role;
+      select * from public.notification_claim_outbox(
+        'notification-deletion-worker', 1, interval '1 minute'
+      );
+      select * from public.notification_prepare_deliveries(
+        '30000000-0000-4000-8000-000000000096'
+      );
+    `,
+    'Create the notification deletion-authorization race fixture',
+  );
+  const deliveryId = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-c',
+      `select id from private.notification_deliveries
+       where outbox_id = '30000000-0000-4000-8000-000000000096';`,
+    ],
+    'Read the prepared notification delivery identity',
+  ).trim();
+  if (!/^[0-9a-f-]{36}$/i.test(deliveryId)) {
+    throw new UpgradeTestError('Prepared notification delivery identity was unavailable.');
+  }
+
+  const deletion = concurrentQuery(
+    databaseUrl,
+    `begin;
+     select * from public.account_deletion_start(
+       '00000000-0000-4000-8000-000000000096'
+     );
+     select pg_sleep(0.5);
+     commit;`,
+  );
+  await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  const authorization = concurrentQuery(
+    databaseUrl,
+    `set role service_role;
+     select delivery_id from public.notification_authorize_deliveries(
+       '30000000-0000-4000-8000-000000000096',
+       'notification-deletion-worker',
+       array['${deliveryId}'::uuid]
+     );`,
+  );
+  const [deletionResult, authorizationResult] = await Promise.all([deletion, authorization]);
+  if (deletionResult.code !== 0 || authorizationResult.code !== 0) {
+    throw new UpgradeTestError(
+      `Notification deletion authorization fence failed: ${deletionResult.stderr}\n${authorizationResult.stderr}`,
+    );
+  }
+  if (/[0-9a-f-]{36}/i.test(authorizationResult.stdout)) {
+    throw new UpgradeTestError(
+      'Notification dispatch authorized against an uncommitted account-deletion tombstone.',
+    );
+  }
+}
+
 async function verifyExpiryWriterLockOrder(databaseUrl) {
   psql(
     databaseUrl,
@@ -1315,7 +1466,18 @@ async function main() {
       ], workspace),
       'Verify sanitized recipient closet copies and settlement finalization',
     );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/notification_infrastructure.test.sql'),
+      ], workspace),
+      'Verify private push lifecycle and notification outbox leases',
+    );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyConcurrentNotificationClaims(latestDatabaseUrl);
+    await verifyNotificationDeletionAuthorizationFence(latestDatabaseUrl);
     await verifyAcquiredGarmentFinalization(latestDatabaseUrl);
     await verifyConcurrentMarketplaceExpiry(latestDatabaseUrl);
     await verifyExpiryWriterLockOrder(latestDatabaseUrl);

@@ -6,6 +6,9 @@ const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
 };
+const appJson = JSON.parse(readFileSync(resolve(root, 'app.json'), 'utf8')) as {
+  expo: { plugins: Array<string | [string, Record<string, unknown>]> };
+};
 
 describe('Expo Go SDK 57 compatibility', () => {
   it('uses the Expo 57 runtime and its matching React versions', () => {
@@ -21,5 +24,14 @@ describe('Expo Go SDK 57 compatibility', () => {
 
   it('pins the minimum Node version required by Expo 57', () => {
     expect(readFileSync(resolve(root, '.nvmrc'), 'utf8').trim()).toBe('22.13.0');
+  });
+
+  it('uses the SDK 57 notification modules and native config plugin', () => {
+    expect(packageJson.dependencies['expo-notifications']).toBe('~57.0.23');
+    expect(packageJson.dependencies['expo-device']).toBe('~57.0.2');
+    expect(appJson.expo.plugins).toContainEqual([
+      'expo-notifications',
+      { defaultChannel: 'default' },
+    ]);
   });
 });
