@@ -15,7 +15,7 @@ Fitly uses Expo SDK 57 and Node 22.13.0. Sign in to the same Expo account in the
 
 The interface includes realistic development data so the complete Phase 1 flow can be reviewed without service credentials. To connect a Supabase project, copy `.env.example` to `.env` and provide the project URL and publishable key. Apply the migration in `supabase/migrations` before using live data.
 
-Live Studio generation calls Google Gemini directly from the `tryon-enqueue` Supabase Edge Function. Configure `GOOGLE_GEMINI_API_KEY` as an Edge Function secret; never add it to the Expo environment or repository.
+Live Studio generation calls Gemini through OpenRouter's Image API from the `tryon-enqueue` Supabase Edge Function. Configure `OPENROUTER_API_KEY` as an Edge Function secret; never add it to the Expo environment or repository. The request pins the approved provider, disables fallbacks, and requires privacy-preserving routing.
 
 ## Included
 

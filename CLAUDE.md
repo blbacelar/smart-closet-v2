@@ -23,8 +23,8 @@ Fitly is a privacy-first Expo mobile app for building a digital closet and gener
 - Garment camera/library capture, validation, private Storage persistence, signed display URLs, live Closet/Studio queries, and Free-plan limits are implemented.
 - The privileged garment background-removal worker, state machine, cost ledger, and Closet retry behavior are implemented and deployed.
 - The cleanup provider still requires `REMOVE_BG_API_KEY` and `REMOVE_BG_COST_USD` as server-side secrets before a live image can complete.
-- The Studio uses persisted private try-on jobs, server-authoritative quota, deterministic caching, one-time refunds, and a deployed direct Google Gemini image adapter instead of a simulated timer.
-- `GOOGLE_GEMINI_API_KEY` is configured as a server-side secret; the Google project still needs available prepaid credits for a successful real-image smoke test.
+- The Studio uses persisted private try-on jobs, server-authoritative quota, deterministic caching, one-time refunds, and an OpenRouter image adapter instead of a simulated timer.
+- `OPENROUTER_API_KEY` must remain a server-side secret; a funded key and a deployed `tryon-enqueue` function are required for a successful real-image smoke test.
 - Persisted feedback, owner-filtered Realtime delivery, polling fallback, and scheduled stuck-job reconciliation are implemented.
 - Do not present simulated timers or seeded records as working AI/backend behavior.
 

@@ -40,10 +40,10 @@ Supabase client
 Third-party providers
   ├─ remove.bg garment adapter (deployed; credentials pending)
   ├─ Google Gemini garment-category and body-photo moderation adapters
-  └─ Google Gemini image try-on adapter (deployed; credential configured)
+  └─ OpenRouter image try-on adapter (deployment and secret required)
 ```
 
-The client never receives AI-provider, Stripe, or service-role secrets. Try-on currently uses asynchronous enqueue → Edge Function background task → direct Gemini generation → private result storage. The Studio subscribes to owner-filtered job updates through Supabase Realtime and retains polling as a connection-loss fallback. A five-minute database schedule marks jobs stale after ten minutes, safely fails at most 100 per run, and reuses the atomic one-time quota refund path.
+The client never receives AI-provider, Stripe, or service-role secrets. Try-on uses asynchronous enqueue → Edge Function background task → OpenRouter Image API → private result storage. The Studio subscribes to owner-filtered job updates through Supabase Realtime and retains polling as a connection-loss fallback. A five-minute database schedule marks jobs stale after ten minutes, safely fails at most 100 per run, and reuses the atomic one-time quota refund path.
 
 ## Key Entry Points
 
@@ -71,7 +71,7 @@ The client never receives AI-provider, Stripe, or service-role secrets. Try-on c
 - `src/features/tryon/` — persisted jobs, quota queries, enqueue boundary, UI state, and tests.
 - `supabase/functions/process-garment/` — authenticated, retryable garment preparation with Gemini category detection, a zero-cost original-image fallback, and optional remove.bg cleanup.
 - `supabase/migrations/20260804044556_initial_fitly_schema.sql` — deployed Phase 1 schema and RLS.
-- `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and stateless direct Gemini adapter.
+- `supabase/functions/tryon-enqueue/` — authenticated enqueue, background orchestration, and privacy-restricted OpenRouter adapter.
 - `supabase/functions/delete-account/` — authenticated Storage purge followed by permanent Auth-user deletion.
 - `supabase/functions/process-notification-outbox/` — service-only leased push dispatch and Expo ticket/receipt processing.
 - `supabase/functions/delete-body-photo/` — authenticated owner-only cleanup of one body photo and its generated result objects.
@@ -133,7 +133,7 @@ The intended live flow is:
 - Atomic garment completion and background-removal cost ledger writes.
 - Server-computed try-on cache keys and transaction-safe Free/Pro daily quota reservation.
 - Idempotent try-on job claims, private base64 provider inputs/outputs, atomic completion/cost writes, and one-time quota refunds.
-- Authenticated `tryon-enqueue` Edge Function and direct Gemini provider adapter deployed with JWT verification.
+- Authenticated `tryon-enqueue` Edge Function and OpenRouter provider adapter with JWT verification.
 - Persisted thumbs-up/down try-on feedback with optimistic UI updates, owner-only database enforcement, and failure rollback.
 - Persisted marketplace membership, credit accounts, append-only credit ledger, listings, offers, and transactions.
 - No-charge development membership activation with a 500-credit first-year grant and 250-credit renewal grant; the annual pilot price remains server configuration.
@@ -164,7 +164,7 @@ The intended live flow is:
 
 - A configured cleanup-provider credential and a real-image smoke test; the remove.bg adapter is deployed but intentionally cannot spend without secrets.
 - Automatic garment color tagging; category detection is implemented, while color remains member-selected.
-- A successful real-image Gemini try-on smoke test after prepaid Google credits are available.
+- A successful real-image OpenRouter try-on smoke test after the updated Edge Function and secret are deployed.
 - RevenueCat subscriptions and real Pro entitlement checks.
 - Google and Apple social-provider credentials and redirect allowlists in Supabase; Apple production setup requires an Apple Developer account.
 - An external crash-reporting service. Product-funnel analytics now use the first-party Supabase adapter; no PostHog or session-replay dependency is required.
@@ -191,10 +191,10 @@ The intended live flow is:
 - Change the schema: add a new migration under `supabase/migrations/`, review RLS, apply it, and verify through the Data API.
 - Optional garment cleanup: set `REMOVE_BG_API_KEY` and the real contracted `REMOVE_BG_COST_USD` in Supabase Edge Function secrets to enable background removal. Without them, the worker securely prepares the original garment JPEG at zero provider cost. Never put provider credentials in the app or committed files.
 - Garment category detection: `GOOGLE_GEMINI_API_KEY` stays in Supabase Edge Function secrets. The default model is `gemini-3.8-flash`, called through Google's Interactions API with structured JSON output and `store: false`. Optional server-only overrides are `GOOGLE_GEMINI_TAGGING_MODEL` and `GOOGLE_GEMINI_TAGGING_COST_USD_FALLBACK`.
-- Try-on configuration: `GOOGLE_GEMINI_API_KEY` is set in Supabase Edge Function secrets. The default model is `gemini-3.1-flash-image`, called through Google's Interactions API with `store: false`. Optional server-only overrides are `GOOGLE_GEMINI_IMAGE_MODEL` and `GOOGLE_GEMINI_TRYON_COST_USD_FALLBACK`. Never put the key in an `EXPO_PUBLIC_` variable or committed file.
+- Try-on configuration: `OPENROUTER_API_KEY` stays in Supabase Edge Function secrets. The default model is `google/gemini-3.1-flash-image`, pinned to `google-vertex/global` with provider fallbacks disabled, data collection denied, and ZDR required. Optional server-only overrides are `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_IMAGE_PROVIDER`, and `OPENROUTER_TRYON_COST_USD_FALLBACK`. Never put the key in an `EXPO_PUBLIC_` variable or committed file.
 
 ## Recommended Build Order
 
-1. Fund the configured Gemini project, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
+1. Deploy and smoke-test the funded OpenRouter try-on path, configure the cleanup provider, and smoke-test both real-image paths. Reassess remove.bg before its announced December 2026 platform transition.
 2. Run the three marketplace settlement modes with two controlled staging accounts, then add chat, notifications, dispute/safety operations, and the approved production membership provider.
 3. Add `EXPO_TOKEN` when an Android cloud build is needed, wire approved observability vendors after defining consent, then prepare the regional beta release.
