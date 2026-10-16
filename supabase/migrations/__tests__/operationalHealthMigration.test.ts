@@ -25,7 +25,7 @@ describe('operational health migration', () => {
   it('is service-only and validates environment-owned thresholds', () => {
     expect(sql).toMatch(/revoke all on function public\.operational_health_check[\s\S]*authenticated/);
     expect(sql).toMatch(/grant execute on function public\.operational_health_check[\s\S]*service_role/);
-    expect(sql).toContain('Invalid operational health thresholds');
+    expect(sql).toContain('invalid operational health thresholds');
   });
 
   it('captures aggregate snapshots on a bounded schedule', () => {

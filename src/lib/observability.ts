@@ -63,6 +63,22 @@ const noopAdapter: ObservabilityAdapter = {
 };
 
 const sensitiveKey = /(?:id$|_id$|photo|image|url|path|email|token|secret|name)/i;
+const safePropertyKeys = new Set([
+  'cached',
+  'category',
+  'categoryMode',
+  'count',
+  'duration_ms',
+  'method',
+  'mode',
+  'platform',
+  'provider',
+  'retryable',
+  'source',
+  'state',
+  'status',
+]);
+const safeStringValue = /^[a-z][a-z0-9_-]{0,47}$/i;
 const recognizedErrorNames = new Set<SafeErrorReport['name']>([
   'Error',
   'TypeError',
@@ -82,8 +98,8 @@ function callSafely(action: () => void) {
 function sanitizeProperties(properties: Record<string, unknown>) {
   const safe: SafeTelemetryProperties = {};
   for (const [key, value] of Object.entries(properties)) {
-    if (sensitiveKey.test(key)) continue;
-    if (typeof value === 'string') safe[key] = value.slice(0, 160);
+    if (sensitiveKey.test(key) || !safePropertyKeys.has(key)) continue;
+    if (typeof value === 'string' && safeStringValue.test(value)) safe[key] = value;
     else if (typeof value === 'boolean') safe[key] = value;
     else if (typeof value === 'number' && Number.isFinite(value)) safe[key] = value;
   }

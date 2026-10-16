@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C05 and C07-C10 merged; C12 implementation and verification in progress; C06 waits on External Gate B)
+**Status:** ECC-reviewed; execution in progress (C01-C05, C07-C10, and C12 merged; C23 implementation and verification in progress; C06 waits on External Gate B)
 
 **Created:** 2026-10-15
 
@@ -30,12 +30,12 @@ Known baseline failures and gaps:
 
 - Marketplace account deletion now separates private erasure from pseudonymous retained accounting records; scheduled retention expiry and backup re-deletion still wait on the approved Gate B policy.
 - Abandoned reservations expire automatically and completed credit/swap/give-away handoffs create sanitized recipient closet copies exactly once.
-- Disputes, reports, blocks, ratings, production moderation, operator tools, and push notifications are missing.
-- Marketplace proximity is not backed by privacy-preserving geospatial search.
+- Disputes, reports, blocks, ratings, production moderation, operator tools, and final marketplace notification events are missing; private push infrastructure is present.
+- Marketplace proximity uses private coarse PostGIS geography; moderation-aware filtering remains in C13.
 - Real billing, renewals, restore/refund/revocation behavior, store policy approval, and final economic parameters are not approved or implemented.
 - The Gemini project still needs funded real-image validation; optional garment cleanup lacks a production credential; marketplace try-on is incomplete.
 - Social OAuth, full localization, external crash reporting, production EAS credentials, store release setup, and full two-device E2E verification are incomplete.
-- The Jest coverage gate does not currently collect `src/features/marketplace`, so a green report can omit launch-critical marketplace code.
+- The Jest coverage gate owns marketplace, worker, provider, and operational handler modules.
 
 ## Definition of Complete
 
