@@ -272,8 +272,8 @@ rails leave Gate C open.
 
 - [ ] **Selected topology:** consumption-only mobile + web membership
 - [ ] **Selected topology:** StoreKit + Play subscription + approved web equivalent
-- [ ] **Selected topology:** paid membership unbundled from independently awarded/earned credits
-- [ ] **Selected topology:** no paid membership; no-charge invite-only pilot
+- [ ] **Selected topology:** paid membership unbundled from independently awarded/earned credits; this selection reopens Gate A and requires a replacement grant/economy contract signed before C19
+- [ ] **Selected topology:** no paid membership; no-charge invite-only pilot; this selection leaves C19 and C20 blocked
 
 Exactly one box above must be selected.
 
@@ -295,13 +295,18 @@ Gate C closes only when the selected matrix is signed by product, legal, and
 finance, the final customer disclosures are attached, and each provider has an
 executable stop-sale/stop-renewal/wind-down action. Provider credentials and
 live SKU identifiers may remain Gate D, but their topology and operational
-actions may not remain undecided.
+actions may not remain undecided. Selecting the unbundled topology invalidates
+the proposed paid-period 60/30 grant contract and therefore reopens Gate A until
+a replacement is signed. Selecting the no-paid topology can close Gate C only
+for the no-charge pilot; it does not authorize C19 or C20.
 
 ## Provider-neutral engineering contract after approval
 
-Only a fully completed and signed Gate A product contract, Gate B lifecycle and
-retention conclusions, and Gate C selected storefront matrix authorize C19.
-C20 additionally requires the Gate D provider accounts and credentials:
+Only a fully completed and signed Gate A paid product contract, Gate B lifecycle
+and retention conclusions, and a Gate C paid storefront matrix authorize C19.
+The no-paid topology leaves C19 and C20 blocked. The unbundled topology requires
+a replacement Gate A contract before C19. C20 additionally requires the Gate D
+provider accounts and credentials:
 
 1. Store immutable normalized provider events with provider, event ID, product,
    original transaction/customer ownership, effective period, status, and a
@@ -323,9 +328,10 @@ C20 additionally requires the Gate D provider accounts and credentials:
 The following must be completed by humans with the stated authority. A blank
 box is a hard launch block.
 
-- [ ] **Founder/product:** accepts or replaces every Gate A lifecycle value and
-  every numeric economy threshold.
-  Name: __________ Date: __________ Evidence/link: __________
+- [ ] **Founder/product + finance:** accept or replace every Gate A lifecycle
+  value and every numeric economy threshold, including fee, grants, bounds,
+  samples, targets, and circuit breakers.
+  Names: __________ Date: __________ Evidence/link: __________
 - [ ] **Founder/product:** approves the final launch credit name after the
   required clearance checks.
   Final name: __________ Date: __________ Evidence/link: __________
