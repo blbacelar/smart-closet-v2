@@ -686,8 +686,11 @@ declare
   v_available_account_id uuid;
   v_held_account_id uuid;
   v_platform_account_id uuid;
-  v_units bigint := abs(p_entry.delta_available) + abs(p_entry.delta_reserved);
-  v_counter_units bigint := -(p_entry.delta_available + p_entry.delta_reserved);
+  v_units bigint := abs(p_entry.delta_available::bigint)
+    + abs(p_entry.delta_reserved::bigint);
+  v_counter_units bigint := -(
+    p_entry.delta_available::bigint + p_entry.delta_reserved::bigint
+  );
 begin
   if v_units <= 0 then
     raise exception 'Legacy marketplace credit entry has invalid units';

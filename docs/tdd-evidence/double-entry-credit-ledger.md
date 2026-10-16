@@ -26,11 +26,12 @@
 | Contract RED | `npm test -- --runInBand supabase/migrations/__tests__/doubleEntryCreditLedgerMigration.test.ts` | Expected FAIL, 4/4 | Migration file did not exist; test target compiled and executed. Checkpoint `9b0329f`. |
 | Contract GREEN | same command | PASS, 4/4 | Restricted tables, balanced/immutable/idempotent contract, compatibility mirror, reconciliation, and privileges are present. |
 | Legacy upgrade RED | `npm run test:db:upgrade` | Expected FAIL | Same-timestamp legacy rows exposed transient overdraft ordering; the migration-only replay path was isolated and reconciled to final balances. |
-| Database GREEN | `npm run test:db:upgrade` | PASS | Legacy backfill 13/13; ledger behavior 43/43; two-connection concurrency 10/10; full RLS 77/77. |
+| Database GREEN | `npm run test:db:upgrade` | PASS | Legacy backfill 15/15; ledger behavior 43/43; two-connection concurrency 10/10; full RLS 77/77. |
 | Concurrent retry RED | `npm run test:db:upgrade` | Expected FAIL | Two simultaneous calls with one idempotency key caused the waiter to validate the post-effect balance. Checkpoint `5e1e8e7`. |
 | Concurrent retry GREEN | same command | PASS | The waiter rechecks journal/event ownership after account locks and returns the original journal. Fix checkpoint `31679ee`. |
 | Independent review RED | contract test plus `npm run test:db:upgrade` | Expected FAIL | Review found reusable grant cohorts, unbound economic retry keys, unsupported multi-bucket legacy adjustments, a reversal retry race, and cache-only reconciliation. Regression checkpoint `85274ef`. |
 | Independent review GREEN | same commands | PASS | Economic identity is validated on every retry path; cohort issuance is unique; every schema-valid legacy adjustment is balanced; reversal retries serialize; reconciliation derives from immutable postings. |
+| Bigint boundary RED/GREEN | `npm run test:db:upgrade` | Expected FAIL, then PASS | A signed-`integer` minimum adjustment overflowed before assignment; checkpoint `76c53da` proves the failure. Both operands are now promoted before `abs`/addition and migrate as balanced bigint postings. |
 
 ## Guarantees
 
