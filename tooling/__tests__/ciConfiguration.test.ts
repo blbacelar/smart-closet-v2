@@ -114,6 +114,7 @@ describe('dependency automation', () => {
     expect(qualityRunner).toContain("args: ['status']");
     expect(qualityRunner).toContain("args: ['start', '-x', SUPABASE_DB_EXCLUSIONS]");
     expect(qualityRunner).toContain("args: ['stop', '--no-backup']");
+    expect(qualityRunner).toContain("args: ['migration', 'up', '--local']");
     expect(qualityRunner).toContain('databaseStartedByRunner');
     expect(qualityRunner).toContain('finally');
   });
