@@ -54,8 +54,10 @@ GitHub authority: #67
 
 ## Remote exit gate
 
-The first independent GitHub Actions run passed both the app-quality and database-security
-jobs: [`38833995875`](https://github.com/blbacelar/smart-closet-v2/actions/runs/38833995875).
+Two consecutive independent GitHub Actions runs passed both the app-quality and
+database-security jobs:
 
-Issue #67 remains open until the second consecutive run, triggered by this evidence update,
-also passes.
+- [`38833995875`](https://github.com/blbacelar/smart-closet-v2/actions/runs/38833995875)
+- [`38834220126`](https://github.com/blbacelar/smart-closet-v2/actions/runs/38834220126)
+
+The remote C01 exit gate is satisfied.

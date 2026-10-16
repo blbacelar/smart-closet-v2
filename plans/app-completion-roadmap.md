@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; ready for gated, incremental execution
+**Status:** ECC-reviewed; execution in progress (C01 verified)
 
 **Created:** 2026-10-15
 
@@ -24,10 +24,10 @@ The repository already contains:
 - Private body photos with Gemini validation, private garment capture and processing, category suggestions, private AI try-on jobs, quota control, realtime recovery, saved results, feedback, and sharing.
 - A development marketplace with no-charge membership activation, credit balance/history, listing modes, offers, listing reservation, private chat, dual handoff confirmation, cancellation, relisting safety, and credit settlement.
 - Supabase migrations, RLS policies, pgTAP tests, Jest tests, PII checks, Expo Doctor, web export, and GitHub Actions workflows.
+- C01 reproducible quality gates with marketplace coverage, locked SDK 57 tooling, adult-media RLS hardening, and two consecutive green CI runs.
 
 Known baseline failures and gaps:
 
-- CI is red because the production dependency audit reports one critical transitive advisory and the database suite exposes an adult-confirmation fixture/policy regression in private-media uploads.
 - Marketplace account deletion/retention is incompatible with permanent transaction records.
 - Abandoned reservations do not expire automatically and acquired garments are not copied into the recipient’s closet.
 - Disputes, reports, blocks, ratings, production moderation, operator tools, and push notifications are missing.
