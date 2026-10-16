@@ -10,6 +10,9 @@ This directory contains exact outbound drafts that reduce the remaining Gate B
 and Gate C work to human review and authorized delivery. They do not grant legal,
 tax, storefront, billing, or launch approval.
 
+Gate D provider-access evidence and Gate E pilot-operations evidence are tracked
+separately in [`../gate-d-e-readiness-pack.md`](../gate-d-e-readiness-pack.md).
+
 ## Operator approval contract
 
 Each draft is immutable for approval purposes. The operator must approve the

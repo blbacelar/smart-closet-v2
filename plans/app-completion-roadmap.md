@@ -93,6 +93,11 @@ These tracks start immediately but may not be completed by code alone:
 
 While a gate is pending, its feature remains behind development mode or a server-side kill switch. Other independent steps continue.
 
+The evidence fields, capability-specific start conditions, secret boundary,
+rollback requirements, and current Gate D/E status are maintained in
+[`docs/gates/gate-d-e-readiness-pack.md`](../docs/gates/gate-d-e-readiness-pack.md).
+Account or environment-variable presence alone does not satisfy that contract.
+
 As of 2026-10-16, C23 was the last independently executable slice. The next
 product slices are blocked by external authority rather than an unresolved code
 task: C06/C13-C16/C21 need Gate B policy; C17/C20/C22/C24 need Gate D accounts
