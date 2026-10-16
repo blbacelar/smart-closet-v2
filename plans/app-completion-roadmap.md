@@ -127,7 +127,7 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 | C17 | Real-provider AI smoke, marketplace try-on privacy, color suggestions, circuit breakers | C02, C09, Gate D Gemini | #39 | Real-image staging evidence and privacy tests |
 | C18A | Localization catalog/language selector, common accessibility primitives, shared loading/error/offline states | C11, C13, C16, C17 | #91 | Shared EN/PT-BR and accessibility foundations pass |
 | C19 | Provider-neutral entitlement event contract and server membership lifecycle | C04, Gates A–C | #27 + #48 | Duplicate/reordered/refund fixtures reconcile |
-| C20 | Store/provider adapters, live disclosure UI, sandbox purchase/restore/cancel | C19, Gates C-D | #90 | Store sandbox device evidence |
+| C20 | Store/provider adapters, live disclosure UI, sandbox purchase/restore/cancel | C19, Gate C payment-rail matrix, Gate D store credentials | #90 | Store sandbox device evidence |
 | C21 | Conditional seller due diligence, restricted identity, valuation/reporting/receipts | Gate B decision, C03, C04 | #44 | Approved reporting fixtures and access audit |
 | C22 | OAuth/account-linking/reauthentication | C02, Gate D OAuth | #92 | Real-device link/revoke/collision tests |
 | C23 | Redacted crash monitoring, health/reconciliation alerts, support runbooks | C01, C04 | #84 | Synthetic incident and privacy tests |
@@ -135,7 +135,7 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 | C24 | Production EAS/signing, SMTP confirmation, crash-provider deployment, runtime/min-version compatibility, OTA/rollback | C02, C18B, C19–C23, Gate D | #89 | Production-candidate builds, redacted diagnostics, and rollback drill |
 | C25 | Accumulated Maestro suites, two-device acceptance, security/performance/recovery | C05–C17, C18B–C24 | #86 | Full green release evidence and reconciliation |
 | C26A | Regional waitlist enrollment and aggregate activation metrics | C12, Gate E thresholds/owner | #38 | Privacy-safe waitlist and density counters match the approved pilot definition |
-| C26 | Regional pilot decision, issue closure by evidence, docs/ADR release sync | C25, Gates A–E | #48 epic | Signed pilot gate; only reconciled issues closed |
+| C26 | Regional pilot decision, issue closure by evidence, docs/ADR release sync | C25, C26A, Gates A–E | #48 epic | Signed pilot gate; only reconciled issues closed |
 
 All code slices use the strongest available review for schema, ledger, deletion, payment, authorization, and release-boundary changes; routine UI/test implementation may use the default model but must pass the same ECC verification gates.
 
