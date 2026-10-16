@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C05 and C07 merged; C08 implementation and verification in progress; C06 waits on External Gate B)
+**Status:** ECC-reviewed; execution in progress (C01-C05 and C07-C08 merged; C09 implementation and verification in progress; C06 waits on External Gate B)
 
 **Created:** 2026-10-15
 
@@ -109,7 +109,7 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 | C06 | Retention expiry/hold release, backup re-deletion, purge evidence | C05, Gate B | same as C05 | Scheduled purge and restore/re-delete drill |
 | C07 | Offer/transaction state contract, timeout policy, immutable snapshots, kill-switch semantics | C04, C05 | #41 | State transitions and deletion tombstone races tested |
 | C08 | Expiry worker and exactly-once reservation/credit release | C07 | #78 | Time-travel/concurrency tests; no stranded state |
-| C09 | Sanitized acquired-garment copies for credit/swap/give-away settlement | C07 | #46 rewrite | All three modes populate recipient closets once |
+| C09 | Sanitized acquired-garment copies for credit/swap/give-away settlement | C07 | #80 | All three modes populate recipient closets once |
 | C10 | Push token lifecycle and notification outbox/provider adapter | C02 | #43 rewrite | Device push/token rotation tests |
 | C11 | Marketplace event notification/deep-link integration | C07, C10, C15 | #43 | Idempotent safe-copy delivery for all final states |
 | C12 | PostGIS coarse geography and authenticated nearby RPC | C03 | #36/#37 rewrite | RLS/radius/precision tests |
