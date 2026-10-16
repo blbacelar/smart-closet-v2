@@ -1,4 +1,4 @@
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const {
   cpSync,
   mkdtempSync,
@@ -29,6 +29,86 @@ function run(command, args, label) {
   if (result.error) throw new UpgradeTestError(`${label} could not start.`);
   if (result.status !== 0) {
     throw new UpgradeTestError(`${label} failed.`, result.status ?? 1);
+  }
+}
+
+function capture(command, args, label) {
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    shell: false,
+  });
+  if (result.error || result.status !== 0) {
+    throw new UpgradeTestError(`${label} failed.`, result.status ?? 1);
+  }
+  return result.stdout;
+}
+
+function isolatedDatabaseUrl(workspacePath) {
+  const status = capture(
+    'supabase',
+    withWorkdir(['status', '-o', 'env'], workspacePath),
+    'Read the isolated database connection',
+  );
+  const match = status.match(/^DB_URL="?([^"\n]+)"?$/m);
+  if (!match) throw new UpgradeTestError('The isolated database URL was unavailable.');
+  return match[1];
+}
+
+function psql(databaseUrl, sql, label) {
+  run('psql', [databaseUrl, '-X', '-v', 'ON_ERROR_STOP=1', '-qAt', '-c', sql], label);
+}
+
+function concurrentQuery(databaseUrl, sql) {
+  return new Promise((resolveQuery) => {
+    const child = spawn(
+      'psql',
+      [databaseUrl, '-X', '-v', 'ON_ERROR_STOP=1', '-qAt', '-c', sql],
+      { shell: false },
+    );
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (error) => resolveQuery({ code: 1, stderr: error.message }));
+    child.on('close', (code) => resolveQuery({ code: code ?? 1, stderr }));
+  });
+}
+
+async function verifyConcurrentReservation(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000012', 'ledger-race@example.com');
+      insert into public.marketplace_credit_accounts (user_id, available_balance)
+      values ('00000000-0000-4000-8000-000000000012', 100);
+      insert into public.marketplace_credit_ledger (
+        user_id, kind, delta_available, idempotency_key, description
+      ) values (
+        '00000000-0000-4000-8000-000000000012',
+        'adjustment', 100, 'ledger-race-opening', 'Concurrency fixture'
+      );
+    `,
+    'Create the committed credit-concurrency fixture',
+  );
+
+  const operation = (key) => `
+    select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000012'),
+      'reserve', 80, '${key}', 'test-v1'
+    );
+  `;
+  const results = await Promise.all([
+    concurrentQuery(databaseUrl, operation('ledger-race-one')),
+    concurrentQuery(databaseUrl, operation('ledger-race-two')),
+  ]);
+  const successes = results.filter((result) => result.code === 0);
+  const insufficient = results.filter((result) =>
+    result.stderr.includes('Insufficient marketplace credit balance'),
+  );
+  if (successes.length !== 1 || insufficient.length !== 1) {
+    throw new UpgradeTestError(
+      'Concurrent reservation did not produce exactly one winner and one insufficient-balance loser.',
+    );
   }
 }
 
@@ -169,6 +249,26 @@ async function main() {
         join(workspace, 'supabase/upgrade-tests/marketplace-parties-backfill.test.sql'),
       ], workspace),
       'Verify the isolated legacy-data backfill',
+    );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/credit_ledger.test.sql'),
+      ], workspace),
+      'Verify the isolated double-entry credit ledger',
+    );
+    const databaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyConcurrentReservation(databaseUrl);
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/upgrade-tests/credit-ledger-concurrency.test.sql'),
+      ], workspace),
+      'Verify concurrent credit reservation reconciliation',
     );
   } catch (error) {
     failure = error;
