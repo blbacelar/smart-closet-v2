@@ -1,5 +1,44 @@
 # Fitly Maestro smoke test
 
+## Installed SDK 57 development build and two-account market
+
+Fitly uses `expo-dev-client` for native acceptance work. The EAS profiles are:
+
+- `development` for a signed physical-device development client;
+- `development-simulator` for an unsigned iOS Simulator development client;
+- `staging` for an internally distributed staging build (`.apk` on Android).
+
+The app uses the `appVersion` runtime policy. Increment `expo.version` whenever
+native dependencies or native app configuration change before publishing an
+update for a previously distributed binary.
+
+For a local smoke, start Supabase with Auth, Storage, and PostgREST available,
+then run `npm run e2e:seed`. The command discovers the local URL and service-role
+key from `supabase status`, creates or refreshes two synthetic accounts, uploads
+the committed non-personal garment fixture, and idempotently prepares active
+memberships, credit balances, a ready garment, and one marketplace listing.
+
+For a remote target, use only a non-production staging project. Provide the
+following variables in the shell: `E2E_SUPABASE_URL`,
+`E2E_SUPABASE_SERVICE_ROLE_KEY`, `E2E_SEED_ALLOW_REMOTE` with the exact value
+`staging`, `E2E_SELLER_PASSWORD`, and `E2E_BUYER_PASSWORD`. Never expose the
+service-role key to Expo, Maestro, a checked-in file, or a production build.
+
+After installing the development build and starting Metro against the same
+Supabase target, run:
+
+```bash
+maestro test \
+  -e E2E_SELLER_EMAIL="fitly-e2e-seller@example.com" \
+  -e E2E_SELLER_PASSWORD="Fitly-E2E-Seller-2026!" \
+  -e E2E_BUYER_EMAIL="fitly-e2e-buyer@example.com" \
+  -e E2E_BUYER_PASSWORD="Fitly-E2E-Buyer-2026!" \
+  .maestro/two-account-marketplace-smoke.yaml
+```
+
+Those published passwords are synthetic local defaults, not credentials for a
+shared environment. Remote staging must supply different secret values.
+
 `expo-go-auth-smoke.yaml` is a no-credential simulator check for the authentication shell. Start Fitly in Expo Go first, then run:
 
 ```bash

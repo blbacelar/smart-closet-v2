@@ -1,0 +1,47 @@
+appId: app.fitly.mobile
+name: Seeded seller and buyer marketplace smoke
+tags:
+  - development-build
+  - marketplace
+  - two-account
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- assertVisible: "Welcome back."
+- tapOn:
+    id: "auth-email-input"
+- inputText: ${E2E_SELLER_EMAIL}
+- pressKey: Enter
+- inputText: ${E2E_SELLER_PASSWORD}
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Your fitting room."
+    timeout: 30000
+- tapOn: "Market"
+- extendedWaitUntil:
+    visible: "E2E green overshirt"
+    timeout: 30000
+- assertVisible: "100 available"
+- assertVisible: "E2E green overshirt"
+- tapOn: "Me"
+- scrollUntilVisible:
+    element: "Sign out"
+    direction: DOWN
+- tapOn: "Sign out"
+- assertVisible: "Welcome back."
+- tapOn:
+    id: "auth-email-input"
+- inputText: ${E2E_BUYER_EMAIL}
+- pressKey: Enter
+- inputText: ${E2E_BUYER_PASSWORD}
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Your fitting room."
+    timeout: 30000
+- tapOn: "Market"
+- extendedWaitUntil:
+    visible: "E2E green overshirt"
+    timeout: 30000
+- assertVisible: "500 available"
+- assertVisible: "E2E green overshirt"

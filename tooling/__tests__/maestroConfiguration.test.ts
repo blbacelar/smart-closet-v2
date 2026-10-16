@@ -12,6 +12,7 @@ const twoAccountFlowPath = resolve(root, '.maestro/two-account-marketplace-smoke
 const appConfigPath = resolve(root, 'app.json');
 const easConfigPath = resolve(root, 'eas.json');
 const packagePath = resolve(root, 'package.json');
+const supabaseConfigPath = resolve(root, 'supabase/config.toml');
 
 describe('Maestro activation journey', () => {
   it('covers signup, onboarding, body photo, garment, and try-on', () => {
@@ -94,6 +95,9 @@ describe('Maestro activation journey', () => {
       android: expect.objectContaining({ buildType: 'apk' }),
     }));
     expect(packageJson.scripts['e2e:seed']).toBe('node scripts/seed-e2e-accounts.js');
+    const supabaseConfig = readFileSync(supabaseConfigPath, 'utf8');
+    expect(supabaseConfig).toMatch(/\[db\.seed\][\s\S]*?enabled = false/);
+    expect(supabaseConfig).not.toContain('sql_paths = ["./seed.sql"]');
   });
 
   it('provides an installed-build two-account marketplace smoke', () => {

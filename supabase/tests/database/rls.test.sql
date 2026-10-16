@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(50);
+select plan(56);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -311,6 +311,13 @@ select is_empty(
 );
 
 reset role;
+select is(has_table_privilege('service_role', 'public.profiles', 'select'), true, 'service role can read profiles for server administration');
+select is(has_table_privilege('service_role', 'public.profiles', 'insert'), true, 'service role can seed profiles');
+select is(has_table_privilege('service_role', 'public.garments', 'insert'), true, 'service role can seed garments');
+select is(has_table_privilege('service_role', 'public.marketplace_memberships', 'insert'), true, 'service role can seed memberships');
+select is(has_table_privilege('service_role', 'public.marketplace_credit_accounts', 'update'), true, 'service role can seed credit balances');
+select is(has_table_privilege('service_role', 'public.marketplace_listings', 'insert'), true, 'service role can seed listings');
+
 set local role anon;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000009', true);
 
