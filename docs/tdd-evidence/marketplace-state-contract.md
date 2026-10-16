@@ -29,6 +29,8 @@ The second independent review found two remaining release blockers. The legacy p
 
 During verification, database lint caught an invalid `distinct` ordering expression in the new advisory helper, and the first concurrency harness run exposed nondeterministic process startup. The helper now orders directly by UUID, and the harness explicitly establishes the deletion lock before releasing the competing writer. The complete isolated database run then passed.
 
+The final independent review approved commit `c02575c` with no P0, P1, or P2 findings. The reviewer independently reran the focused Jest suites and complete isolated Supabase harness, confirmed the global lock order, and verified that client roles cannot execute the private advisory helper.
+
 ## Contract coverage
 
 - `supabase/migrations/__tests__/marketplaceStateContractMigration.test.ts` checks the migration surface and recovery semantics.
