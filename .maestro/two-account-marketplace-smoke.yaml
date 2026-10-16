@@ -1,0 +1,79 @@
+appId: app.fitly.mobile
+name: Seeded seller and buyer marketplace smoke
+tags:
+  - development-build
+  - marketplace
+  - two-account
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- openLink: ${EXPO_URL}
+- extendedWaitUntil:
+    visible: "Continue"
+    timeout: 120000
+- tapOn: "Continue"
+- tapOn:
+    text: "Close"
+    optional: true
+- extendedWaitUntil:
+    visible: "Welcome back."
+    timeout: 30000
+- tapOn:
+    id: "auth-birth-date-input"
+- inputText: "19900101"
+- tapOn: "Welcome back."
+- scrollUntilVisible:
+    element:
+      id: "auth-email-input"
+    direction: DOWN
+- tapOn:
+    id: "auth-email-input"
+- inputText: ${E2E_SELLER_EMAIL}
+- pressKey: Enter
+- inputText: ${E2E_SELLER_PASSWORD}
+- pressKey: Enter
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Studio"
+    timeout: 30000
+- tapOn: "Market, tab, 3 of .*"
+- extendedWaitUntil:
+    visible: "Open E2E green overshirt listing"
+    timeout: 30000
+- assertVisible: "100 Fitly credits available; view marketplace membership"
+- assertVisible: "Open E2E green overshirt listing"
+- tapOn: "Me, tab, 4 of .*"
+- scrollUntilVisible:
+    element: "Sign out"
+    direction: DOWN
+- tapOn: "Sign out"
+- assertVisible: "Welcome back."
+- tapOn:
+    id: "auth-birth-date-input"
+- inputText: "19900101"
+- tapOn: "Welcome back."
+- scrollUntilVisible:
+    element:
+      id: "auth-email-input"
+    direction: DOWN
+- tapOn:
+    id: "auth-email-input"
+- inputText: ${E2E_BUYER_EMAIL}
+- pressKey: Enter
+- inputText: ${E2E_BUYER_PASSWORD}
+- pressKey: Enter
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Studio"
+    timeout: 30000
+- tapOn: "Market, tab, 3 of .*"
+- extendedWaitUntil:
+    visible: "Open E2E green overshirt listing"
+    timeout: 30000
+- assertVisible: "500 Fitly credits available; view marketplace membership"
+- assertVisible: "Open E2E green overshirt listing"

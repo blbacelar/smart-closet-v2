@@ -61,7 +61,7 @@ export default function MarketScreen() {
 
       {summary.data?.membershipStatus === 'active' ? (
         <Pressable
-          accessibilityLabel="View marketplace membership"
+          accessibilityLabel={`${summary.data.availableCredits} Fitly credits available; view marketplace membership`}
           accessibilityRole="button"
           onPress={() => router.push('/marketplace-membership')}
           style={styles.balanceCard}

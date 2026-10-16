@@ -13,6 +13,10 @@ const messagingMigrationPath = resolve(
   __dirname,
   '../20261013170000_marketplace_private_messages.sql',
 );
+const listingImageAccessMigrationPath = resolve(
+  __dirname,
+  '../20261016030000_marketplace_listing_image_access.sql',
+);
 
 describe('marketplace economy migration', () => {
   it('defines membership, credits, listings, offers, and transactions', () => {
@@ -81,5 +85,19 @@ describe('marketplace economy migration', () => {
     expect(sql).toContain('create or replace function public.marketplace_my_messages');
     expect(sql).toContain('create or replace function public.marketplace_send_message');
     expect(sql).toContain('revoke insert, update, delete on public.marketplace_messages');
+  });
+
+  it('lets buyers read active listing images without opening private closets', () => {
+    expect(existsSync(listingImageAccessMigrationPath)).toBe(true);
+    const sql = readFileSync(listingImageAccessMigrationPath, 'utf8').toLowerCase();
+
+    expect(sql).toContain('create or replace function public.marketplace_can_read_garment_object');
+    expect(sql).toContain('security definer');
+    expect(sql).toContain("l.status = 'active'");
+    expect(sql).toContain('p_name = coalesce(g.clean_path, g.original_path)');
+    expect(sql).not.toContain('p_name in (g.original_path, g.clean_path)');
+    expect(sql).toContain('public.marketplace_can_read_garment_object(name)');
+    expect(sql).toContain('revoke all on function public.marketplace_can_read_garment_object(text) from public, anon');
+    expect(sql).toContain('grant execute on function public.marketplace_can_read_garment_object(text) to authenticated');
   });
 });
