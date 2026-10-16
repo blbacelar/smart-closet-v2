@@ -39,6 +39,8 @@ create unique index marketplace_ledger_member_account_kind_idx
 create table private.marketplace_ledger_journals (
   id uuid primary key default gen_random_uuid(),
   kind text not null,
+  request_party_id uuid not null references private.marketplace_parties(id) on delete restrict,
+  request_units bigint not null check (request_units > 0),
   idempotency_key text not null,
   external_event_key text,
   terms_version text not null,
@@ -54,6 +56,10 @@ create table private.marketplace_ledger_journals (
   check (char_length(trim(idempotency_key)) between 1 and 240),
   check (jsonb_typeof(metadata) = 'object')
 );
+
+create unique index marketplace_ledger_grant_cohort_issuance_idx
+  on private.marketplace_ledger_journals(grant_cohort_id)
+  where grant_cohort_id is not null;
 
 create table private.marketplace_ledger_postings (
   id uuid primary key default gen_random_uuid(),
@@ -163,6 +169,65 @@ begin
 end;
 $$;
 
+create or replace function private.marketplace_validate_existing_credit_journal(
+  p_idempotency_key text,
+  p_external_event_key text,
+  p_party_id uuid,
+  p_operation text,
+  p_units bigint,
+  p_terms_version text,
+  p_grant_cohort_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_idempotency_journal_id uuid;
+  v_event_journal_id uuid;
+  v_existing private.marketplace_ledger_journals%rowtype;
+begin
+  select id into v_idempotency_journal_id
+  from private.marketplace_ledger_journals
+  where idempotency_key = p_idempotency_key;
+
+  if p_external_event_key is not null then
+    select id into v_event_journal_id
+    from private.marketplace_ledger_journals
+    where external_event_key = p_external_event_key;
+  end if;
+
+  if v_idempotency_journal_id is not null
+     and v_event_journal_id is not null
+     and v_idempotency_journal_id <> v_event_journal_id then
+    raise exception 'Marketplace credit request conflicts with an existing idempotency or event key';
+  end if;
+
+  select * into v_existing
+  from private.marketplace_ledger_journals
+  where id = coalesce(v_idempotency_journal_id, v_event_journal_id);
+  if not found then return null; end if;
+
+  if v_existing.kind <> p_operation
+     or v_existing.request_party_id <> p_party_id
+     or v_existing.request_units <> p_units
+     or v_existing.terms_version <> p_terms_version
+     or (
+       v_idempotency_journal_id is not null
+       and v_existing.external_event_key is distinct from p_external_event_key
+     )
+     or (
+       p_grant_cohort_id is not null
+       and v_existing.grant_cohort_id is distinct from p_grant_cohort_id
+     ) then
+    raise exception 'Marketplace credit request conflicts with an existing idempotency or event key';
+  end if;
+
+  return v_existing.id;
+end;
+$$;
+
 create or replace function private.marketplace_post_credit_operation(
   p_party_id uuid,
   p_operation text,
@@ -203,13 +268,11 @@ begin
     raise exception 'Ledger metadata must be an object';
   end if;
 
-  select id into v_journal_id
-  from private.marketplace_ledger_journals
-  where idempotency_key = p_idempotency_key
-     or (p_external_event_key is not null and external_event_key = p_external_event_key)
-  order by created_at, id
-  limit 1;
-  if found then return v_journal_id; end if;
+  v_journal_id := private.marketplace_validate_existing_credit_journal(
+    p_idempotency_key, p_external_event_key, p_party_id, p_operation,
+    p_units, p_terms_version, p_grant_cohort_id
+  );
+  if v_journal_id is not null then return v_journal_id; end if;
 
   if p_operation in ('grant_pending', 'grant_available') and p_grant_cohort_id is null then
     if p_external_event_key is null then
@@ -230,14 +293,41 @@ begin
     if p_grant_cohort_id is null then
       select id into p_grant_cohort_id
       from private.marketplace_grant_cohorts
-      where source_event_key = p_external_event_key
-        and party_id = p_party_id
-        and terms_version = p_terms_version
-        and units = p_units;
+      where source_event_key = p_external_event_key;
       if p_grant_cohort_id is null then
         raise exception 'External grant event conflicts with its existing cohort';
       end if;
     end if;
+  end if;
+
+  if p_operation in ('grant_pending', 'grant_available') then
+    if not exists (
+      select 1
+      from private.marketplace_grant_cohorts cohort
+      where cohort.id = p_grant_cohort_id
+        and cohort.party_id = p_party_id
+        and cohort.terms_version = p_terms_version
+        and cohort.units = p_units
+        and cohort.initial_state = case
+          when p_operation = 'grant_pending' then 'pending'
+          else 'available'
+        end
+        and (
+          p_external_event_key is null
+          or cohort.source_event_key = p_external_event_key
+        )
+    ) then
+      raise exception 'Grant cohort conflicts with the requested issuance';
+    end if;
+
+    if exists (
+      select 1 from private.marketplace_ledger_journals
+      where grant_cohort_id = p_grant_cohort_id
+    ) then
+      raise exception 'Grant cohort already issued';
+    end if;
+  elsif p_grant_cohort_id is not null then
+    raise exception 'Grant cohorts are only valid for issuance operations';
   end if;
 
   case p_operation
@@ -295,13 +385,18 @@ begin
   -- A concurrent request may have committed while this call waited for the
   -- account locks. Re-check ownership before validating balances so retries
   -- return the original effect instead of observing the post-effect balance.
-  select id into v_journal_id
-  from private.marketplace_ledger_journals
-  where idempotency_key = p_idempotency_key
-     or (p_external_event_key is not null and external_event_key = p_external_event_key)
-  order by created_at, id
-  limit 1;
-  if found then return v_journal_id; end if;
+  v_journal_id := private.marketplace_validate_existing_credit_journal(
+    p_idempotency_key, p_external_event_key, p_party_id, p_operation,
+    p_units, p_terms_version, p_grant_cohort_id
+  );
+  if v_journal_id is not null then return v_journal_id; end if;
+
+  if p_operation in ('grant_pending', 'grant_available') and exists (
+    select 1 from private.marketplace_ledger_journals
+    where grant_cohort_id = p_grant_cohort_id
+  ) then
+    raise exception 'Grant cohort already issued';
+  end if;
 
   if not p_allow_migration_overdraft and v_member_kind like 'member_%' and (
     select balance + v_member_units
@@ -319,10 +414,12 @@ begin
   end if;
 
   insert into private.marketplace_ledger_journals (
-    kind, idempotency_key, external_event_key, terms_version,
+    kind, request_party_id, request_units,
+    idempotency_key, external_event_key, terms_version,
     grant_cohort_id, metadata
   ) values (
-    p_operation, p_idempotency_key, p_external_event_key, p_terms_version,
+    p_operation, p_party_id, p_units,
+    p_idempotency_key, p_external_event_key, p_terms_version,
     p_grant_cohort_id, coalesce(p_metadata, '{}'::jsonb)
   )
   returning id into v_journal_id;
@@ -361,10 +458,10 @@ begin
   return v_journal_id;
 exception
   when unique_violation then
-    select id into v_journal_id
-    from private.marketplace_ledger_journals
-    where idempotency_key = p_idempotency_key
-       or (p_external_event_key is not null and external_event_key = p_external_event_key);
+    v_journal_id := private.marketplace_validate_existing_credit_journal(
+      p_idempotency_key, p_external_event_key, p_party_id, p_operation,
+      p_units, p_terms_version, p_grant_cohort_id
+    );
     if v_journal_id is null then raise; end if;
     return v_journal_id;
 end;
@@ -390,7 +487,17 @@ begin
   select id into v_reversal_id
   from private.marketplace_ledger_journals
   where idempotency_key = p_idempotency_key;
-  if found then return v_reversal_id; end if;
+  if found then
+    if exists (
+      select 1 from private.marketplace_ledger_journals
+      where id = v_reversal_id
+        and kind = 'reversal'
+        and reversal_of = p_journal_id
+    ) then
+      return v_reversal_id;
+    end if;
+    raise exception 'Marketplace reversal request conflicts with an existing idempotency key';
+  end if;
 
   if exists (
     select 1 from private.marketplace_ledger_journals where reversal_of = p_journal_id
@@ -411,6 +518,30 @@ begin
   order by account.id
   for update of account;
 
+  -- Account locks serialize reversals of the same economic effect. Re-check
+  -- both keys after waiting so identical retries resolve to the one reversal.
+  select id into v_reversal_id
+  from private.marketplace_ledger_journals
+  where idempotency_key = p_idempotency_key;
+  if found then
+    if exists (
+      select 1 from private.marketplace_ledger_journals
+      where id = v_reversal_id
+        and kind = 'reversal'
+        and reversal_of = p_journal_id
+    ) then
+      return v_reversal_id;
+    end if;
+    raise exception 'Marketplace reversal request conflicts with an existing idempotency key';
+  end if;
+
+  select id into v_reversal_id
+  from private.marketplace_ledger_journals
+  where reversal_of = p_journal_id;
+  if found then
+    raise exception 'Marketplace journal already reversed';
+  end if;
+
   for v_account in
     select account.id, account.kind, account.balance, -posting.units as reversal_units
     from private.marketplace_ledger_postings posting
@@ -424,9 +555,11 @@ begin
   end loop;
 
   insert into private.marketplace_ledger_journals (
-    kind, idempotency_key, terms_version, reason_version, reversal_of, metadata
+    kind, request_party_id, request_units, idempotency_key,
+    terms_version, reason_version, reversal_of, metadata
   )
-  select 'reversal', p_idempotency_key, terms_version, p_reason_version,
+  select 'reversal', request_party_id, request_units, p_idempotency_key,
+         terms_version, p_reason_version,
          id, jsonb_build_object('reverses', id)
   from private.marketplace_ledger_journals
   where id = p_journal_id
@@ -471,6 +604,15 @@ begin
   end if;
 
   return v_reversal_id;
+exception
+  when unique_violation then
+    select id into v_reversal_id
+    from private.marketplace_ledger_journals
+    where idempotency_key = p_idempotency_key
+      and kind = 'reversal'
+      and reversal_of = p_journal_id;
+    if v_reversal_id is null then raise; end if;
+    return v_reversal_id;
 end;
 $$;
 
@@ -502,9 +644,9 @@ begin
   order by id for update;
 
   insert into private.marketplace_ledger_journals (
-    kind, idempotency_key, terms_version, metadata
+    kind, request_party_id, request_units, idempotency_key, terms_version, metadata
   ) values (
-    'migration_adjustment',
+    'migration_adjustment', p_party_id, abs(p_delta),
     'migration:opening:' || p_party_id::text || ':' || p_member_kind,
     'legacy-v1',
     jsonb_build_object('compatibility_backfill', true)
@@ -531,6 +673,103 @@ begin
 end;
 $$;
 
+create or replace function private.marketplace_post_legacy_adjustment(
+  p_entry public.marketplace_credit_ledger
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_journal_id uuid;
+  v_available_account_id uuid;
+  v_held_account_id uuid;
+  v_platform_account_id uuid;
+  v_units bigint := abs(p_entry.delta_available) + abs(p_entry.delta_reserved);
+  v_counter_units bigint := -(p_entry.delta_available + p_entry.delta_reserved);
+begin
+  if v_units <= 0 then
+    raise exception 'Legacy marketplace credit entry has invalid units';
+  end if;
+
+  v_journal_id := private.marketplace_validate_existing_credit_journal(
+    'legacy:' || p_entry.idempotency_key,
+    null,
+    p_entry.party_id,
+    'legacy_adjustment',
+    v_units,
+    'legacy-v1',
+    null
+  );
+  if v_journal_id is not null then return v_journal_id; end if;
+
+  v_available_account_id := private.marketplace_ledger_account(
+    p_entry.party_id, 'member_available'
+  );
+  v_held_account_id := private.marketplace_ledger_account(
+    p_entry.party_id, 'member_held'
+  );
+  v_platform_account_id := private.marketplace_ledger_account(
+    null, 'system_platform_loss'
+  );
+
+  perform 1
+  from private.marketplace_ledger_accounts
+  where id in (v_available_account_id, v_held_account_id, v_platform_account_id)
+  order by id
+  for update;
+
+  v_journal_id := private.marketplace_validate_existing_credit_journal(
+    'legacy:' || p_entry.idempotency_key,
+    null,
+    p_entry.party_id,
+    'legacy_adjustment',
+    v_units,
+    'legacy-v1',
+    null
+  );
+  if v_journal_id is not null then return v_journal_id; end if;
+
+  insert into private.marketplace_ledger_journals (
+    kind, request_party_id, request_units, idempotency_key, terms_version, metadata
+  ) values (
+    'legacy_adjustment',
+    p_entry.party_id,
+    v_units,
+    'legacy:' || p_entry.idempotency_key,
+    'legacy-v1',
+    jsonb_build_object(
+      'legacy_ledger_id', p_entry.id,
+      'offer_id', p_entry.offer_id,
+      'transaction_id', p_entry.transaction_id
+    )
+  )
+  returning id into v_journal_id;
+
+  insert into private.marketplace_ledger_postings (journal_id, account_id, units)
+  select v_journal_id, account_id, units
+  from (values
+    (v_available_account_id, p_entry.delta_available),
+    (v_held_account_id, p_entry.delta_reserved),
+    (v_platform_account_id, v_counter_units)
+  ) posting(account_id, units)
+  where units <> 0;
+
+  update private.marketplace_ledger_accounts account
+  set balance = account.balance + delta.units
+  from (values
+    (v_available_account_id, p_entry.delta_available),
+    (v_held_account_id, p_entry.delta_reserved),
+    (v_platform_account_id, v_counter_units)
+  ) delta(account_id, units)
+  where account.id = delta.account_id
+    and delta.units <> 0;
+
+  return v_journal_id;
+end;
+$$;
+
 create or replace function private.marketplace_mirror_legacy_credit_entry_from_row(
   p_entry public.marketplace_credit_ledger
 )
@@ -545,7 +784,9 @@ declare
   v_cohort_id uuid;
   v_journal_id uuid;
 begin
-  if p_entry.kind in ('membership_grant', 'renewal_grant') then
+  if p_entry.kind = 'adjustment' then
+    return private.marketplace_post_legacy_adjustment(p_entry);
+  elsif p_entry.kind in ('membership_grant', 'renewal_grant') then
     v_operation := 'grant_available';
     v_units := p_entry.delta_available;
     insert into private.marketplace_grant_cohorts (
@@ -568,10 +809,6 @@ begin
     v_operation := 'settle_out'; v_units := -p_entry.delta_reserved;
   elsif p_entry.kind = 'transfer_in' then
     v_operation := 'settle_in'; v_units := p_entry.delta_available;
-  elsif p_entry.kind = 'adjustment' and p_entry.delta_available > 0 then
-    v_operation := 'loss_cover'; v_units := p_entry.delta_available;
-  elsif p_entry.kind = 'adjustment' and p_entry.delta_available < 0 then
-    v_operation := 'retire'; v_units := -p_entry.delta_available;
   else
     raise exception 'Unsupported legacy marketplace credit entry';
   end if;
@@ -719,9 +956,13 @@ create or replace function public.marketplace_reconcile_credit_ledger()
 returns table (
   party_id uuid,
   legacy_available bigint,
-  ledger_available bigint,
+  cached_available bigint,
+  posting_available bigint,
   legacy_reserved bigint,
-  ledger_held bigint,
+  cached_held bigint,
+  posting_held bigint,
+  cached_pending bigint,
+  posting_pending bigint,
   balanced boolean
 )
 language sql
@@ -729,26 +970,67 @@ stable
 security definer
 set search_path = ''
 as $$
+  with cached as (
+    select
+      account.party_id,
+      coalesce(sum(account.balance) filter (
+        where account.kind = 'member_available'
+      ), 0)::bigint as available,
+      coalesce(sum(account.balance) filter (
+        where account.kind = 'member_held'
+      ), 0)::bigint as held,
+      coalesce(sum(account.balance) filter (
+        where account.kind = 'member_pending'
+      ), 0)::bigint as pending
+    from private.marketplace_ledger_accounts account
+    where account.party_id is not null
+    group by account.party_id
+  ), posting as (
+    select
+      account.party_id,
+      coalesce(sum(entry.units) filter (
+        where account.kind = 'member_available'
+      ), 0)::bigint as available,
+      coalesce(sum(entry.units) filter (
+        where account.kind = 'member_held'
+      ), 0)::bigint as held,
+      coalesce(sum(entry.units) filter (
+        where account.kind = 'member_pending'
+      ), 0)::bigint as pending
+    from private.marketplace_ledger_accounts account
+    left join private.marketplace_ledger_postings entry on entry.account_id = account.id
+    where account.party_id is not null
+    group by account.party_id
+  )
   select
     compatibility.party_id,
     compatibility.available_balance::bigint,
-    coalesce(sum(account.balance) filter (where account.kind = 'member_available'), 0)::bigint,
+    coalesce(cached.available, 0)::bigint,
+    coalesce(posting.available, 0)::bigint as posting_available,
     compatibility.reserved_balance::bigint,
-    coalesce(sum(account.balance) filter (where account.kind = 'member_held'), 0)::bigint,
-    compatibility.available_balance = coalesce(sum(account.balance) filter (where account.kind = 'member_available'), 0)
-      and compatibility.reserved_balance = coalesce(sum(account.balance) filter (where account.kind = 'member_held'), 0)
+    coalesce(cached.held, 0)::bigint,
+    coalesce(posting.held, 0)::bigint as posting_held,
+    coalesce(cached.pending, 0)::bigint,
+    coalesce(posting.pending, 0)::bigint,
+    compatibility.available_balance = coalesce(cached.available, 0)
+      and compatibility.available_balance = coalesce(posting.available, 0)
+      and compatibility.reserved_balance = coalesce(cached.held, 0)
+      and compatibility.reserved_balance = coalesce(posting.held, 0)
+      and coalesce(cached.pending, 0) = coalesce(posting.pending, 0)
   from public.marketplace_credit_accounts compatibility
-  left join private.marketplace_ledger_accounts account on account.party_id = compatibility.party_id
-  group by compatibility.party_id, compatibility.available_balance, compatibility.reserved_balance
+  left join cached on cached.party_id = compatibility.party_id
+  left join posting on posting.party_id = compatibility.party_id
   order by compatibility.party_id;
 $$;
 
 revoke all on function private.marketplace_reject_ledger_mutation() from public, anon, authenticated;
 revoke all on function private.marketplace_assert_balanced_journal() from public, anon, authenticated;
 revoke all on function private.marketplace_ledger_account(uuid, text) from public, anon, authenticated;
+revoke all on function private.marketplace_validate_existing_credit_journal(text, text, uuid, text, bigint, text, uuid) from public, anon, authenticated;
 revoke all on function private.marketplace_post_credit_operation(uuid, text, bigint, text, text, text, uuid, jsonb, boolean, boolean) from public, anon, authenticated;
 revoke all on function private.marketplace_reverse_credit_journal(uuid, text, text) from public, anon, authenticated;
 revoke all on function private.marketplace_post_opening_adjustment(uuid, text, bigint) from public, anon, authenticated;
+revoke all on function private.marketplace_post_legacy_adjustment(public.marketplace_credit_ledger) from public, anon, authenticated;
 revoke all on function private.marketplace_mirror_legacy_credit_entry_from_row(public.marketplace_credit_ledger) from public, anon, authenticated;
 revoke all on function private.marketplace_mirror_legacy_credit_entry() from public, anon, authenticated;
 revoke all on function public.marketplace_my_credit_balance() from public, anon;
