@@ -108,6 +108,15 @@ describe('dependency automation', () => {
       'supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor',
     );
   });
+
+  it('makes the local quality command own and clean up a missing database stack', () => {
+    const qualityRunner = read('scripts/run-quality.js');
+    expect(qualityRunner).toContain("args: ['status']");
+    expect(qualityRunner).toContain("args: ['start', '-x', SUPABASE_DB_EXCLUSIONS]");
+    expect(qualityRunner).toContain("args: ['stop', '--no-backup']");
+    expect(qualityRunner).toContain('databaseStartedByRunner');
+    expect(qualityRunner).toContain('finally');
+  });
 });
 
 describe('coverage ownership', () => {
