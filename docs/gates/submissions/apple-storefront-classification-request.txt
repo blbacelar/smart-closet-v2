@@ -26,12 +26,13 @@ Please confirm which of these contracts Apple would accept for the Canadian stor
 
 For the accepted option, please also confirm the permitted behavior for purchase, restore, account management, cancellation, renewal disclosure, refund/revocation, and a provider-initiated stop-sale or wind-down. Fitly will not enable production billing until its product, legal, tax, privacy, and storefront approvals all describe the same contract.
 
-Supporting implementation facts:
+Current implementation and required production invariants:
 
-- Membership and credit balances are server-authoritative.
-- Grants use immutable double-entry journal postings and provider-period idempotency.
-- Refund or revocation cannot create a negative balance or claw earned credits back from an innocent counterparty.
-- A lapsed member retains history, balance visibility, account deletion, and the ability to finish or dispute an already accepted physical handoff, but cannot start a new marketplace transaction.
+- Current development membership and credit balance mutations are server-authoritative.
+- Existing development grants use immutable double-entry journal postings.
+- C19 provider-event ownership, provider-period idempotency, and paid refund/revocation handling are not implemented.
+- Before billing is enabled, the approved production design must prevent a refund or revocation from creating a negative balance or clawing earned credits back from an innocent counterparty.
+- The proposed lapse behavior retains history, balance visibility, account deletion, and the ability to finish or dispute an already accepted physical handoff, but prevents a new marketplace transaction.
 - Production billing is currently disabled; development activation is no-charge.
 
 We can provide a review account, build, terms, disclosures, and lifecycle diagrams after the appropriate developer account and submission channel are available.

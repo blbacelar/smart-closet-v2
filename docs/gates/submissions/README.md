@@ -19,8 +19,8 @@ or merged is not send authorization.
 
 | Draft ID | Counterparty | Authorized destination | File | SHA-256 | Status |
 | --- | --- | --- | --- | --- | --- |
-| `gate-c-apple-v1` | Apple App Review / Developer Support | Authenticated Apple/App Store Connect case chosen by the account owner | `apple-storefront-classification-request.txt` | `3010bc9d7e2e3e9fc12a7fc6a0e899a39a8556effba5379cc73e8dd499ca0abb` | Drafted; not approved; not sent |
-| `gate-c-google-v1` | Google Play policy support | Authenticated Play Console support case chosen by the account owner | `google-play-storefront-classification-request.txt` | `e207b6392e7f7c8823ddf30ecb1ce99c121cfd6e3100009d25917aa7cab16016` | Drafted; not approved; not sent |
+| `gate-c-apple-v1` | Apple App Review / Developer Support | Authenticated Apple/App Store Connect case chosen by the account owner | `apple-storefront-classification-request.txt` | `acbb2c9d85424c397677b191db12757adfcdb0ceb41fe5c35b50432799108325` | Drafted; not approved; not sent |
+| `gate-c-google-v1` | Google Play policy support | Authenticated Play Console support case chosen by the account owner | `google-play-storefront-classification-request.txt` | `0b77b6471b62500acbe7256cd5a43b607eb65dac14c72e09f29e78ef55aca5a0` | Drafted; not approved; not sent |
 | `gate-b-counsel-tax-v1` | Qualified Canadian/B.C. legal counsel and Canadian tax/accounting adviser | Recipients selected and verified by the founder | `canadian-legal-tax-review-request.md` | `9195ca5473f28e91fd205afa3c03ec353de58881732ff33860c88aa7184d5c87` | Drafted; not approved; not sent |
 
 No destination address, account, or named professional is currently recorded.
