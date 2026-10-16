@@ -62,14 +62,17 @@ insert into public.marketplace_listings (
   false, false, true, null, 'Delete fixture area'
 );
 insert into public.marketplace_offers (
-  id, listing_id, buyer_id, seller_id, mode, status
+  id, listing_id, buyer_id, seller_id, mode
 ) values (
   '50000000-0000-4000-8000-000000000020',
   '40000000-0000-4000-8000-000000000020',
   '00000000-0000-4000-8000-000000000022',
   '00000000-0000-4000-8000-000000000020',
-  'giveaway', 'rejected'
+  'giveaway'
 );
+update public.marketplace_offers
+set status = 'rejected'
+where id = '50000000-0000-4000-8000-000000000020';
 insert into public.marketplace_messages (offer_id, sender_id, body)
 values (
   '50000000-0000-4000-8000-000000000020',
@@ -94,24 +97,33 @@ insert into public.marketplace_listings (
   false, false, true, null, 'Completed sale area'
 );
 insert into public.marketplace_offers (
-  id, listing_id, buyer_id, seller_id, mode, status
+  id, listing_id, buyer_id, seller_id, mode
 ) values (
   '50000000-0000-4000-8000-000000000120',
   '40000000-0000-4000-8000-000000000120',
   '00000000-0000-4000-8000-000000000022',
   '00000000-0000-4000-8000-000000000020',
-  'giveaway', 'accepted'
+  'giveaway'
 );
 insert into public.marketplace_transactions (
-  id, offer_id, listing_id, seller_id, buyer_id, mode, status, completed_at
+  id, offer_id, listing_id, seller_id, buyer_id, mode
 ) values (
   '70000000-0000-4000-8000-000000000120',
   '50000000-0000-4000-8000-000000000120',
   '40000000-0000-4000-8000-000000000120',
   '00000000-0000-4000-8000-000000000020',
   '00000000-0000-4000-8000-000000000022',
-  'giveaway', 'completed', now()
+  'giveaway'
 );
+update public.marketplace_offers
+set status = 'accepted'
+where id = '50000000-0000-4000-8000-000000000120';
+update public.marketplace_transactions
+set status = 'completed',
+    buyer_confirmed_at = now(),
+    seller_confirmed_at = now(),
+    completed_at = now()
+where id = '70000000-0000-4000-8000-000000000120';
 insert into public.analytics_events (user_id, event_name)
 values ('00000000-0000-4000-8000-000000000020', 'app_opened');
 insert into public.marketplace_credit_accounts (user_id, available_balance)
@@ -366,14 +378,20 @@ insert into public.marketplace_listings (
   ('40000000-0000-4000-8000-000000000028', '20000000-0000-4000-8000-000000000028',
    '00000000-0000-4000-8000-000000000028', false, false, true, 'Dual 28');
 insert into public.marketplace_offers (
-  id, listing_id, buyer_id, seller_id, mode, message, status
+  id, listing_id, buyer_id, seller_id, mode, message
 ) values
   ('50000000-0000-4000-8000-000000000027', '40000000-0000-4000-8000-000000000028',
    '00000000-0000-4000-8000-000000000027', '00000000-0000-4000-8000-000000000028',
-   'giveaway', 'Delete both 27', 'rejected'),
+   'giveaway', 'Delete both 27'),
   ('50000000-0000-4000-8000-000000000028', '40000000-0000-4000-8000-000000000027',
    '00000000-0000-4000-8000-000000000028', '00000000-0000-4000-8000-000000000027',
-   'giveaway', 'Delete both 28', 'rejected');
+   'giveaway', 'Delete both 28');
+update public.marketplace_offers
+set status = 'rejected'
+where id in (
+  '50000000-0000-4000-8000-000000000027',
+  '50000000-0000-4000-8000-000000000028'
+);
 create temporary table dual_request_27 as
 select * from public.account_deletion_start('00000000-0000-4000-8000-000000000027');
 create temporary table dual_request_28 as
