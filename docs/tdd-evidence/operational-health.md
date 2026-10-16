@@ -32,11 +32,17 @@ direct table inserts could bypass privacy intent, unclaimed notification work
 was invisible, and cron used different thresholds from the endpoint. New RED
 tests reproduced each issue before the fixes.
 
+The re-review then exposed PostgreSQL three-valued logic in the analytics RPC:
+`NOT NULL` did not enter a PL/pgSQL `IF`, so a modified client could omit a
+required property. Five new pgTAP assertions reproduced the bypass. The RPC now
+accepts only an explicit `TRUE` validation result and rejects both `FALSE` and
+`NULL`.
+
 ## GREEN
 
 - Focused Jest: handler, migration, and observability privacy contracts pass.
 - TypeScript: `tsc --noEmit` passes.
-- Isolated database: schema lint, legacy forward migration, RLS 78/78, all
+- Isolated database: schema lint, legacy forward migration, RLS 83/83, all
   marketplace concurrency/deletion suites, and operational health 31/31 pass.
 - The operational drill produces one aggregate warning snapshot, exposes no IDs,
   and deletes snapshots older than 30 days.

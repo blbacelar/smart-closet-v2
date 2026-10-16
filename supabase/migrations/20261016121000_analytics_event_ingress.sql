@@ -73,7 +73,7 @@ begin
   if v_user_id is null then
     raise insufficient_privilege using message = 'Authentication required';
   end if;
-  if not private.analytics_properties_valid(p_event_name, v_properties) then
+  if private.analytics_properties_valid(p_event_name, v_properties) is not true then
     raise invalid_parameter_value using message = 'Invalid analytics event properties';
   end if;
   insert into public.analytics_events (user_id, event_name, properties)

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(78);
+select plan(83);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -449,6 +449,34 @@ select throws_ok(
   $$select public.record_analytics_event('app_opened', '{"source":"secret-token"}')$$,
   '22023', 'Invalid analytics event properties',
   'server validation rejects sensitive-looking values from modified clients'
+);
+select throws_ok(
+  $$select public.record_analytics_event('auth_signed_in', '{}'::jsonb)$$,
+  '22023', 'Invalid analytics event properties',
+  'server validation rejects an auth event without its required method'
+);
+select throws_ok(
+  $$select public.record_analytics_event('garment_uploaded', '{}'::jsonb)$$,
+  '22023', 'Invalid analytics event properties',
+  'server validation rejects a garment event without its required category mode'
+);
+select throws_ok(
+  $$select public.record_analytics_event('tryon_requested', '{}'::jsonb)$$,
+  '22023', 'Invalid analytics event properties',
+  'server validation rejects a try-on request without its required cache flag'
+);
+select throws_ok(
+  $$select public.record_analytics_event('tryon_completed', '{}'::jsonb)$$,
+  '22023', 'Invalid analytics event properties',
+  'server validation rejects a try-on completion without its required provider'
+);
+select throws_ok(
+  $$select public.record_analytics_event(
+    'app_error',
+    '{"name":"Error","operation":"render","fatal":false}'::jsonb
+  )$$,
+  '22023', 'Invalid analytics event properties',
+  'server validation rejects a partial error event without its required code'
 );
 
 select results_eq(
