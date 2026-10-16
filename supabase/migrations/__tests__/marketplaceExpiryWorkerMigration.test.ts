@@ -26,7 +26,7 @@ describe('marketplace expiry worker migration', () => {
 
     expect(body).toBeDefined();
     expect(body).toMatch(
-      /marketplace_lock_listings[\s\S]*?account_deletion_lock_subjects[\s\S]*?for update/,
+      /marketplace_try_lock_listings[\s\S]*?account_deletion_try_lock_subjects[\s\S]*?for update nowait/,
     );
     expect(body).toMatch(/order by[\s\S]*?limit p_limit/);
     expect(body).not.toMatch(/for update skip locked[\s\S]*?marketplace_lock_listings/);
@@ -39,6 +39,8 @@ describe('marketplace expiry worker migration', () => {
     expect(sql).toContain("'expiration_release'");
     expect(sql).toContain("'transaction:' || v_tx.id::text || ':expire'");
     expect(sql).toContain('on conflict (idempotency_key) do nothing');
+    expect(sql).toContain('private.marketplace_expiry_failures');
+    expect(sql).toContain('items_deferred');
   });
 
   it('restricts execution to the service role and schedules the worker', () => {

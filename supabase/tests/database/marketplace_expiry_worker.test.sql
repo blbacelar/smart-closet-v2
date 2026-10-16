@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(25);
+select plan(31);
 
 select has_column('marketplace_offers', 'expired_at', 'offers record their expiry time');
 select has_column('marketplace_transactions', 'expired_at', 'transactions record their expiry time');
@@ -216,6 +216,66 @@ select is(
   (select count(*)::integer from public.marketplace_credit_ledger
    where kind = 'expiration_release'),
   1, 'a worker retry cannot duplicate the expiry release'
+);
+
+update public.marketplace_config
+set offers_enabled = true, offer_ttl = interval '7 days'
+where id;
+insert into auth.users (id, email)
+values
+  ('00000000-0000-4000-8000-000000000057', 'expiry-poison-seller@example.com'),
+  ('00000000-0000-4000-8000-000000000058', 'expiry-poison-buyer@example.com');
+insert into public.marketplace_memberships (user_id, expires_at)
+values
+  ('00000000-0000-4000-8000-000000000057', now() + interval '1 year'),
+  ('00000000-0000-4000-8000-000000000058', now() + interval '1 year');
+insert into public.garments (
+  id, user_id, original_path, image_hash, name, category, status
+) values
+  ('20000000-0000-4000-8000-000000000057', '00000000-0000-4000-8000-000000000057',
+   '00000000-0000-4000-8000-000000000057/poison.jpg', 'expiry-57-a', 'Poison offer', 'top', 'ready'),
+  ('20000000-0000-4000-8000-000000000157', '00000000-0000-4000-8000-000000000057',
+   '00000000-0000-4000-8000-000000000057/later.jpg', 'expiry-57-b', 'Later offer', 'top', 'ready');
+insert into public.marketplace_listings (
+  id, garment_id, seller_id, accepts_credits, accepts_swap,
+  is_giveaway, credit_price, pickup_area
+) values
+  ('40000000-0000-4000-8000-000000000057', '20000000-0000-4000-8000-000000000057',
+   '00000000-0000-4000-8000-000000000057', true, false, false, 10, 'Poison area'),
+  ('40000000-0000-4000-8000-000000000157', '20000000-0000-4000-8000-000000000157',
+   '00000000-0000-4000-8000-000000000057', false, false, true, null, 'Later area');
+insert into public.marketplace_offers (
+  id, listing_id, buyer_id, seller_id, mode, credit_amount, created_at
+) values
+  ('50000000-0000-4000-8000-000000000057', '40000000-0000-4000-8000-000000000057',
+   '00000000-0000-4000-8000-000000000058', '00000000-0000-4000-8000-000000000057',
+   'credits', 10, now() - interval '9 days'),
+  ('50000000-0000-4000-8000-000000000157', '40000000-0000-4000-8000-000000000157',
+   '00000000-0000-4000-8000-000000000058', '00000000-0000-4000-8000-000000000057',
+   'giveaway', null, now() - interval '8 days');
+
+create temporary table poison_result as
+select * from public.marketplace_expire_stale(now(), 100);
+select is((select offers_expired from poison_result), 1, 'a later healthy candidate still expires');
+select is((select items_deferred from poison_result), 1, 'the poison candidate is isolated and deferred');
+select is(
+  (select status from public.marketplace_offers where id = '50000000-0000-4000-8000-000000000057'),
+  'pending', 'the poison candidate is not partially mutated'
+);
+select is(
+  (select status from public.marketplace_offers where id = '50000000-0000-4000-8000-000000000157'),
+  'expired', 'a poison row does not roll back a later expiry'
+);
+select ok(
+  exists(select 1 from private.marketplace_expiry_failures
+         where resource_type = 'offer'
+           and resource_id = '50000000-0000-4000-8000-000000000057'
+           and attempt_count = 1 and next_retry_at > now()),
+  'the poison row receives persisted retry backoff'
+);
+select is(
+  (select items_deferred from public.marketplace_expire_stale(now(), 100)),
+  0, 'an immediate cron retry skips the backed-off poison row'
 );
 
 select throws_ok(
