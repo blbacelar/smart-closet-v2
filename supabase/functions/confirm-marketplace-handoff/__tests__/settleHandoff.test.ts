@@ -4,7 +4,7 @@ const originalOnly: AcquisitionManifestItem = {
   acquiredGarmentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   sourceOriginalPath: 'seller/original.jpg',
   sourceCleanPath: null,
-  destinationOriginalPath: 'buyer/acquired/item/original',
+  destinationOriginalPath: 'buyer/acquired/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/original',
   destinationCleanPath: null,
 };
 
@@ -39,8 +39,8 @@ describe('settleHandoff', () => {
         acquiredGarmentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         sourceOriginalPath: 'other/original.jpg',
         sourceCleanPath: 'other/clean.png',
-        destinationOriginalPath: 'seller/acquired/item/original',
-        destinationCleanPath: 'seller/acquired/item/clean',
+        destinationOriginalPath: 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/original',
+        destinationCleanPath: 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/clean',
       },
     ]);
 
@@ -48,9 +48,9 @@ describe('settleHandoff', () => {
       'completed',
     );
     expect(deps.copyObject.mock.calls).toEqual([
-      ['seller/original.jpg', 'buyer/acquired/item/original'],
-      ['other/original.jpg', 'seller/acquired/item/original'],
-      ['other/clean.png', 'seller/acquired/item/clean'],
+      ['seller/original.jpg', 'buyer/acquired/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/original'],
+      ['other/original.jpg', 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/original'],
+      ['other/clean.png', 'seller/acquired/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/clean'],
     ]);
     expect(deps.finalize).toHaveBeenCalledWith('transaction-1');
     expect(deps.copyObject.mock.invocationCallOrder.at(-1)).toBeLessThan(

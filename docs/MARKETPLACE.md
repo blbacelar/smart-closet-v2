@@ -25,7 +25,7 @@ Official HomeExchange references used for the adaptation:
 2. Open a ready garment in **Closet**, choose **List in marketplace**, select credits, swap, and/or give-away, then provide a general pickup area.
 3. A second member opens the listing and sends exactly one type of offer. Credit offers reserve the listing price immediately; swap offers identify one active swap listing owned by the buyer.
 4. Both participants can use the offer's private chat to agree on a safe public pickup plan. The owner accepts or declines from **Market → Activity**. Accepting atomically reserves the garment or both swap garments and releases competing offers.
-5. At the in-person handoff, both members confirm. Only the second confirmation completes the transaction and transfers reserved credits to the seller.
+5. At the in-person handoff, both members confirm. The second confirmation prepares recipient-owned image copies; only after Storage verifies those copies does one atomic finalizer transfer reserved credits, complete the listings and add sanitized garments to the recipient closet. Swaps create one copy in each closet.
 6. Before either member confirms, either participant can cancel; credits are released exactly once and the listing can receive another offer.
 
 ## Server-authoritative state contract
@@ -39,7 +39,9 @@ The database, rather than the mobile client, owns all marketplace transitions:
 - A private, immutable terms record captures the accepted listing, mode, credit amount, participant parties, and swap listing. It deliberately excludes messages, media, and precise pickup information.
 - Repeating an accepted response returns the original transaction. Repeating rejection or cancellation is a safe no-op, so network retries cannot duplicate value movement.
 
-The database expiry worker enforces offer and handoff deadlines in bounded batches. Overlapping cron runs return immediately, while each candidate uses nonblocking marketplace/deletion gates and row locks. A busy or malformed item receives private retry backoff without rolling back healthy items later in the batch. Pending offers release reservations once. An overdue handoff with no confirmation expires and reopens its listing set; a handoff with either participant already confirmed becomes `disputed` and keeps credits/listings frozen for the future dispute resolver. Acquired-garment copies remain a separate completion slice.
+The database expiry worker enforces offer and handoff deadlines in bounded batches. Overlapping cron runs return immediately, while each candidate uses nonblocking marketplace/deletion gates and row locks. A busy or malformed item receives private retry backoff without rolling back healthy items later in the batch. Pending offers release reservations once. An overdue handoff with no confirmation expires and reopens its listing set; a handoff with either participant already confirmed becomes `disputed` and keeps credits/listings frozen for the future dispute resolver.
+
+Completed handoffs never reassign a seller's private garment or Storage path. The `confirm-marketplace-handoff` Edge Function copies only the garment image assets into a deterministic path owned by the recipient. PostgreSQL then creates a sanitized closet row with safe descriptive metadata and restricted provenance. Copy/finalizer retries cannot duplicate garments or credit movement, and an incomplete media copy leaves settlement frozen rather than exposing a broken closet item.
 
 ## Operational switches
 
