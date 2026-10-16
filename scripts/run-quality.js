@@ -1,7 +1,5 @@
 const { spawnSync } = require('node:child_process');
 
-const SUPABASE_DB_EXCLUSIONS = 'gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor';
-
 const gates = [
   {
     name: 'Typecheck',
@@ -64,80 +62,14 @@ function runGate(gate) {
   }
 }
 
-function isDatabaseRunning() {
-  const statusCheck = {
-    command: 'supabase',
-    args: ['status'],
-  };
-  const result = spawnSync(statusCheck.command, statusCheck.args, {
-    stdio: 'ignore',
-    shell: false,
-  });
-  return !result.error && result.status === 0;
-}
-
-let databaseStartedByRunner = false;
-let cleanupInProgress = false;
-
-function stopManagedDatabase() {
-  if (!databaseStartedByRunner || cleanupInProgress) return;
-  cleanupInProgress = true;
-  try {
-    runGate({
-      name: 'Stop managed Supabase database',
-      display: 'supabase stop --no-backup',
-      command: 'supabase',
-      args: ['stop', '--no-backup'],
-    });
-    databaseStartedByRunner = false;
-  } finally {
-    cleanupInProgress = false;
-  }
-}
-
-for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]]) {
-  process.once(signal, () => {
-    try {
-      stopManagedDatabase();
-    } catch (error) {
-      process.stderr.write(`[quality] ${error.message}\n`);
-    }
-    process.exit(exitCode);
-  });
-}
-
 try {
   for (const gate of gates) runGate(gate);
 
-  if (!isDatabaseRunning()) {
-    databaseStartedByRunner = true;
-    runGate({
-      name: 'Start managed Supabase database',
-      display: `supabase start -x ${SUPABASE_DB_EXCLUSIONS}`,
-      command: 'supabase',
-      args: ['start', '-x', SUPABASE_DB_EXCLUSIONS],
-    });
-  }
-
   runGate({
-    name: 'Marketplace party legacy upgrade',
+    name: 'Isolated database upgrade, ledger, concurrency, and RLS',
     display: 'npm run test:db:upgrade',
     command: 'npm',
     args: ['run', 'test:db:upgrade'],
-  });
-
-  runGate({
-    name: 'Apply pending local database migrations',
-    display: 'supabase migration up --local',
-    command: 'supabase',
-    args: ['migration', 'up', '--local'],
-  });
-
-  runGate({
-    name: 'Database RLS policies',
-    display: 'npm run test:db',
-    command: 'npm',
-    args: ['run', 'test:db'],
   });
 
   process.stdout.write('\n[quality] All quality gates passed.\n');
@@ -147,11 +79,4 @@ try {
     : new QualityGateError(error instanceof Error ? error.message : 'Unknown quality failure.');
   process.stderr.write(`[quality] ${failure.message}\n`);
   process.exitCode = failure.exitCode;
-} finally {
-  try {
-    stopManagedDatabase();
-  } catch (error) {
-    process.stderr.write(`[quality] ${error.message}\n`);
-    process.exitCode = error instanceof QualityGateError ? error.exitCode : 1;
-  }
 }

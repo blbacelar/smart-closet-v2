@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C02 verified locally)
+**Status:** ECC-reviewed; execution in progress (C01-C03 merged; C04 implementation in review)
 
 **Created:** 2026-10-15
 
@@ -104,7 +104,7 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 | C01 | CI/advisory remediation, deterministic Supabase CI, marketplace coverage ownership; `.github/workflows`, `package*.json` | none | #67 | Two consecutive green CI runs; marketplace included in coverage |
 | C02 | Minimal EAS dev-client/staging profiles and seeded two-account device harness; `app.json`, `eas.json`, E2E config | C01, Gate D for signed builds | #34 rewrite | Verified in an installed SDK 57 iOS simulator build with an idempotent two-account seed and Maestro smoke; signed physical build remains Gate D/C24 |
 | C03 | Pseudonymous marketplace party identity and FK migration; `supabase/migrations` | C01 | #48 + #71 | Forward migration/RLS tests; old data backfilled |
-| C04 | Double-entry account/journal/posting/cohort/reversal foundation and reconciliation | C03, Gate A for final cohort policy | #48 rewrite | Balanced journal and concurrency pgTAP tests |
+| C04 | Double-entry account/journal/posting/cohort/reversal foundation and reconciliation | C03, Gate A for final cohort policy | #48 + #73 | Balanced journal and concurrency pgTAP tests |
 | C05 | Deletion tombstone, write barrier, durable checkpoints, private-media purge | C03, C04, Gate B retention rules | #30 replacement/new issue | Deletion races with uploads/workers safely |
 | C06 | Retention expiry/hold release, backup re-deletion, purge evidence | C05, Gate B | same as C05 | Scheduled purge and restore/re-delete drill |
 | C07 | Offer/transaction state contract, timeout policy, immutable snapshots, kill-switch semantics | C04, C05 | #41/#46 rewrite | State transitions and deletion tombstone races tested |
