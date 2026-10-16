@@ -25,7 +25,7 @@ describe('GitHub quality CI', () => {
     expect(workflow).toContain('run: npm ci');
     expect(workflow).toContain('run: npm run typecheck');
     expect(workflow).toContain('run: npm run test:coverage -- --ci');
-    expect(workflow).toContain('run: npx expo-doctor');
+    expect(workflow).toContain('run: npm exec --offline expo-doctor');
     expect(workflow).toContain('run: npm run build:web');
     expect(workflow).toContain('run: npm audit --omit=dev --audit-level=critical');
   });
@@ -62,6 +62,7 @@ describe('manual EAS build workflow', () => {
 
 describe('dependency automation', () => {
   const packageJson = JSON.parse(read('package.json')) as {
+    devDependencies?: Record<string, string>;
     overrides?: Record<string, string>;
     scripts?: Record<string, string>;
   };
@@ -81,7 +82,7 @@ describe('dependency automation', () => {
     expect(packageJson.overrides?.['shell-quote']).toBe('1.11.0');
   });
 
-  it('provides one local command for the non-Docker CI gates', () => {
+  it('provides one local command for every CI gate', () => {
     expect(packageJson.scripts?.quality).toBe('node scripts/run-quality.js');
 
     const qualityRunner = read('scripts/run-quality.js');
@@ -89,12 +90,23 @@ describe('dependency automation', () => {
       'npm run typecheck',
       'npm run test:coverage -- --ci',
       'npm run check:pii',
-      'npx expo-doctor',
+      'npm exec --offline expo-doctor',
       'npm run build:web',
       'npm audit --omit=dev --audit-level=critical',
+      'npm run test:db',
     ]) {
       expect(qualityRunner).toContain(command);
     }
+  });
+
+  it('locks Expo Doctor instead of downloading an untracked release', () => {
+    expect(packageJson.devDependencies?.['expo-doctor']).toBe('1.20.4');
+  });
+
+  it('starts only the local services required by the pgTAP database suite', () => {
+    expect(read('.github/workflows/ci.yml')).toContain(
+      'supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor',
+    );
   });
 });
 
