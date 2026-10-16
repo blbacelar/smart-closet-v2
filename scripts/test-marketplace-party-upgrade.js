@@ -159,6 +159,61 @@ async function verifyDeletionWriteFence(databaseUrl) {
   }
 }
 
+async function verifyDiscoveryDeletionWriteFence(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000106', 'discovery-deletion-race@example.com');
+    `,
+    'Create the discovery deletion-fence fixture',
+  );
+
+  const deletion = concurrentQuery(
+    databaseUrl,
+    `begin;
+     select * from public.account_deletion_start(
+       '00000000-0000-4000-8000-000000000106'
+     );
+     select pg_sleep(0.75);
+     commit;`,
+  );
+  await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+  const locationWrite = concurrentQuery(
+    databaseUrl,
+    `begin;
+     set local role authenticated;
+     select set_config(
+       'request.jwt.claim.sub',
+       '00000000-0000-4000-8000-000000000106',
+       true
+     );
+     select public.marketplace_set_discovery_location(
+       49.2827, -123.1207, 'Racing area', 'device'
+     );
+     commit;`,
+  );
+  const [deletionResult, writeResult] = await Promise.all([deletion, locationWrite]);
+  if (deletionResult.code !== 0) {
+    throw new UpgradeTestError(`Discovery deletion fixture failed: ${deletionResult.stderr}`);
+  }
+  if (!writeResult.stderr.includes('Account deletion in progress')) {
+    throw new UpgradeTestError('A discovery-location write crossed the account-deletion tombstone.');
+  }
+  const remaining = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-c',
+      `select count(*) from private.marketplace_member_locations
+       where user_id = '00000000-0000-4000-8000-000000000106';`,
+    ],
+    'Verify deletion removed the racing discovery location',
+  ).trim();
+  if (remaining !== '0') {
+    throw new UpgradeTestError('Private discovery geography survived account-deletion start.');
+  }
+}
+
 async function verifyCommittedAuthDeletion(databaseUrl) {
   psql(
     databaseUrl,
@@ -1393,7 +1448,9 @@ async function main() {
     );
     run(
       'supabase',
-      withWorkdir(['db', 'lint', '--local'], workspace),
+      withWorkdir([
+        'db', 'lint', '--local', '--schema', 'public,private', '--level', 'warning', '--fail-on', 'error',
+      ], workspace),
       'Lint the isolated upgraded database',
     );
     run(
@@ -1475,6 +1532,15 @@ async function main() {
       ], workspace),
       'Verify private push lifecycle and notification outbox leases',
     );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/marketplace_nearby.test.sql'),
+      ], workspace),
+      'Verify private coarse marketplace discovery',
+    );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
     await verifyConcurrentNotificationClaims(latestDatabaseUrl);
     await verifyNotificationDeletionAuthorizationFence(latestDatabaseUrl);
@@ -1495,6 +1561,7 @@ async function main() {
     await verifyCrossedSwapCreation(latestDatabaseUrl);
     await verifyLegacyWriterDeletionLockOrder(latestDatabaseUrl);
     await verifyDeletionWriteFence(latestDatabaseUrl);
+    await verifyDiscoveryDeletionWriteFence(latestDatabaseUrl);
     await verifyCommittedAuthDeletion(latestDatabaseUrl);
     run(
       'supabase',

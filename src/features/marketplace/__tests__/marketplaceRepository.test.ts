@@ -32,6 +32,24 @@ const listingRow = {
   created_at: '2026-10-13T10:00:00Z',
 };
 
+const nearbyListingRows = [
+  { ...listingRow, distance_km: 2 },
+  {
+    ...listingRow,
+    id: '11111111-1111-4111-8111-111111111112',
+    garment_id: '22222222-2222-4222-8222-222222222223',
+    created_at: '2026-10-12T10:00:00Z',
+    distance_km: 5,
+  },
+  {
+    ...listingRow,
+    id: '11111111-1111-4111-8111-111111111113',
+    garment_id: '22222222-2222-4222-8222-222222222224',
+    created_at: '2026-10-11T10:00:00Z',
+    distance_km: 8,
+  },
+];
+
 const messageRow = {
   id: '66666666-6666-4666-8666-666666666666',
   offer_id: '44444444-4444-4444-8444-444444444444',
@@ -78,6 +96,7 @@ function createClient() {
   const rpc: jest.Mock = jest.fn(async (name: string) => {
     if (name === 'marketplace_my_summary') return { data: [summaryRow], error: null };
     if (name === 'marketplace_discover_listings') return { data: [listingRow], error: null };
+    if (name === 'marketplace_listings_nearby') return { data: nearbyListingRows, error: null };
     if (name === 'marketplace_activate_membership') {
       return { data: [{ ...summaryRow, credits_granted: 500 }], error: null };
     }
@@ -140,6 +159,79 @@ describe('marketplaceRepository', () => {
       }),
     ]);
     expect(mocks.createSignedUrl).toHaveBeenCalledWith('seller/jacket-clean.png', 3600);
+  });
+
+  it('stores a server-quantized discovery location and can clear it', async () => {
+    const mocks = createClient();
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.setDiscoveryLocation({
+      latitude: 49.2827291,
+      longitude: -123.1207375,
+      areaLabel: 'Downtown Vancouver',
+      source: 'device',
+    })).resolves.toBeUndefined();
+    await expect(repository.clearDiscoveryLocation()).resolves.toBeUndefined();
+
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_set_discovery_location', {
+      p_latitude: 49.2827291,
+      p_longitude: -123.1207375,
+      p_area_label: 'Downtown Vancouver',
+      p_source: 'device',
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_clear_discovery_location');
+  });
+
+  it('loads a bounded nearby page and returns an opaque keyset cursor', async () => {
+    const mocks = createClient();
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.listNearbyListings({ radiusKm: 25, limit: 2 })).resolves.toEqual({
+      items: [
+        expect.objectContaining({ id: nearbyListingRows[0].id, distanceKm: 2 }),
+        expect.objectContaining({ id: nearbyListingRows[1].id, distanceKm: 5 }),
+      ],
+      nextCursor: {
+        distanceKm: 5,
+        createdAt: nearbyListingRows[1].created_at,
+        id: nearbyListingRows[1].id,
+      },
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_listings_nearby', {
+      p_radius_km: 25,
+      p_limit: 3,
+      p_cursor_distance_km: null,
+      p_cursor_created_at: null,
+      p_cursor_id: null,
+    });
+    expect(mocks.createSignedUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes every nearby cursor component back to the server', async () => {
+    const mocks = createClient();
+    mocks.rpc.mockImplementation(async (name: string) => (
+      name === 'marketplace_listings_nearby'
+        ? { data: [], error: null }
+        : { data: null, error: null }
+    ));
+    const repository = createMarketplaceRepository(mocks.client as never);
+    const cursor = {
+      distanceKm: 5,
+      createdAt: '2026-10-12T10:00:00Z',
+      id: '11111111-1111-4111-8111-111111111112',
+    };
+
+    await expect(repository.listNearbyListings({ radiusKm: 10, limit: 12, cursor })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_listings_nearby', {
+      p_radius_km: 10,
+      p_limit: 13,
+      p_cursor_distance_km: 5,
+      p_cursor_created_at: cursor.createdAt,
+      p_cursor_id: cursor.id,
+    });
   });
 
   it('publishes a closet garment using only validated listing fields', async () => {
