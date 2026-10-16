@@ -139,6 +139,10 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 
 All code slices use the strongest available review for schema, ledger, deletion, payment, authorization, and release-boundary changes; routine UI/test implementation may use the default model but must pass the same ECC verification gates.
 
+The founder/counsel/storefront decision template for Gates A-C is
+[`docs/gates/gate-a-c-decision-pack.md`](../docs/gates/gate-a-c-decision-pack.md).
+Its numerical values are recommendations, not authority to enable billing.
+
 ---
 
 ## Step 1 — Restore a Trustworthy Engineering and Device-Test Baseline

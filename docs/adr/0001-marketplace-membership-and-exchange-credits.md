@@ -5,7 +5,7 @@
 - Required approvers: Product, Canadian legal counsel, Canadian tax/accounting adviser, security/privacy owner
 - Last reviewed: 2026-10-01
 - Supersedes: nothing until accepted
-- Related: GitHub #27, #36–#48; `plans/marketplace-loops-economy.md`; `plans/marketplace-economics-scenarios.md`
+- Related: GitHub #27, #36–#48; `plans/marketplace-loops-economy.md`; `plans/marketplace-economics-scenarios.md`; `docs/gates/gate-a-c-decision-pack.md`
 
 This is a decision record, not legal or tax advice. The no-charge development implementation may be exercised for product testing. Items marked **Required** must have written evidence before this ADR can become Accepted, before real money is collected, or before a public marketplace launch.
 
@@ -48,6 +48,11 @@ No purchase CTA may ship while any **Required** cell is unresolved.
 Apple currently requires non-IAP payment methods for physical goods consumed outside the app, while digital features generally fall under in-app purchase rules. Google Play similarly excludes physical goods from Play billing but treats in-app virtual currency and digital subscriptions as Play-billed products. Because Fitly membership combines access with units redeemable for physical garments, engineering will not infer the correct rail from either general rule.
 
 ## Required product/economics approval
+
+The current evidence-based recommendation and human sign-off template are in
+[`docs/gates/gate-a-c-decision-pack.md`](../gates/gate-a-c-decision-pack.md).
+That document narrows the choices but does not clear a gate without the recorded
+approvals it names.
 
 - [ ] Select annual price, grant allotment, and maximum annual issuance from a signed scenario memo. The exploratory scenarios in `plans/marketplace-economics-scenarios.md` are not prices.
 - [ ] Define new-member, renewal, grace, cancellation, refund, revocation, chargeback, family-sharing, account-merge, and wind-down behavior.
