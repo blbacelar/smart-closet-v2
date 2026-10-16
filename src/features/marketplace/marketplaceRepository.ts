@@ -169,7 +169,9 @@ export type MarketplaceRepository = {
   respondToOffer: (offerId: string, accept: boolean) => Promise<string | null>;
   withdrawOffer: (offerId: string) => Promise<void>;
   listTransactions: () => Promise<MarketplaceTransaction[]>;
-  confirmHandoff: (transactionId: string) => Promise<'awaiting_handoff' | 'completed'>;
+  confirmHandoff: (transactionId: string) => Promise<
+    'awaiting_handoff' | 'settlement_pending' | 'completed'
+  >;
   cancelTransaction: (transactionId: string) => Promise<void>;
   listMessages: (offerId: string) => Promise<MarketplaceMessage[]>;
   sendMessage: (offerId: string, body: string) => Promise<string>;
@@ -327,11 +329,13 @@ export function createMarketplaceRepository(client: SupabaseClient): Marketplace
     },
 
     async confirmHandoff(transactionId) {
-      const { data, error } = await client.rpc('marketplace_confirm_handoff', {
-        p_transaction_id: transactionId,
+      const { data, error } = await client.functions.invoke('confirm-marketplace-handoff', {
+        body: { transactionId },
       });
       throwIfError(error);
-      return z.enum(['awaiting_handoff', 'completed']).parse(data);
+      return z.object({
+        state: z.enum(['awaiting_handoff', 'settlement_pending', 'completed']),
+      }).parse(data).state;
     },
 
     async cancelTransaction(transactionId) {

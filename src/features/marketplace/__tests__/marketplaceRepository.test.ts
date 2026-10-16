@@ -90,7 +90,6 @@ function createClient() {
     if (name === 'marketplace_my_offers') return { data: [offerRow], error: null };
     if (name === 'marketplace_respond_to_offer') return { data: transactionRow.id, error: null };
     if (name === 'marketplace_my_transactions') return { data: [transactionRow], error: null };
-    if (name === 'marketplace_confirm_handoff') return { data: 'completed', error: null };
     if (name === 'marketplace_my_messages') return { data: [messageRow], error: null };
     if (name === 'marketplace_send_message') return { data: messageRow.id, error: null };
     return { data: null, error: null };
@@ -99,12 +98,18 @@ function createClient() {
     data: { signedUrl: 'https://signed.example/jacket' },
     error: null,
   });
+  const invoke = jest.fn().mockResolvedValue({
+    data: { state: 'completed' },
+    error: null,
+  });
   return {
     client: {
       rpc,
+      functions: { invoke },
       storage: { from: jest.fn(() => ({ createSignedUrl })) },
     },
     rpc,
+    invoke,
     createSignedUrl,
   };
 }
@@ -230,8 +235,8 @@ describe('marketplaceRepository', () => {
     ]);
     await expect(repository.confirmHandoff(transactionRow.id)).resolves.toBe('completed');
     await expect(repository.cancelTransaction(transactionRow.id)).resolves.toBeUndefined();
-    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_confirm_handoff', {
-      p_transaction_id: transactionRow.id,
+    expect(mocks.invoke).toHaveBeenCalledWith('confirm-marketplace-handoff', {
+      body: { transactionId: transactionRow.id },
     });
     expect(mocks.rpc).toHaveBeenCalledWith('marketplace_cancel_transaction', {
       p_transaction_id: transactionRow.id,

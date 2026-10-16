@@ -393,6 +393,186 @@ async function verifyConcurrentMarketplaceExpiry(databaseUrl) {
   }
 }
 
+async function verifyAcquiredGarmentFinalization(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email) values
+        ('00000000-0000-4000-8000-000000000075', 'acquired-race-seller@example.com'),
+        ('00000000-0000-4000-8000-000000000076', 'acquired-race-buyer@example.com');
+      insert into public.marketplace_memberships (user_id, expires_at) values
+        ('00000000-0000-4000-8000-000000000075', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000076', now() + interval '1 year');
+      insert into public.marketplace_credit_accounts (user_id, available_balance)
+      values ('00000000-0000-4000-8000-000000000076', 100);
+      insert into public.marketplace_credit_ledger (
+        user_id, kind, delta_available, idempotency_key, description
+      ) values (
+        '00000000-0000-4000-8000-000000000076', 'adjustment', 100,
+        'acquired-race-opening', 'Acquired garment concurrency fixture'
+      );
+      insert into public.garments (
+        id, user_id, original_path, image_hash, name, category, status
+      ) values
+        ('20000000-0000-4000-8000-000000000075',
+         '00000000-0000-4000-8000-000000000075',
+         '00000000-0000-4000-8000-000000000075/credit.jpg',
+         'acquired-race-credit', 'Acquired race credit', 'top', 'ready'),
+        ('20000000-0000-4000-8000-000000000175',
+         '00000000-0000-4000-8000-000000000075',
+         '00000000-0000-4000-8000-000000000075/giveaway.jpg',
+         'acquired-race-giveaway', 'Acquired race giveaway', 'top', 'ready');
+      insert into public.marketplace_listings (
+        id, garment_id, seller_id, accepts_credits, accepts_swap,
+        is_giveaway, credit_price, pickup_area
+      ) values
+        ('40000000-0000-4000-8000-000000000075',
+         '20000000-0000-4000-8000-000000000075',
+         '00000000-0000-4000-8000-000000000075',
+         true, false, false, 20, 'Acquired race area'),
+        ('40000000-0000-4000-8000-000000000175',
+         '20000000-0000-4000-8000-000000000175',
+         '00000000-0000-4000-8000-000000000075',
+         false, false, true, null, 'Acquired race area');
+
+      begin;
+      set local role authenticated;
+      select set_config(
+        'request.jwt.claim.sub',
+        '00000000-0000-4000-8000-000000000076', true
+      );
+      create temporary table acquired_race_offers as
+      select 'credits' mode, public.marketplace_create_offer(
+        '40000000-0000-4000-8000-000000000075', 'credits', null, null
+      ) id
+      union all select 'giveaway', public.marketplace_create_offer(
+        '40000000-0000-4000-8000-000000000175', 'giveaway', null, null
+      );
+      commit;
+
+      create table public.acquired_race_transactions (
+        mode text primary key,
+        id uuid not null
+      );
+      grant insert, select on public.acquired_race_transactions to authenticated;
+
+      begin;
+      set local role authenticated;
+      select set_config(
+        'request.jwt.claim.sub',
+        '00000000-0000-4000-8000-000000000075', true
+      );
+      insert into public.acquired_race_transactions (mode, id)
+      select offer.mode, public.marketplace_respond_to_offer(offer.id, true)
+      from acquired_race_offers offer;
+      commit;
+
+      select public.marketplace_record_handoff_confirmation(
+        transaction_record.id, '00000000-0000-4000-8000-000000000075'
+      ) from public.acquired_race_transactions transaction_record;
+      select public.marketplace_record_handoff_confirmation(
+        transaction_record.id, '00000000-0000-4000-8000-000000000076'
+      ) from public.acquired_race_transactions transaction_record;
+      insert into storage.objects (id, bucket_id, name)
+      select gen_random_uuid(), 'garments', manifest.destination_path
+      from public.acquired_race_transactions transaction_record
+      cross join lateral public.marketplace_acquisition_manifest(transaction_record.id) manifest;
+    `,
+    'Create acquired-garment finalization concurrency fixtures',
+  );
+
+  const creditTransaction = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-c',
+      `select id from public.acquired_race_transactions where mode = 'credits';`,
+    ],
+    'Read the acquired-garment credit transaction',
+  ).trim();
+  const finalization = `select public.marketplace_finalize_handoff('${creditTransaction}');`;
+  const results = await Promise.all([
+    concurrentQuery(databaseUrl, finalization),
+    concurrentQuery(databaseUrl, finalization),
+    concurrentQuery(
+      databaseUrl,
+      "select * from public.marketplace_expire_stale(now() + interval '1 year', 100);",
+    ),
+  ]);
+  if (results.some((result) => result.code !== 0)) {
+    throw new UpgradeTestError(
+      `Concurrent finalization and expiry failed: ${results.map((result) => result.stderr).join('\n')}`,
+    );
+  }
+
+  const exactlyOnce = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-F', '|', '-c',
+      `select
+        (select count(*) from private.marketplace_acquisitions
+         where transaction_id = '${creditTransaction}' and completed_at is not null),
+        (select count(*) from public.marketplace_credit_ledger
+         where transaction_id = '${creditTransaction}'
+           and kind in ('transfer_out', 'transfer_in')),
+        (select count(*) from public.garments garment
+         join private.marketplace_acquisitions acquisition
+           on acquisition.acquired_garment_id = garment.id
+         where acquisition.transaction_id = '${creditTransaction}');`,
+    ],
+    'Read acquired-garment exactly-once result',
+  ).trim();
+  if (exactlyOnce !== '1|2|1') {
+    throw new UpgradeTestError(
+      `Concurrent finalization/expiry duplicated or disputed settlement effects: ${exactlyOnce}`,
+    );
+  }
+
+  const giveawayTransaction = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-c',
+      `select id from public.acquired_race_transactions where mode = 'giveaway';`,
+    ],
+    'Read the acquired-garment deletion-race transaction',
+  ).trim();
+  const deletion = concurrentQuery(
+    databaseUrl,
+    `begin;
+     select private.account_deletion_lock_subjects(
+       array['00000000-0000-4000-8000-000000000076'::uuid], '{}'::uuid[]
+     );
+     select pg_sleep(0.5);
+     select * from public.account_deletion_start(
+       '00000000-0000-4000-8000-000000000076'
+     );
+     commit;`,
+  );
+  await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  const finalizeAfterFence = concurrentQuery(
+    databaseUrl,
+    `select public.marketplace_finalize_handoff('${giveawayTransaction}');`,
+  );
+  const [deletionResult, finalizerResult] = await Promise.all([
+    deletion,
+    finalizeAfterFence,
+  ]);
+  const diagnostics = `${deletionResult.stderr}\n${finalizerResult.stderr}`;
+  if (diagnostics.toLowerCase().includes('deadlock detected')
+    || deletionResult.code === 0
+    || !deletionResult.stderr.includes('unresolved marketplace activity')
+    || finalizerResult.code !== 0) {
+    throw new UpgradeTestError(
+      `Acquired-garment finalization crossed account deletion unsafely: ${diagnostics}`,
+    );
+  }
+
+  psql(
+    databaseUrl,
+    'drop table public.acquired_race_transactions;',
+    'Remove acquired-garment concurrency fixtures',
+  );
+}
+
 async function verifyExpiryWriterLockOrder(databaseUrl) {
   psql(
     databaseUrl,
@@ -1126,7 +1306,17 @@ async function main() {
       ], workspace),
       'Verify marketplace deadline enforcement and exactly-once release',
     );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/marketplace_acquired_garments.test.sql'),
+      ], workspace),
+      'Verify sanitized recipient closet copies and settlement finalization',
+    );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyAcquiredGarmentFinalization(latestDatabaseUrl);
     await verifyConcurrentMarketplaceExpiry(latestDatabaseUrl);
     await verifyExpiryWriterLockOrder(latestDatabaseUrl);
     await verifyConcurrentOfferAcceptance(latestDatabaseUrl);
