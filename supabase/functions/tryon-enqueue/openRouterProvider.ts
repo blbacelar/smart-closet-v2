@@ -1,4 +1,4 @@
-import type { TryOnCategory } from './processor.ts';
+import { TryOnProcessingFailure, type TryOnCategory } from './processor.ts';
 
 type FetchResponse = {
   ok: boolean;
@@ -11,8 +11,8 @@ type ProviderDependencies = {
   model: string;
   provider: string;
   fallbackCostUsd: number;
+  timeoutMs: number;
   fetch: (url: string, init: Record<string, unknown>) => Promise<FetchResponse>;
-  wait?: (milliseconds: number) => Promise<void>;
   createRequestId?: () => string;
 };
 
@@ -26,9 +26,14 @@ const categoryDescription: Record<TryOnCategory, string> = {
   shoes: 'pair of shoes',
 };
 
-export class OpenRouterProviderError extends Error {
-  constructor(public readonly status: number | null, public readonly retryable: boolean) {
-    super('Virtual try-on provider failed.');
+export class OpenRouterProviderError extends TryOnProcessingFailure {
+  constructor(
+    public readonly status: number | null,
+    public readonly retryable: boolean,
+    code: 'generation_failed' | 'timeout' = 'generation_failed',
+    costUsd = 0,
+  ) {
+    super(code, { provider: 'openrouter', costUsd });
     this.name = 'OpenRouterProviderError';
   }
 }
@@ -91,37 +96,50 @@ export function createOpenRouterProvider(dependencies: ProviderDependencies) {
     || !dependencies.model
     || !dependencies.provider
     || !Number.isFinite(dependencies.fallbackCostUsd)
-    || dependencies.fallbackCostUsd < 0
+    || dependencies.fallbackCostUsd <= 0
+    || !Number.isFinite(dependencies.timeoutMs)
+    || dependencies.timeoutMs <= 0
   ) {
     throw new Error('Virtual try-on is not configured.');
   }
 
-  const wait = dependencies.wait
-    ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const createRequestId = dependencies.createRequestId ?? (() => crypto.randomUUID());
   const headers = {
     Authorization: `Bearer ${dependencies.apiKey}`,
     'Content-Type': 'application/json',
   };
 
-  const request = async (init: Record<string, unknown>, attempts = 3) => {
-    let lastError: OpenRouterProviderError | null = null;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      try {
-        const response = await dependencies.fetch('https://openrouter.ai/api/v1/images', init);
-        if (response.ok) return record(await response.json());
-        const retryable = response.status === 429 || response.status >= 500;
-        lastError = new OpenRouterProviderError(response.status, retryable);
-        if (!retryable) throw lastError;
-      } catch (error) {
-        lastError = error instanceof OpenRouterProviderError
-          ? error
-          : new OpenRouterProviderError(null, true);
-        if (!lastError.retryable) throw lastError;
+  const request = async (init: Record<string, unknown>) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), dependencies.timeoutMs);
+    let response: FetchResponse | undefined;
+    try {
+      response = await dependencies.fetch('https://openrouter.ai/api/v1/images', {
+        ...init,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new OpenRouterProviderError(
+          response.status,
+          false,
+          'generation_failed',
+          0,
+        );
       }
-      if (attempt < attempts - 1) await wait(500 * (2 ** attempt));
+      return record(await response.json());
+    } catch (error) {
+      if (error instanceof OpenRouterProviderError) throw error;
+      const timedOut = controller.signal.aborted
+        || (error instanceof DOMException && error.name === 'AbortError');
+      throw new OpenRouterProviderError(
+        response?.status ?? null,
+        false,
+        timedOut ? 'timeout' : 'generation_failed',
+        dependencies.fallbackCostUsd,
+      );
+    } finally {
+      clearTimeout(timeout);
     }
-    throw lastError ?? new OpenRouterProviderError(null, false);
   };
 
   return {
@@ -158,11 +176,18 @@ export function createOpenRouterProvider(dependencies: ProviderDependencies) {
         ? usageCost
         : dependencies.fallbackCostUsd;
 
+      let image;
+      try {
+        image = decodeImage(payload);
+      } catch {
+        throw new OpenRouterProviderError(200, false, 'generation_failed', costUsd);
+      }
+
       return {
         id: createRequestId(),
         provider: 'openrouter',
         costUsd,
-        ...decodeImage(payload),
+        ...image,
       };
     },
   };

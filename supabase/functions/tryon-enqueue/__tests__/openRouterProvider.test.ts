@@ -13,13 +13,13 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     apiKey: 'private-key',
     model: 'google/gemini-3.1-flash-image',
     provider: 'google-vertex/global',
-    fallbackCostUsd: 0,
+    fallbackCostUsd: 0.1,
+    timeoutMs: 90_000,
     fetch: jest.fn().mockResolvedValue(jsonResponse(200, {
       created: 1_780_000_000,
       data: [{ b64_json: 'YWJjZA==', media_type: 'image/png' }],
       usage: { cost: 0.0412 },
     })),
-    wait: jest.fn().mockResolvedValue(undefined),
     createRequestId: jest.fn().mockReturnValue('request-1'),
     ...overrides,
   };
@@ -87,21 +87,20 @@ describe('OpenRouter provider adapter', () => {
     );
   });
 
-  it('retries transient failures with bounded backoff', async () => {
+  it('never retries a paid generation when the outcome is ambiguous', async () => {
     const fetch = jest.fn()
-      .mockResolvedValueOnce(jsonResponse(429, {}))
-      .mockResolvedValueOnce(jsonResponse(502, {}))
+      .mockRejectedValueOnce(new TypeError('connection closed'))
       .mockResolvedValueOnce(jsonResponse(200, {
         data: [{ b64_json: 'YWJjZA==', media_type: 'image/png' }],
         usage: { cost: 0.03 },
       }));
     const deps = dependencies({ fetch });
 
-    await createOpenRouterProvider(deps).generateTryOn({ ...input, category: 'bottom' });
+    await expect(
+      createOpenRouterProvider(deps).generateTryOn({ ...input, category: 'bottom' }),
+    ).rejects.toEqual(expect.objectContaining({ costUsd: 0.1 }));
 
-    expect(fetch).toHaveBeenCalledTimes(3);
-    expect(deps.wait).toHaveBeenNthCalledWith(1, 500);
-    expect(deps.wait).toHaveBeenNthCalledWith(2, 1_000);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry permanent API errors', async () => {
@@ -112,7 +111,55 @@ describe('OpenRouter provider adapter', () => {
       expect.objectContaining({ status: 400, retryable: false }),
     );
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(deps.wait).not.toHaveBeenCalled();
+  });
+
+  it('aborts a hung request and reports a billable timeout without retrying', async () => {
+    const fetch = jest.fn((_url: string, init: Record<string, unknown>) => new Promise((_, reject) => {
+      const signal = init.signal as AbortSignal;
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    }));
+    const deps = dependencies({ fetch, timeoutMs: 1 });
+
+    await expect(createOpenRouterProvider(deps).generateTryOn(input)).rejects.toEqual(
+      expect.objectContaining({ code: 'timeout', costUsd: 0.1 }),
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the timeout active while reading a successful response body', async () => {
+    const fetch = jest.fn((_url: string, init: Record<string, unknown>) => {
+      const signal = init.signal as AbortSignal;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        }),
+      });
+    });
+    const deps = dependencies({ fetch, timeoutMs: 1 });
+    const outcome = Promise.race([
+      createOpenRouterProvider(deps).generateTryOn(input).catch((error) => error),
+      new Promise((resolve) => setTimeout(() => resolve('response-body-hung'), 25)),
+    ]);
+
+    await expect(outcome).resolves.toEqual(expect.objectContaining({
+      code: 'timeout',
+      costUsd: 0.1,
+    }));
+  });
+
+  it('preserves known usage cost when a successful response contains an invalid image', async () => {
+    const deps = dependencies({
+      fetch: jest.fn().mockResolvedValue(jsonResponse(200, {
+        data: [],
+        usage: { cost: 0.073 },
+      })),
+    });
+
+    await expect(createOpenRouterProvider(deps).generateTryOn(input)).rejects.toEqual(
+      expect.objectContaining({ costUsd: 0.073 }),
+    );
   });
 
   it('requires complete server-side configuration', () => {
@@ -123,6 +170,12 @@ describe('OpenRouter provider adapter', () => {
       'Virtual try-on is not configured.',
     );
     expect(() => createOpenRouterProvider(dependencies({ provider: '' }))).toThrow(
+      'Virtual try-on is not configured.',
+    );
+    expect(() => createOpenRouterProvider(dependencies({ fallbackCostUsd: 0 }))).toThrow(
+      'Virtual try-on is not configured.',
+    );
+    expect(() => createOpenRouterProvider(dependencies({ timeoutMs: 0 }))).toThrow(
       'Virtual try-on is not configured.',
     );
   });
