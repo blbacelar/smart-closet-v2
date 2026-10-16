@@ -120,6 +120,13 @@ try {
   }
 
   runGate({
+    name: 'Marketplace party legacy upgrade',
+    display: 'npm run test:db:upgrade',
+    command: 'npm',
+    args: ['run', 'test:db:upgrade'],
+  });
+
+  runGate({
     name: 'Apply pending local database migrations',
     display: 'supabase migration up --local',
     command: 'supabase',

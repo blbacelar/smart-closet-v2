@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(58);
+select plan(77);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -20,7 +20,121 @@ select is((select public from storage.buckets where id = 'results'), false, 'res
 insert into auth.users (id, email)
 values
   ('00000000-0000-4000-8000-000000000001', 'member-one@example.com'),
-  ('00000000-0000-4000-8000-000000000002', 'member-two@example.com');
+  ('00000000-0000-4000-8000-000000000002', 'member-two@example.com'),
+  ('00000000-0000-4000-8000-000000000003', 'detached-member@example.com');
+
+select has_table('private', 'marketplace_parties', 'marketplace parties use a private identity map');
+select is(
+  has_table_privilege('authenticated', 'private.marketplace_parties', 'select'),
+  false,
+  'members cannot read the marketplace party map'
+);
+select is(
+  has_table_privilege('anon', 'private.marketplace_parties', 'select'),
+  false,
+  'anonymous clients cannot read the marketplace party map'
+);
+
+insert into public.marketplace_memberships (user_id, expires_at)
+values
+  ('00000000-0000-4000-8000-000000000001', now() + interval '1 year'),
+  ('00000000-0000-4000-8000-000000000002', now() + interval '1 year'),
+  ('00000000-0000-4000-8000-000000000003', now() + interval '1 year');
+
+insert into public.marketplace_credit_accounts (user_id, available_balance)
+values
+  ('00000000-0000-4000-8000-000000000001', 100),
+  ('00000000-0000-4000-8000-000000000002', 200),
+  ('00000000-0000-4000-8000-000000000003', 300);
+
+insert into public.marketplace_credit_ledger (
+  user_id, kind, delta_available, idempotency_key, description
+) values (
+  '00000000-0000-4000-8000-000000000003',
+  'adjustment',
+  300,
+  'detached-member-opening-balance',
+  'Detachment fixture'
+);
+
+select is(
+  (select count(*)
+   from private.marketplace_parties
+   where user_id in (
+     '00000000-0000-4000-8000-000000000001',
+     '00000000-0000-4000-8000-000000000002',
+     '00000000-0000-4000-8000-000000000003'
+   )),
+  3::bigint,
+  'one opaque marketplace party is created per participant'
+);
+select is(
+  (select count(*)
+   from public.marketplace_memberships membership
+   join private.marketplace_parties party
+     on party.id = membership.party_id and party.user_id = membership.user_id
+   where membership.user_id in (
+     '00000000-0000-4000-8000-000000000001',
+     '00000000-0000-4000-8000-000000000002',
+     '00000000-0000-4000-8000-000000000003'
+   )),
+  3::bigint,
+  'legacy membership writes synchronize the party foreign key'
+);
+select is(
+  (select count(*)
+   from public.marketplace_credit_accounts account
+   join private.marketplace_parties party
+     on party.id = account.party_id and party.user_id = account.user_id
+   where account.user_id in (
+     '00000000-0000-4000-8000-000000000001',
+     '00000000-0000-4000-8000-000000000002',
+     '00000000-0000-4000-8000-000000000003'
+   )),
+  3::bigint,
+  'legacy credit-account writes synchronize the party foreign key'
+);
+select throws_ok(
+  $$insert into public.marketplace_credit_ledger (
+      user_id, party_id, kind, delta_available, idempotency_key, description
+    ) values (
+      '00000000-0000-4000-8000-000000000002',
+      (select id from private.marketplace_parties
+       where user_id = '00000000-0000-4000-8000-000000000001'),
+      'adjustment', 1, 'mismatched-party', 'Must fail'
+    )$$,
+  'P0001',
+  'Marketplace party does not match the live profile',
+  'a live profile cannot write against another marketplace party'
+);
+
+delete from public.profiles
+where id = '00000000-0000-4000-8000-000000000003';
+
+select is(
+  (select count(*) from private.marketplace_parties where user_id is null),
+  1::bigint,
+  'profile deletion detaches rather than deletes the opaque party'
+);
+select is(
+  (select count(*) from public.marketplace_memberships
+   where user_id is null and party_id is not null),
+  1::bigint,
+  'detached marketplace membership retains only its party reference'
+);
+select is(
+  (select count(*) from public.marketplace_credit_accounts
+   where user_id is null and party_id is not null and available_balance = 300),
+  1::bigint,
+  'detached credit account remains reconcilable without a profile id'
+);
+select is(
+  (select count(*) from public.marketplace_credit_ledger
+   where user_id is null and party_id is not null
+     and idempotency_key = 'detached-member-opening-balance'),
+  1::bigint,
+  'detached ledger history remains linked only to the opaque party'
+);
 
 insert into public.body_photos (id, user_id, storage_path, status)
 values
@@ -142,6 +256,74 @@ values (
   'Test pickup area'
 );
 
+insert into public.marketplace_listings (
+  id, garment_id, seller_id, accepts_credits, accepts_swap, is_giveaway, credit_price, pickup_area
+)
+values (
+  '50000000-0000-4000-8000-000000000002',
+  '20000000-0000-4000-8000-000000000002',
+  '00000000-0000-4000-8000-000000000002',
+  false,
+  false,
+  true,
+  null,
+  'Second pickup area'
+);
+
+insert into public.marketplace_offers (
+  id, listing_id, buyer_id, seller_id, mode
+) values (
+  '60000000-0000-4000-8000-000000000001',
+  '50000000-0000-4000-8000-000000000002',
+  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000002',
+  'giveaway'
+);
+
+insert into public.marketplace_transactions (
+  id, offer_id, listing_id, seller_id, buyer_id, mode
+) values (
+  '70000000-0000-4000-8000-000000000001',
+  '60000000-0000-4000-8000-000000000001',
+  '50000000-0000-4000-8000-000000000002',
+  '00000000-0000-4000-8000-000000000002',
+  '00000000-0000-4000-8000-000000000001',
+  'giveaway'
+);
+
+select is(
+  (select count(*)
+   from public.marketplace_listings listing
+   join private.marketplace_parties party
+     on party.id = listing.seller_party_id and party.user_id = listing.seller_id
+   where listing.id in (
+     '50000000-0000-4000-8000-000000000001',
+     '50000000-0000-4000-8000-000000000002'
+   )),
+  2::bigint,
+  'legacy listing writes synchronize seller parties'
+);
+select is(
+  (select count(*)
+   from public.marketplace_offers offer_record
+   join private.marketplace_parties buyer on buyer.id = offer_record.buyer_party_id
+   join private.marketplace_parties seller on seller.id = offer_record.seller_party_id
+   where buyer.user_id = offer_record.buyer_id
+     and seller.user_id = offer_record.seller_id),
+  1::bigint,
+  'legacy offer writes synchronize both participant parties'
+);
+select is(
+  (select count(*)
+   from public.marketplace_transactions transaction_record
+   join private.marketplace_parties buyer on buyer.id = transaction_record.buyer_party_id
+   join private.marketplace_parties seller on seller.id = transaction_record.seller_party_id
+   where buyer.user_id = transaction_record.buyer_id
+     and seller.user_id = transaction_record.seller_id),
+  1::bigint,
+  'legacy transaction writes synchronize both participant parties'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
 
@@ -227,6 +409,31 @@ select results_eq('select count(*) from public.body_photos', array[2::bigint], '
 select results_eq('select count(*) from public.garments', array[1::bigint], 'member sees only their garments');
 select results_eq('select count(*) from public.usage_daily', array[1::bigint], 'member sees only their usage');
 select results_eq('select count(*) from public.tryon_jobs', array[1::bigint], 'member sees only their try-on jobs');
+select results_eq(
+  'select count(*) from public.marketplace_memberships',
+  array[1::bigint],
+  'member sees only their marketplace membership through the party mapping'
+);
+select results_eq(
+  'select count(*) from public.marketplace_credit_accounts',
+  array[1::bigint],
+  'member sees only their marketplace credit account through the party mapping'
+);
+select results_eq(
+  'select bool_and(public.marketplace_party_matches(party_id)) from public.marketplace_memberships',
+  array[true],
+  'the public helper reveals only whether a party belongs to the current member'
+);
+select is(
+  (select count(*)::integer from public.marketplace_offers),
+  1,
+  'an offer participant can read their offer through party authorization'
+);
+select is(
+  (select count(*)::integer from public.marketplace_transactions),
+  1,
+  'a transaction participant can read their transaction through party authorization'
+);
 select is(has_table_privilege('authenticated', 'public.ai_cost_ledger', 'select'), false, 'member cannot read the cost ledger');
 select is(has_table_privilege('authenticated', 'public.analytics_events', 'select'), false, 'member cannot read analytics events');
 select lives_ok(

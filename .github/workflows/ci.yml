@@ -71,6 +71,9 @@ jobs:
       - name: Start local Supabase
         run: supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
+      - name: Test marketplace party legacy upgrade
+        run: npm run test:db:upgrade
+
       - name: Test database policies
         run: npm run test:db
 
