@@ -679,6 +679,18 @@ async function verifyNotificationDeletionAuthorizationFence(databaseUrl) {
     `,
     'Create the notification deletion-authorization race fixture',
   );
+  const deliveryId = capture(
+    'psql',
+    [
+      databaseUrl, '-X', '-qAt', '-c',
+      `select id from private.notification_deliveries
+       where outbox_id = '30000000-0000-4000-8000-000000000096';`,
+    ],
+    'Read the prepared notification delivery identity',
+  ).trim();
+  if (!/^[0-9a-f-]{36}$/i.test(deliveryId)) {
+    throw new UpgradeTestError('Prepared notification delivery identity was unavailable.');
+  }
 
   const deletion = concurrentQuery(
     databaseUrl,
@@ -696,10 +708,7 @@ async function verifyNotificationDeletionAuthorizationFence(databaseUrl) {
      select delivery_id from public.notification_authorize_deliveries(
        '30000000-0000-4000-8000-000000000096',
        'notification-deletion-worker',
-       array(
-         select id from private.notification_deliveries
-         where outbox_id = '30000000-0000-4000-8000-000000000096'
-       )
+       array['${deliveryId}'::uuid]
      );`,
   );
   const [deletionResult, authorizationResult] = await Promise.all([deletion, authorization]);

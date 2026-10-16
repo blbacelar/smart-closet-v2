@@ -109,10 +109,11 @@ describe('Expo push provider adapter', () => {
       fetch: jest.fn().mockResolvedValue(response(true, 200, { data: [data] })),
     });
 
+    const expectedCode = (data as { details?: { error?: string } }).details?.error ?? 'provider_error';
     await expect(provider.send([{
       deliveryId: 'delivery-1', token: 'ExpoPushToken[token-1]', kind: 'account_update', route: null,
     }])).resolves.toEqual([{
-      deliveryId: 'delivery-1', state: 'ambiguous-failure', code: 'provider_error',
+      deliveryId: 'delivery-1', state: 'ambiguous-failure', code: expectedCode,
     }]);
   });
 

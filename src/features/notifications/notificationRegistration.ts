@@ -1,3 +1,5 @@
+import type { DevicePushToken } from 'expo-notifications';
+
 export type NotificationPlatform = 'ios' | 'android';
 export type NormalizedPermission = {
   granted: boolean;
@@ -13,14 +15,14 @@ export type NotificationRegistrationDependencies = {
   getPermissions: () => Promise<NormalizedPermission>;
   requestPermissions: () => Promise<NormalizedPermission>;
   createAndroidChannel: () => Promise<void>;
-  getExpoPushToken: (projectId: string) => Promise<string>;
+  getExpoPushToken: (projectId: string, devicePushToken?: DevicePushToken) => Promise<string>;
   register: (input: {
     expoToken: string;
     installationId: string;
     platform: NotificationPlatform;
   }) => Promise<void>;
   disable: (installationId: string) => Promise<void>;
-  subscribeToTokenChanges: (listener: () => void) => () => void;
+  subscribeToTokenChanges: (listener: (token: DevicePushToken) => void) => () => void;
 };
 
 export type NotificationEnableResult =
@@ -45,10 +47,15 @@ function unavailableReason(dependencies: NotificationRegistrationDependencies) {
   return null;
 }
 
-async function registerCurrentToken(dependencies: NotificationRegistrationDependencies) {
+async function registerCurrentToken(
+  dependencies: NotificationRegistrationDependencies,
+  devicePushToken?: DevicePushToken,
+) {
   const installationId = await dependencies.installationId();
   if (!installationId) throw new Error('Notification installation could not be identified.');
-  const expoToken = await dependencies.getExpoPushToken(dependencies.projectId!);
+  const expoToken = devicePushToken
+    ? await dependencies.getExpoPushToken(dependencies.projectId!, devicePushToken)
+    : await dependencies.getExpoPushToken(dependencies.projectId!);
   await dependencies.register({
     expoToken,
     installationId,
@@ -79,13 +86,14 @@ export async function enablePushNotifications(
 
 export async function syncPushNotifications(
   dependencies: NotificationRegistrationDependencies,
+  devicePushToken?: DevicePushToken,
 ): Promise<NotificationEnableResult> {
   const reason = unavailableReason(dependencies);
   if (reason) return { state: 'unavailable', reason };
   if (dependencies.platform === 'android') await dependencies.createAndroidChannel();
   const permission = await dependencies.getPermissions();
   if (!permissionAllowsPush(permission)) return { state: 'denied' };
-  await registerCurrentToken(dependencies);
+  await registerCurrentToken(dependencies, devicePushToken);
   return { state: 'enabled' };
 }
 
@@ -96,10 +104,10 @@ export function maintainPushNotifications(
   if (unavailableReason(dependencies)) return () => undefined;
   let active = true;
   let refresh = Promise.resolve();
-  const synchronize = () => {
+  const synchronize = (devicePushToken?: DevicePushToken) => {
     refresh = refresh
       .then(async () => {
-        if (active) await syncPushNotifications(dependencies);
+        if (active) await syncPushNotifications(dependencies, devicePushToken);
       })
       .catch(onError);
   };

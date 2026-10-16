@@ -31,7 +31,10 @@ The initial checkpoint failed four suites because `notificationRegistration`,
 exist. A second RED checkpoint (`fc21a88`) added the post-review race cases and
 failed 9 focused tests: token rotation/startup synchronization, prepare→send
 authorization, ambiguous POST handling, permanent provider classification, and
-the corresponding database lifecycle contract.
+the corresponding database lifecycle contract. A third RED checkpoint
+(`a5df260`) failed 8 focused tests covering native-token propagation, unknown
+provider results, bounded receipt request failures, and authorization racing an
+uncommitted account-deletion tombstone.
 
 ## GREEN
 
@@ -40,12 +43,13 @@ Implemented with Expo SDK 57-compatible `expo-notifications` 57.0.23 and
 profile action, and logout/account-deletion cleanup.
 
 Focused Jest verification passed the notification and profile contracts. The
-final `npm run quality` passed 94 suites and 551 tests with 90.82% statements,
-80.41% branches, 85.21% functions, and 92.60% lines. PII scanning, Expo Doctor
+final `npm run quality` passed 94 suites and 558 tests with 90.99% statements,
+80.88% branches, 85.33% functions, and 92.70% lines. PII scanning, Expo Doctor
 21/21, web export, and the critical production audit passed. The isolated
 database migration/lint, legacy backfill, all existing RLS/ledger/marketplace
 suites, 48 notification pgTAP assertions, final Auth deletion with notification
-history, and the two-connection outbox claim race passed. The review hardening
-also added immutable historical token rows, pre-POST reauthorization, durable
-`sending` state, no-retry ambiguous attempts, and complete permanent Expo error
-classification. External Gate D still owns physical push delivery acceptance.
+history, the two-connection outbox claim race, and the deletion-authorization
+race passed. Review hardening added immutable historical token rows, lock-fenced
+pre-POST reauthorization, durable `sending` state, no-retry ambiguous attempts,
+native-token rotation propagation, and bounded receipt transport failure
+handling. External Gate D still owns physical push delivery acceptance.

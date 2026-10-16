@@ -62,7 +62,16 @@ export async function processNotificationReceipts(
 ) {
   const claimed = await dependencies.claimReceipts();
   if (claimed.length === 0) return { checked: 0 };
-  const results = await dependencies.receipts(claimed.map((item) => item.ticketId));
+  let results: ReceiptResult[];
+  try {
+    results = await dependencies.receipts(claimed.map((item) => item.ticketId));
+  } catch {
+    results = claimed.map((item) => ({
+      ticketId: item.ticketId,
+      state: 'transient-failure' as const,
+      code: 'receipt_worker_failure',
+    }));
+  }
   await dependencies.recordReceipts(results);
   return { checked: claimed.length };
 }

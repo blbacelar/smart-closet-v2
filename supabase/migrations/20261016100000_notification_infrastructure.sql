@@ -407,7 +407,15 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_recipient_user_id uuid;
 begin
+  select recipient_user_id into v_recipient_user_id
+  from private.notification_outbox
+  where id = p_outbox_id;
+  if v_recipient_user_id is null then return; end if;
+  perform private.account_deletion_lock_subjects(array[v_recipient_user_id], '{}'::uuid[]);
+
   update private.notification_deliveries delivery
   set status = 'dead', last_error_code = 'dispatch_revoked', updated_at = now()
   where delivery.outbox_id = p_outbox_id

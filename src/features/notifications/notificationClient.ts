@@ -82,8 +82,11 @@ export function createNativeNotificationDependencies(): NotificationRegistration
         importance: Notifications.AndroidImportance.DEFAULT,
       });
     },
-    getExpoPushToken: async (easProjectId) => (
-      await Notifications.getExpoPushTokenAsync({ projectId: easProjectId })
+    getExpoPushToken: async (easProjectId, devicePushToken) => (
+      await Notifications.getExpoPushTokenAsync({
+        projectId: easProjectId,
+        ...(devicePushToken ? { devicePushToken } : {}),
+      })
     ).data,
     register: async ({ expoToken, installationId: id, platform: os }) => {
       const { error } = await requireSupabase().rpc('register_push_token', {
@@ -101,7 +104,7 @@ export function createNativeNotificationDependencies(): NotificationRegistration
       if (error) throw new Error('Could not safely disable notifications. Try again.');
     },
     subscribeToTokenChanges: (listener) => {
-      const subscription = Notifications.addPushTokenListener(() => listener());
+      const subscription = Notifications.addPushTokenListener(listener);
       return () => subscription.remove();
     },
   };

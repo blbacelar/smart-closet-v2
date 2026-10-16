@@ -35,6 +35,7 @@ const permanentCodes = new Set([
   'MessageTooBig',
   'MismatchSenderId',
 ]);
+const transientCodes = new Set(['MessageRateExceeded']);
 
 export class ExpoPushProviderError extends Error {
   constructor(public readonly retryable: boolean) {
@@ -71,7 +72,15 @@ function errorCode(value: unknown) {
 }
 
 function failureState(code: string) {
-  return permanentCodes.has(code) ? 'permanent-failure' as const : 'transient-failure' as const;
+  if (permanentCodes.has(code)) return 'permanent-failure' as const;
+  if (transientCodes.has(code)) return 'transient-failure' as const;
+  return 'ambiguous-failure' as const;
+}
+
+function receiptFailureState(code: string) {
+  return transientCodes.has(code) || code === 'receipt_not_ready'
+    ? 'transient-failure' as const
+    : 'permanent-failure' as const;
 }
 
 function appendUnattempted(results: TicketResult[], deliveries: PushDelivery[]) {
@@ -170,15 +179,28 @@ export function createExpoPushProvider(dependencies: ProviderDependencies) {
           body: JSON.stringify({ ids: ticketIds }),
         });
       } catch {
-        throw new ExpoPushProviderError(true);
+        return ticketIds.map((ticketId) => ({
+          ticketId,
+          state: 'transient-failure' as const,
+          code: 'receipt_transport_error',
+        }));
       }
-      if (!response.ok) throw new ExpoPushProviderError(response.status === 429 || response.status >= 500);
+      if (!response.ok) {
+        const state = response.status === 408 || response.status === 429 || response.status >= 500
+          ? 'transient-failure' as const
+          : 'permanent-failure' as const;
+        return ticketIds.map((ticketId) => ({
+          ticketId,
+          state,
+          code: `receipt_http_${response.status}`,
+        }));
+      }
       const data = record(record(await response.json()).data);
       return ticketIds.map((ticketId) => {
         const receipt = record(data[ticketId]);
         if (receipt.status === 'ok') return { ticketId, state: 'delivered' };
         const code = Object.keys(receipt).length === 0 ? 'receipt_not_ready' : errorCode(receipt);
-        return { ticketId, state: failureState(code), code };
+        return { ticketId, state: receiptFailureState(code), code };
       });
     },
   };
