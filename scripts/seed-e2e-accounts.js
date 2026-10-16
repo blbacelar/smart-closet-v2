@@ -11,17 +11,38 @@ const GARMENT_ID = 'e2000000-0000-4000-8000-000000000001';
 const LISTING_ID = 'e2000000-0000-4000-8000-000000000002';
 const FIXED_START = '2026-01-01T00:00:00.000Z';
 const FIXED_EXPIRY = '2099-01-01T00:00:00.000Z';
+const SELLER_LEDGER_KEY = 'e2e-seed:seller:initial-balance';
+const BUYER_LEDGER_KEY = 'e2e-seed:buyer:initial-balance';
 
 function isLoopback(hostname) {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
 }
 
-function assertSafeSeedTarget(url, remoteAcknowledgement = '') {
+function assertSyntheticSeedEmail(email) {
+  if (!/^fitly-e2e(?:[+.-][a-z0-9-]+)?@example\.(?:com|test)$/i.test(email)) {
+    throw new Error(
+      `Refusing non-synthetic E2E identity ${email}. Use the fitly-e2e namespace on example.com or example.test.`,
+    );
+  }
+}
+
+function assertSafeSeedTarget(url, remoteAcknowledgement = '', stagingProjectRef = '') {
   const target = new URL(url);
-  if (!isLoopback(target.hostname) && remoteAcknowledgement !== 'staging') {
+  if (isLoopback(target.hostname)) return;
+
+  const hostnameMatch = target.hostname.match(/^([a-z0-9]+)\.supabase\.co$/);
+  const targetProjectRef = hostnameMatch?.[1];
+  if (
+    target.protocol !== 'https:'
+    || !targetProjectRef
+    || remoteAcknowledgement !== 'staging'
+    || !stagingProjectRef
+    || targetProjectRef !== stagingProjectRef
+  ) {
     throw new Error(
       'Remote E2E seeding is allowed only for a non-production staging project. '
-      + 'Set E2E_SEED_ALLOW_REMOTE=staging after verifying the target.',
+      + 'Set E2E_SEED_ALLOW_REMOTE=staging and E2E_SEED_STAGING_PROJECT_REF '
+      + 'to the exact project ref in E2E_SUPABASE_URL.',
     );
   }
 }
@@ -50,7 +71,12 @@ async function requireSuccess(result, operation) {
   return resolved.data;
 }
 
-async function findOrCreateUser(client, { email, password, displayName }) {
+async function findOrCreateUser(client, {
+  email,
+  password,
+  displayName,
+  allowLegacyExistingUser,
+}) {
   const users = await requireSuccess(
     client.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     `List E2E users for ${displayName}`,
@@ -58,14 +84,12 @@ async function findOrCreateUser(client, { email, password, displayName }) {
   const existing = users.users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
 
   if (existing) {
-    await requireSuccess(
-      client.auth.admin.updateUserById(existing.id, {
-        password,
-        user_metadata: { display_name: displayName, adult_confirmed: true },
-      }),
-      `Refresh ${displayName}`,
-    );
-    return existing;
+    if (existing.user_metadata?.e2e_seed !== true && !allowLegacyExistingUser) {
+      throw new Error(
+        `Refusing to modify ${email}: the existing account is not marked as an E2E seed account.`,
+      );
+    }
+    return { user: existing, created: false };
   }
 
   const created = await requireSuccess(
@@ -73,15 +97,69 @@ async function findOrCreateUser(client, { email, password, displayName }) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { display_name: displayName, adult_confirmed: true },
+      user_metadata: { display_name: displayName, adult_confirmed: true, e2e_seed: true },
     }),
     `Create ${displayName}`,
   );
-  return created.user;
+  return { user: created.user, created: true };
 }
 
 async function upsert(client, table, value, onConflict) {
   await requireSuccess(client.from(table).upsert(value, { onConflict }), `Seed ${table}`);
+}
+
+async function assertPristineSeedState(client, sellerId, buyerId) {
+  const participantFilter = [sellerId, buyerId].join(',');
+  const [offers, transactions, ledger] = await Promise.all([
+    requireSuccess(
+      client.from('marketplace_offers')
+        .select('id')
+        .or(`buyer_id.in.(${participantFilter}),seller_id.in.(${participantFilter})`),
+      'Check E2E offers',
+    ),
+    requireSuccess(
+      client.from('marketplace_transactions')
+        .select('id')
+        .or(`buyer_id.in.(${participantFilter}),seller_id.in.(${participantFilter})`),
+      'Check E2E transactions',
+    ),
+    requireSuccess(
+      client.from('marketplace_credit_ledger')
+        .select('user_id,idempotency_key')
+        .in('user_id', [sellerId, buyerId]),
+      'Check E2E credit ledger',
+    ),
+  ]);
+  const allowedLedgerKeys = new Map([
+    [sellerId, SELLER_LEDGER_KEY],
+    [buyerId, BUYER_LEDGER_KEY],
+  ]);
+  const hasForeignLedgerEntry = ledger.some(
+    (entry) => allowedLedgerKeys.get(entry.user_id) !== entry.idempotency_key,
+  );
+
+  if (offers.length > 0 || transactions.length > 0 || hasForeignLedgerEntry) {
+    throw new Error(
+      'Refusing to reset E2E accounts with marketplace activity. '
+      + 'Use fresh synthetic accounts or reset the isolated staging project.',
+    );
+  }
+}
+
+async function refreshExistingUser(client, resolved, { password, displayName }) {
+  if (resolved.created) return;
+  await requireSuccess(
+    client.auth.admin.updateUserById(resolved.user.id, {
+      password,
+      user_metadata: {
+        ...resolved.user.user_metadata,
+        display_name: displayName,
+        adult_confirmed: true,
+        e2e_seed: true,
+      },
+    }),
+    `Refresh ${displayName}`,
+  );
 }
 
 async function seedE2EAccounts({
@@ -91,14 +169,31 @@ async function seedE2EAccounts({
   sellerPassword,
   buyerEmail = BUYER_EMAIL,
   buyerPassword,
+  allowLegacyExistingUsers = false,
 }) {
-  const seller = await findOrCreateUser(client, {
+  assertSyntheticSeedEmail(sellerEmail);
+  assertSyntheticSeedEmail(buyerEmail);
+  const sellerResult = await findOrCreateUser(client, {
     email: sellerEmail,
     password: sellerPassword,
     displayName: 'Fitly E2E Seller',
+    allowLegacyExistingUser: allowLegacyExistingUsers,
   });
-  const buyer = await findOrCreateUser(client, {
+  const buyerResult = await findOrCreateUser(client, {
     email: buyerEmail,
+    password: buyerPassword,
+    displayName: 'Fitly E2E Buyer',
+    allowLegacyExistingUser: allowLegacyExistingUsers,
+  });
+  const seller = sellerResult.user;
+  const buyer = buyerResult.user;
+
+  await assertPristineSeedState(client, seller.id, buyer.id);
+  await refreshExistingUser(client, sellerResult, {
+    password: sellerPassword,
+    displayName: 'Fitly E2E Seller',
+  });
+  await refreshExistingUser(client, buyerResult, {
     password: buyerPassword,
     displayName: 'Fitly E2E Buyer',
   });
@@ -123,6 +218,24 @@ async function seedE2EAccounts({
     { user_id: seller.id, status: 'active', starts_at: FIXED_START, expires_at: FIXED_EXPIRY },
     { user_id: buyer.id, status: 'active', starts_at: FIXED_START, expires_at: FIXED_EXPIRY },
   ], 'user_id');
+  await upsert(client, 'marketplace_credit_ledger', [
+    {
+      user_id: seller.id,
+      kind: 'adjustment',
+      delta_available: 100,
+      delta_reserved: 0,
+      idempotency_key: SELLER_LEDGER_KEY,
+      description: 'Synthetic seller balance for installed-build testing',
+    },
+    {
+      user_id: buyer.id,
+      kind: 'adjustment',
+      delta_available: 500,
+      delta_reserved: 0,
+      idempotency_key: BUYER_LEDGER_KEY,
+      description: 'Synthetic buyer balance for installed-build testing',
+    },
+  ], 'idempotency_key');
   await upsert(client, 'marketplace_credit_accounts', [
     { user_id: seller.id, available_balance: 100, reserved_balance: 0 },
     { user_id: buyer.id, available_balance: 500, reserved_balance: 0 },
@@ -187,7 +300,11 @@ function resolveCliSettings(environment) {
 
 async function main() {
   const settings = resolveCliSettings(process.env);
-  assertSafeSeedTarget(settings.url, process.env.E2E_SEED_ALLOW_REMOTE);
+  assertSafeSeedTarget(
+    settings.url,
+    process.env.E2E_SEED_ALLOW_REMOTE,
+    process.env.E2E_SEED_STAGING_PROJECT_REF,
+  );
   const sellerPassword = process.env.E2E_SELLER_PASSWORD
     || (settings.isLocal ? LOCAL_SELLER_PASSWORD : undefined);
   const buyerPassword = process.env.E2E_BUYER_PASSWORD
@@ -207,6 +324,7 @@ async function main() {
     sellerPassword,
     buyerEmail: process.env.E2E_BUYER_EMAIL || BUYER_EMAIL,
     buyerPassword,
+    allowLegacyExistingUsers: settings.isLocal,
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
@@ -220,6 +338,8 @@ if (require.main === module) {
 
 module.exports = {
   assertSafeSeedTarget,
+  assertSyntheticSeedEmail,
+  assertPristineSeedState,
   parseStatusEnv,
   seedE2EAccounts,
 };

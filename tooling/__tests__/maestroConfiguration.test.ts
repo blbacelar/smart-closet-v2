@@ -45,6 +45,7 @@ describe('Maestro activation journey', () => {
     expect(guide).toContain('synthetic-adult-body.jpg');
     expect(guide).toContain('synthetic-green-overshirt.jpg');
     expect(guide).toContain('available prepaid credits');
+    expect(guide).toContain('E2E_SEED_STAGING_PROJECT_REF');
     expect(guide).not.toMatch(/sb_(?:secret|publishable)_[A-Za-z0-9_-]+/);
   });
 

@@ -94,6 +94,8 @@ describe('marketplace economy migration', () => {
     expect(sql).toContain('create or replace function public.marketplace_can_read_garment_object');
     expect(sql).toContain('security definer');
     expect(sql).toContain("l.status = 'active'");
+    expect(sql).toContain('p_name = coalesce(g.clean_path, g.original_path)');
+    expect(sql).not.toContain('p_name in (g.original_path, g.clean_path)');
     expect(sql).toContain('public.marketplace_can_read_garment_object(name)');
     expect(sql).toContain('revoke all on function public.marketplace_can_read_garment_object(text) from public, anon');
     expect(sql).toContain('grant execute on function public.marketplace_can_read_garment_object(text) to authenticated');

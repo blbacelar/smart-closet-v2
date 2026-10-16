@@ -28,8 +28,12 @@ GitHub authority: #34
   - Added the SDK 57 development client, runtime version policy, internal development/simulator/staging profiles, guarded seed script, service-role seed grants, synthetic fixture, and two-account Maestro flow.
 - Marketplace image access repair:
   - Added a narrowly scoped, authenticated, `auth.uid()`-bound server decision for listed garment objects.
-  - Kept private closet and body-photo objects owner-only.
+  - Publishes only the effective cleaned path; the original upload, private closet, and body-photo objects remain owner-only.
   - Added executable buyer-vs-seller pgTAP coverage and a migration contract.
+- Seed safety repair:
+  - Requires an exact remote staging project-ref match and a reserved synthetic email namespace.
+  - Refuses to take over an unmarked account or overwrite fixture state after marketplace activity.
+  - Creates idempotent adjustment-ledger rows matching the synthetic 100/500 balances.
 - Accessibility/runtime hardening:
   - Exposed exact Fitly Credit balances to assistive technology so the installed test distinguishes both identities.
   - Updated the flow for the numeric date-of-birth field, native password prompt, and actual tab accessibility labels.
@@ -44,7 +48,7 @@ GitHub authority: #34
 | Local seed is idempotent | `npm run e2e:seed` twice; stable account and listing identifiers | PASS |
 | Seller fixture is correct | authenticated API check: 100 credits and one active listing | PASS |
 | Buyer fixture is correct | authenticated API check: 500 credits and the seller's active listing | PASS |
-| Listing images are buyer-readable without opening private closets | pgTAP 57/57, including active-listing Storage access | PASS |
+| Listing images are buyer-readable without opening private closets | pgTAP 58/58: active cleaned path allowed; original, unlisted, and withdrawn paths denied | PASS |
 | Installed two-account journey works | Maestro: seller login/100 credits/listing → logout → buyer login/500 credits/same listing | PASS |
 | Harness and migration contracts are enforced | targeted Jest suites: 17/17 | PASS |
 

@@ -21,8 +21,13 @@ memberships, credit balances, a ready garment, and one marketplace listing.
 For a remote target, use only a non-production staging project. Provide the
 following variables in the shell: `E2E_SUPABASE_URL`,
 `E2E_SUPABASE_SERVICE_ROLE_KEY`, `E2E_SEED_ALLOW_REMOTE` with the exact value
-`staging`, `E2E_SELLER_PASSWORD`, and `E2E_BUYER_PASSWORD`. Never expose the
-service-role key to Expo, Maestro, a checked-in file, or a production build.
+`staging`, `E2E_SEED_STAGING_PROJECT_REF` matching the project ref in the URL,
+`E2E_SELLER_PASSWORD`, and `E2E_BUYER_PASSWORD`. Remote identities must use the
+reserved `fitly-e2e…@example.com` or `fitly-e2e…@example.test` namespace. The
+script refuses to take over an unmarked account or reset a fixture after offers,
+transactions, or non-seed ledger entries exist; use fresh identities or reset
+the isolated staging project instead. Never expose the service-role key to Expo,
+Maestro, a checked-in file, or a production build.
 
 After installing the development build and starting Metro against the same
 Supabase target, run:

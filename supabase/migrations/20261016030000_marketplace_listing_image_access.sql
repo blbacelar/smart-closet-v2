@@ -18,7 +18,7 @@ as $$
       select 1
       from public.marketplace_listings l
       join public.garments g on g.id = l.garment_id
-      where p_name in (g.original_path, g.clean_path)
+      where p_name = coalesce(g.clean_path, g.original_path)
         and (
           l.status = 'active'
           or exists (
