@@ -436,6 +436,156 @@ async function verifyCrossedSwapCreation(databaseUrl) {
   }
 }
 
+async function verifyLegacyWriterDeletionLockOrder(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email) values
+        ('00000000-0000-4000-8000-000000000044', 'publish-delete-race@example.com'),
+        ('00000000-0000-4000-8000-000000000045', 'listing-delete-race@example.com'),
+        ('00000000-0000-4000-8000-000000000046', 'offer-delete-seller@example.com'),
+        ('00000000-0000-4000-8000-000000000047', 'offer-delete-buyer@example.com');
+      insert into public.marketplace_memberships (user_id, expires_at) values
+        ('00000000-0000-4000-8000-000000000044', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000045', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000046', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000047', now() + interval '1 year');
+      insert into public.garments (
+        id, user_id, original_path, image_hash, name, category, status
+      ) values
+        ('20000000-0000-4000-8000-000000000044',
+         '00000000-0000-4000-8000-000000000044',
+         '00000000-0000-4000-8000-000000000044/item.jpg',
+         'publish-delete-race', 'Publish deletion race', 'top', 'ready'),
+        ('20000000-0000-4000-8000-000000000045',
+         '00000000-0000-4000-8000-000000000045',
+         '00000000-0000-4000-8000-000000000045/item.jpg',
+         'listing-delete-race', 'Listing deletion race', 'top', 'ready'),
+        ('20000000-0000-4000-8000-000000000046',
+         '00000000-0000-4000-8000-000000000046',
+         '00000000-0000-4000-8000-000000000046/item.jpg',
+         'offer-delete-race', 'Offer deletion race', 'top', 'ready');
+      insert into public.marketplace_listings (
+        id, garment_id, seller_id, accepts_credits, accepts_swap,
+        is_giveaway, pickup_area
+      ) values
+        ('40000000-0000-4000-8000-000000000044',
+         '20000000-0000-4000-8000-000000000044',
+         '00000000-0000-4000-8000-000000000044',
+         false, false, true, 'Publish race area'),
+        ('40000000-0000-4000-8000-000000000045',
+         '20000000-0000-4000-8000-000000000045',
+         '00000000-0000-4000-8000-000000000045',
+         false, false, true, 'Listing race area'),
+        ('40000000-0000-4000-8000-000000000046',
+         '20000000-0000-4000-8000-000000000046',
+         '00000000-0000-4000-8000-000000000046',
+         false, false, true, 'Offer race area');
+      insert into public.marketplace_offers (
+        id, listing_id, buyer_id, seller_id, mode
+      ) values (
+        '50000000-0000-4000-8000-000000000047',
+        '40000000-0000-4000-8000-000000000046',
+        '00000000-0000-4000-8000-000000000047',
+        '00000000-0000-4000-8000-000000000046', 'giveaway'
+      );
+    `,
+    'Create the legacy-writer deletion fixtures',
+  );
+
+  const deletionWithPause = (userId) => `
+    begin;
+    select private.account_deletion_lock_subjects(
+      array['${userId}'::uuid], '{}'::uuid[]
+    );
+    select pg_sleep(0.5);
+    select * from public.account_deletion_start('${userId}');
+    commit;
+  `;
+  const authenticated = (userId, operation) => `
+    begin;
+    set local role authenticated;
+    select set_config('request.jwt.claim.sub', '${userId}', true);
+    ${operation}
+    commit;
+  `;
+
+  const assertNoDeadlock = (results, label) => {
+    const diagnostics = results.map((result) => result.stderr).join('\n');
+    if (diagnostics.toLowerCase().includes('deadlock detected')) {
+      throw new UpgradeTestError(`${label} deadlocked with account deletion.`);
+    }
+    return diagnostics;
+  };
+
+  const publishResults = await Promise.all([
+    concurrentQuery(
+      databaseUrl,
+      deletionWithPause('00000000-0000-4000-8000-000000000044'),
+    ),
+    concurrentQuery(
+      databaseUrl,
+      authenticated(
+        '00000000-0000-4000-8000-000000000044',
+        `select public.marketplace_publish_listing(
+          '20000000-0000-4000-8000-000000000044',
+          false, false, true, null, 'Changed publish area'
+        );`,
+      ),
+    ),
+  ]);
+  let diagnostics = assertNoDeadlock(publishResults, 'Listing publication');
+  if (publishResults[0].code !== 0
+    || publishResults[1].code === 0
+    || !diagnostics.includes('Account deletion in progress')) {
+    throw new UpgradeTestError('Listing publication did not yield to the deletion tombstone.');
+  }
+
+  const listingResults = await Promise.all([
+    concurrentQuery(
+      databaseUrl,
+      deletionWithPause('00000000-0000-4000-8000-000000000045'),
+    ),
+    concurrentQuery(
+      databaseUrl,
+      authenticated(
+        '00000000-0000-4000-8000-000000000045',
+        `select public.marketplace_withdraw_listing(
+          '40000000-0000-4000-8000-000000000045'
+        );`,
+      ),
+    ),
+  ]);
+  diagnostics = assertNoDeadlock(listingResults, 'Listing withdrawal');
+  if (listingResults[0].code !== 0
+    || listingResults[1].code === 0
+    || !diagnostics.includes('Account deletion in progress')) {
+    throw new UpgradeTestError('Listing withdrawal did not yield to the deletion tombstone.');
+  }
+
+  const offerResults = await Promise.all([
+    concurrentQuery(
+      databaseUrl,
+      deletionWithPause('00000000-0000-4000-8000-000000000047'),
+    ),
+    concurrentQuery(
+      databaseUrl,
+      authenticated(
+        '00000000-0000-4000-8000-000000000047',
+        `select public.marketplace_withdraw_offer(
+          '50000000-0000-4000-8000-000000000047'
+        );`,
+      ),
+    ),
+  ]);
+  diagnostics = assertNoDeadlock(offerResults, 'Offer withdrawal');
+  if (offerResults[1].code !== 0
+    || offerResults[0].code === 0
+    || !diagnostics.includes('unresolved marketplace activity')) {
+    throw new UpgradeTestError('Offer withdrawal and deletion did not serialize safely.');
+  }
+}
+
 async function verifyConcurrentReservation(databaseUrl) {
   psql(
     databaseUrl,
@@ -746,6 +896,7 @@ async function main() {
     );
     await verifyAcceptanceDeletionLockOrder(latestDatabaseUrl);
     await verifyCrossedSwapCreation(latestDatabaseUrl);
+    await verifyLegacyWriterDeletionLockOrder(latestDatabaseUrl);
     await verifyDeletionWriteFence(latestDatabaseUrl);
     await verifyCommittedAuthDeletion(latestDatabaseUrl);
     run(

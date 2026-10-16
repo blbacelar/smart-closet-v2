@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(40);
 
 select has_table('private', 'marketplace_transaction_terms', 'accepted terms have a restricted snapshot');
 select is(
@@ -198,6 +198,22 @@ select throws_ok(
   'the buyer cannot cancel after the seller confirms handoff'
 );
 reset role;
+
+update public.marketplace_transactions
+set status = 'disputed', updated_at = now()
+where id = (select id from seller_partial_transaction);
+select throws_ok(
+  format('update public.marketplace_transactions set status = %L where id = %L',
+    'completed', (select id from seller_partial_transaction)),
+  'P0001', 'Invalid marketplace transaction transition',
+  'a disputed transaction cannot bypass the future atomic resolver to complete'
+);
+select throws_ok(
+  format('update public.marketplace_transactions set status = %L where id = %L',
+    'cancelled', (select id from seller_partial_transaction)),
+  'P0001', 'Invalid marketplace transaction transition',
+  'a disputed transaction cannot bypass the future atomic resolver to cancel'
+);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000031', true);
