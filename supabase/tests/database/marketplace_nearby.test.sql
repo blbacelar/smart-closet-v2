@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(27);
+select plan(28);
 
 select has_extension('postgis', 'PostGIS is available for coarse marketplace discovery');
 select has_table('private', 'marketplace_member_locations', 'member geography is private');
@@ -35,18 +35,16 @@ select is(
   false,
   'anonymous callers cannot use nearby discovery'
 );
-select unlike(
-  pg_get_function_result(
+select ok(
+  position('latitude' in pg_get_function_result(
     'public.marketplace_listings_nearby(integer,integer,integer,timestamp with time zone,uuid)'::regprocedure
-  ),
-  '%latitude%',
+  )) = 0,
   'nearby results do not expose latitude'
 );
-select unlike(
-  pg_get_function_result(
+select ok(
+  position('longitude' in pg_get_function_result(
     'public.marketplace_listings_nearby(integer,integer,integer,timestamp with time zone,uuid)'::regprocedure
-  ),
-  '%longitude%',
+  )) = 0,
   'nearby results do not expose longitude'
 );
 
@@ -92,7 +90,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000102', true);
 select public.marketplace_set_discovery_location(49.29, -123.12, 'Near area', 'manual');
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000103', true);
-select public.marketplace_set_discovery_location(49.37, -123.12, 'Edge area', 'manual');
+select public.marketplace_set_discovery_location(49.36, -123.12, 'Edge area', 'manual');
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000104', true);
 select public.marketplace_set_discovery_location(50.00, -123.00, 'Far area', 'manual');
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000105', true);
@@ -220,12 +218,12 @@ select throws_ok(
 );
 reset role;
 
-delete from auth.users where id = '00000000-0000-4000-8000-000000000105';
+select * from public.account_deletion_start('00000000-0000-4000-8000-000000000105');
 select is(
   (select count(*) from private.marketplace_member_locations
    where user_id = '00000000-0000-4000-8000-000000000105'),
   0::bigint,
-  'Auth/profile deletion removes private member geography'
+  'account-deletion start immediately removes private member geography'
 );
 
 select * from finish();

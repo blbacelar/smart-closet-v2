@@ -20,6 +20,8 @@ describe('marketplace nearby discovery migration', () => {
     expect(sql).toContain('round(p_longitude::numeric, 2)');
     expect(sql).toMatch(/marketplace_member_locations[\s\S]*user_id uuid[\s\S]*on delete cascade/);
     expect(sql).toMatch(/marketplace_listing_locations[\s\S]*seller_user_id uuid[\s\S]*on delete cascade/);
+    expect(sql).toContain('marketplace_purge_location_for_deletion');
+    expect(sql).toContain('private.account_deletion_requests');
   });
 
   it('exposes authenticated lifecycle and nearby RPCs without raw coordinates', () => {

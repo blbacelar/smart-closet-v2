@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C05 and C07-C09 merged; C10 implementation and verification in progress; C06 waits on External Gate B)
+**Status:** ECC-reviewed; execution in progress (C01-C05 and C07-C10 merged; C12 implementation and verification in progress; C06 waits on External Gate B)
 
 **Created:** 2026-10-15
 

@@ -35,6 +35,9 @@ const listingRowSchema = z.object({
   image_path: z.string().min(1),
   created_at: z.string().min(1),
 });
+const nearbyListingRowSchema = listingRowSchema.extend({
+  distance_km: z.number().int().min(1).max(100),
+});
 
 const offerRowSchema = z.object({
   id: z.string().uuid(),
@@ -109,6 +112,25 @@ export type MarketplaceListing = {
   imagePath: string;
   imageUrl: string;
   createdAt: string;
+  distanceKm: number | null;
+};
+
+export type MarketplaceDiscoveryLocation = {
+  latitude: number;
+  longitude: number;
+  areaLabel: string;
+  source: 'device' | 'manual';
+};
+
+export type NearbyListingCursor = {
+  distanceKm: number;
+  createdAt: string;
+  id: string;
+};
+
+export type NearbyListingPage = {
+  items: MarketplaceListing[];
+  nextCursor: NearbyListingCursor | null;
 };
 
 export type MarketplaceOffer = {
@@ -157,6 +179,13 @@ export type MarketplaceRepository = {
   getSummary: () => Promise<MarketplaceSummary>;
   activateMembership: () => Promise<{ creditsGranted: number }>;
   listListings: () => Promise<MarketplaceListing[]>;
+  setDiscoveryLocation: (input: MarketplaceDiscoveryLocation) => Promise<void>;
+  clearDiscoveryLocation: () => Promise<void>;
+  listNearbyListings: (options?: {
+    radiusKm?: number;
+    limit?: number;
+    cursor?: NearbyListingCursor | null;
+  }) => Promise<NearbyListingPage>;
   publishListing: (input: ValidatedMarketplaceListing & { garmentId: string }) => Promise<string>;
   withdrawListing: (listingId: string) => Promise<void>;
   createOffer: (input: {
@@ -204,6 +233,29 @@ export function createMarketplaceRepository(client: SupabaseClient): Marketplace
     throwIfError(error);
     return data.signedUrl;
   };
+  const mapListing = async (
+    row: z.infer<typeof listingRowSchema>,
+    distanceKm: number | null,
+  ): Promise<MarketplaceListing> => ({
+    id: row.id,
+    garmentId: row.garment_id,
+    sellerId: row.seller_id,
+    sellerName: row.seller_name,
+    status: row.status,
+    acceptsCredits: row.accepts_credits,
+    acceptsSwap: row.accepts_swap,
+    isGiveaway: row.is_giveaway,
+    creditPrice: row.credit_price,
+    pickupArea: row.pickup_area,
+    garmentName: row.garment_name,
+    category: row.category,
+    color: row.color,
+    size: row.size,
+    imagePath: row.image_path,
+    imageUrl: await signImage(row.image_path),
+    createdAt: row.created_at,
+    distanceKm,
+  });
 
   return {
     async getSummary() {
@@ -222,25 +274,54 @@ export function createMarketplaceRepository(client: SupabaseClient): Marketplace
     async listListings() {
       const { data, error } = await client.rpc('marketplace_discover_listings');
       throwIfError(error);
-      return Promise.all(z.array(listingRowSchema).parse(data ?? []).map(async (row) => ({
-        id: row.id,
-        garmentId: row.garment_id,
-        sellerId: row.seller_id,
-        sellerName: row.seller_name,
-        status: row.status,
-        acceptsCredits: row.accepts_credits,
-        acceptsSwap: row.accepts_swap,
-        isGiveaway: row.is_giveaway,
-        creditPrice: row.credit_price,
-        pickupArea: row.pickup_area,
-        garmentName: row.garment_name,
-        category: row.category,
-        color: row.color,
-        size: row.size,
-        imagePath: row.image_path,
-        imageUrl: await signImage(row.image_path),
-        createdAt: row.created_at,
-      })));
+      return Promise.all(
+        z.array(listingRowSchema).parse(data ?? []).map((row) => mapListing(row, null)),
+      );
+    },
+
+    async setDiscoveryLocation(input) {
+      const { error } = await client.rpc('marketplace_set_discovery_location', {
+        p_latitude: input.latitude,
+        p_longitude: input.longitude,
+        p_area_label: input.areaLabel.trim(),
+        p_source: input.source,
+      });
+      throwIfError(error);
+    },
+
+    async clearDiscoveryLocation() {
+      const { error } = await client.rpc('marketplace_clear_discovery_location');
+      throwIfError(error);
+    },
+
+    async listNearbyListings(options = {}) {
+      const radiusKm = z.number().int().min(1).max(100).parse(options.radiusKm ?? 25);
+      const limit = z.number().int().min(1).max(49).parse(options.limit ?? 24);
+      const cursor = options.cursor ?? null;
+      if (cursor) {
+        z.object({
+          distanceKm: z.number().int().min(1).max(100),
+          createdAt: z.string().min(1),
+          id: z.string().uuid(),
+        }).parse(cursor);
+      }
+      const { data, error } = await client.rpc('marketplace_listings_nearby', {
+        p_radius_km: radiusKm,
+        p_limit: limit + 1,
+        p_cursor_distance_km: cursor?.distanceKm ?? null,
+        p_cursor_created_at: cursor?.createdAt ?? null,
+        p_cursor_id: cursor?.id ?? null,
+      });
+      throwIfError(error);
+      const rows = z.array(nearbyListingRowSchema).parse(data ?? []);
+      const pageRows = rows.slice(0, limit);
+      const last = pageRows.at(-1);
+      return {
+        items: await Promise.all(pageRows.map((row) => mapListing(row, row.distance_km))),
+        nextCursor: rows.length > limit && last
+          ? { distanceKm: last.distance_km, createdAt: last.created_at, id: last.id }
+          : null,
+      };
     },
 
     async publishListing(input) {
@@ -379,6 +460,9 @@ export const supabaseMarketplaceRepository: MarketplaceRepository = {
   getSummary: () => requireRepository().getSummary(),
   activateMembership: () => requireRepository().activateMembership(),
   listListings: () => requireRepository().listListings(),
+  setDiscoveryLocation: (input) => requireRepository().setDiscoveryLocation(input),
+  clearDiscoveryLocation: () => requireRepository().clearDiscoveryLocation(),
+  listNearbyListings: (options) => requireRepository().listNearbyListings(options),
   publishListing: (input) => requireRepository().publishListing(input),
   withdrawListing: (listingId) => requireRepository().withdrawListing(listingId),
   createOffer: (input) => requireRepository().createOffer(input),
