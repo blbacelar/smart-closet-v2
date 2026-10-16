@@ -1,4 +1,4 @@
-import { handleDeleteAccountRequest } from '../handler';
+import { AccountDeletionBlockedError, handleDeleteAccountRequest } from '../handler';
 
 function request(input: { method?: string; authorization?: string; body?: unknown; throws?: boolean } = {}) {
   return {
@@ -83,6 +83,19 @@ describe('delete-account handler', () => {
       body: {
         code: 'deletion_failed',
         message: "We couldn't delete your account. Please try again.",
+      },
+    });
+  });
+
+  it('returns an honest conflict when marketplace activity must be resolved first', async () => {
+    const deps = dependencies();
+    deps.deleteAccount.mockRejectedValue(new AccountDeletionBlockedError());
+
+    await expect(handleDeleteAccountRequest(request(), deps)).resolves.toEqual({
+      status: 409,
+      body: {
+        code: 'marketplace_activity_unresolved',
+        message: 'Finish or cancel your active marketplace exchanges before deleting your account.',
       },
     });
   });

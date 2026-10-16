@@ -15,6 +15,7 @@ jest.mock('../../../lib/supabase', () => ({
   },
 }));
 
+import { AccountDeletionBlockedError } from '../../account/accountDeletionErrors';
 import { supabaseAuthGateway } from '../authGateway';
 
 function createClient() {
@@ -278,6 +279,22 @@ describe('supabaseAuthGateway', () => {
 
     await expect(supabaseAuthGateway.deleteAccount()).rejects.toThrow(
       "We couldn't delete your account. Please try again.",
+    );
+    expect(mockSupabase.auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('surfaces only the known marketplace conflict when deletion is blocked', async () => {
+    mockSupabase.functions.invoke.mockResolvedValue({
+      data: null,
+      error: {
+        context: {
+          json: jest.fn().mockResolvedValue({ code: 'marketplace_activity_unresolved' }),
+        },
+      },
+    });
+
+    await expect(supabaseAuthGateway.deleteAccount()).rejects.toBeInstanceOf(
+      AccountDeletionBlockedError,
     );
     expect(mockSupabase.auth.signOut).not.toHaveBeenCalled();
   });

@@ -72,6 +72,130 @@ function concurrentQuery(databaseUrl, sql) {
   });
 }
 
+async function verifyDeletionWriteFence(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000023', 'deletion-race@example.com');
+    `,
+    'Create the committed deletion-fence fixture',
+  );
+
+  const writer = spawn(
+    'psql',
+    [databaseUrl, '-X', '-v', 'ON_ERROR_STOP=1', '-qAt'],
+    { shell: false },
+  );
+  let writerStderr = '';
+  writer.stderr.on('data', (chunk) => { writerStderr += chunk.toString(); });
+  const writerClosed = new Promise((resolveClose) => {
+    writer.on('error', (error) => resolveClose({ code: 1, error }));
+    writer.on('close', (code) => resolveClose({ code: code ?? 1 }));
+  });
+  const writerReady = new Promise((resolveReady, rejectReady) => {
+    const timeout = setTimeout(
+      () => rejectReady(new UpgradeTestError('Timed out waiting for the held storage write.')),
+      5000,
+    );
+    writer.stdout.on('data', (chunk) => {
+      if (chunk.toString().includes('WRITE_LOCKED')) {
+        clearTimeout(timeout);
+        resolveReady();
+      }
+    });
+  });
+  writer.stdin.write(`
+    begin;
+    insert into storage.objects (id, bucket_id, name) values (
+      '60000000-0000-4000-8000-000000000023',
+      'garments',
+      '00000000-0000-4000-8000-000000000023/racing.jpg'
+    );
+    select 'WRITE_LOCKED';
+  `);
+  await writerReady;
+
+  let deletionSettled = false;
+  const deletion = concurrentQuery(
+    databaseUrl,
+    `select * from public.account_deletion_start(
+      '00000000-0000-4000-8000-000000000023'
+    );`,
+  ).then((result) => {
+    deletionSettled = true;
+    return result;
+  });
+  await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+  if (deletionSettled) {
+    writer.stdin.end('rollback;\n\\q\n');
+    await writerClosed;
+    throw new UpgradeTestError(
+      'Account deletion crossed an in-flight storage write instead of waiting for its transaction.',
+    );
+  }
+
+  writer.stdin.end('commit;\n\\q\n');
+  const [writerResult, deletionResult] = await Promise.all([writerClosed, deletion]);
+  if (writerResult.code !== 0) {
+    throw new UpgradeTestError(`Held storage write failed: ${writerStderr}`);
+  }
+  if (deletionResult.code !== 0) {
+    throw new UpgradeTestError(`Deletion fence failed: ${deletionResult.stderr}`);
+  }
+
+  const lateWrite = await concurrentQuery(
+    databaseUrl,
+    `insert into storage.objects (id, bucket_id, name) values (
+      '60000000-0000-4000-8000-000000000123',
+      'garments',
+      '00000000-0000-4000-8000-000000000023/late.jpg'
+    );`,
+  );
+  if (!lateWrite.stderr.includes('Account deletion in progress')) {
+    throw new UpgradeTestError('A storage write crossed the committed deletion tombstone.');
+  }
+}
+
+async function verifyCommittedAuthDeletion(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000024', 'deletion-auth-commit@example.com');
+      insert into public.marketplace_credit_accounts (user_id, available_balance)
+      values ('00000000-0000-4000-8000-000000000024', 5);
+      insert into public.marketplace_credit_ledger (
+        user_id, kind, delta_available, idempotency_key, description
+      ) values (
+        '00000000-0000-4000-8000-000000000024',
+        'adjustment', 5, 'deletion-auth-commit-opening', 'Committed Auth deletion fixture'
+      );
+      create temporary table committed_deletion_request as
+      select * from public.account_deletion_start(
+        '00000000-0000-4000-8000-000000000024'
+      );
+      select public.account_deletion_mark_storage_step(request_id, step)
+      from committed_deletion_request,
+        unnest(array['body', 'garments', 'results']) step;
+      select public.account_deletion_purge_database(request_id)
+      from committed_deletion_request;
+    `,
+    'Commit database purge before Auth deletion',
+  );
+
+  const authDeletion = await concurrentQuery(
+    databaseUrl,
+    `delete from auth.users
+     where id = '00000000-0000-4000-8000-000000000024';`,
+  );
+  if (authDeletion.code !== 0) {
+    throw new UpgradeTestError(
+      `Auth deletion could not complete after a committed purge: ${authDeletion.stderr}`,
+    );
+  }
+}
+
 async function verifyConcurrentReservation(databaseUrl) {
   psql(
     databaseUrl,
@@ -359,6 +483,27 @@ async function main() {
         join(workspace, 'supabase/tests/database/rls.test.sql'),
       ], workspace),
       'Verify the complete isolated database RLS contract',
+    );
+    const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyDeletionWriteFence(latestDatabaseUrl);
+    await verifyCommittedAuthDeletion(latestDatabaseUrl);
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/upgrade-tests/account-deletion-concurrency.test.sql'),
+      ], workspace),
+      'Verify the account-deletion write fence across connections',
+    );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/account_deletion_lifecycle.test.sql'),
+      ], workspace),
+      'Verify marketplace-aware account deletion lifecycle',
     );
   } catch (error) {
     failure = error;

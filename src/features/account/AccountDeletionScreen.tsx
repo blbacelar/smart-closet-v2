@@ -12,6 +12,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts } from '../../theme';
+import {
+  isAccountDeletionBlockedError,
+  unresolvedMarketplaceDeletionMessage,
+} from './accountDeletionErrors';
 
 type AccountDeletionScreenProps = {
   onCancel: () => void;
@@ -35,8 +39,12 @@ export function AccountDeletionScreen({ onCancel, onDelete }: AccountDeletionScr
     setIsDeleting(true);
     try {
       await onDelete();
-    } catch {
-      setError(safeFailureMessage);
+    } catch (deletionError) {
+      setError(
+        isAccountDeletionBlockedError(deletionError)
+          ? unresolvedMarketplaceDeletionMessage
+          : safeFailureMessage,
+      );
       setIsDeleting(false);
     }
   };
@@ -56,7 +64,9 @@ export function AccountDeletionScreen({ onCancel, onDelete }: AccountDeletionScr
         <Text style={styles.eyebrow}>Privacy & account</Text>
         <Text style={styles.title}>Delete your account?</Text>
         <Text style={styles.intro}>
-          This action is permanent and cannot be undone. Your current Fitly data will be removed.
+          This action is permanent and cannot be undone. Your private content and public profile
+          will be removed. Limited exchange and accounting records may remain without your public
+          identity when required by policy.
         </Text>
 
         <View style={styles.summary}>
@@ -64,6 +74,7 @@ export function AccountDeletionScreen({ onCancel, onDelete }: AccountDeletionScr
           <Text style={styles.summaryItem}>Your profile and sign-in access</Text>
           <Text style={styles.summaryItem}>Your private body photos</Text>
           <Text style={styles.summaryItem}>Your garments and fitting results</Text>
+          <Text style={styles.summaryItem}>Your listing details and messages you sent</Text>
           <Text style={styles.summaryItem}>Your usage and feedback history</Text>
         </View>
 

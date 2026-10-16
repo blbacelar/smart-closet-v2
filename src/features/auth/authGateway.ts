@@ -2,6 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../../lib/supabase';
+import { AccountDeletionBlockedError } from '../account/accountDeletionErrors';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -41,6 +42,32 @@ export type AuthGateway = {
 const deletionFailureMessage = "We couldn't delete your account. Please try again.";
 const socialAuthFailureMessage = 'Could not complete social sign-in. Try again.';
 const adultConfirmationFailureMessage = 'Could not confirm account eligibility. Try again.';
+
+async function deletionResponseCode(data: unknown, error: unknown) {
+  if (typeof data === 'object' && data !== null && 'code' in data) {
+    return (data as { code?: unknown }).code;
+  }
+
+  const context = typeof error === 'object' && error !== null && 'context' in error
+    ? (error as { context?: unknown }).context
+    : null;
+  if (
+    typeof context === 'object'
+    && context !== null
+    && 'json' in context
+    && typeof (context as { json?: unknown }).json === 'function'
+  ) {
+    try {
+      const payload = await (context as { json: () => Promise<unknown> }).json();
+      if (typeof payload === 'object' && payload !== null && 'code' in payload) {
+        return (payload as { code?: unknown }).code;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 function requireClient() {
   if (!supabase) {
@@ -202,6 +229,9 @@ export const supabaseAuthGateway: AuthGateway = {
       || !('deleted' in data)
       || data.deleted !== true
     ) {
+      if (await deletionResponseCode(data, error) === 'marketplace_activity_unresolved') {
+        throw new AccountDeletionBlockedError();
+      }
       throw new Error(deletionFailureMessage);
     }
 
