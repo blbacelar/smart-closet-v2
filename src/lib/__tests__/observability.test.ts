@@ -78,6 +78,27 @@ describe('privacy-safe observability', () => {
     });
   });
 
+  it('drops sensitive values even when a caller hides them under an allowed property name', () => {
+    const target = adapter();
+    const client = createObservability(target, consent);
+
+    client.track('app_opened', {
+      source: 'member@example.com',
+      category: '49.2827,-123.1207',
+      method: 'Bearer secret-token',
+      state: 'user/private/body.jpg',
+      mode: 'https://private.example/item',
+      message: 'private chat copy',
+      count: 3,
+      cached: true,
+    });
+
+    expect(target.track).toHaveBeenCalledWith('app_opened', {
+      count: 3,
+      cached: true,
+    });
+  });
+
   it('captures only a safe error descriptor, never the original message or object', () => {
     const target = adapter();
     const client = createObservability(target, consent);
