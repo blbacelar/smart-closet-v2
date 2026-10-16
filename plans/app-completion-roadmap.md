@@ -88,7 +88,7 @@ These tracks start immediately but may not be completed by code alone:
 | A. Economy | Final annual price, first/renewal grant, pricing bounds, lapse, refund/revocation, wind-down, final credit name, and measurable cost/liquidity thresholds | Step 10 paid membership; paid staging and launch |
 | B. Legal/tax/privacy | Approved terms, retention/destruction schedule, barter/platform reporting and seller-due-diligence requirements, dispute/evidence policy, takedown process | Step 3 final retention schema, Step 7 dispute policy, Step 11 compliance tooling, any production pilot |
 | C. Storefront | Written iOS, Android, and web payment-rail decision; approved product disclosures and provider-operable wind-down actions | Step 10 billing; paid mobile launch |
-| D. Accounts and credentials | Apple Developer, Google Play, EAS/Expo token, OAuth credentials, funded Gemini project, production SMTP, approved crash-provider account, optional cleanup-provider decision | Signed device builds, email confirmation, OAuth, push, real-provider smoke tests, redacted crash delivery, store submission |
+| D. Provider access and acceptance | Access-ready ownership, terms, funding, least-privilege roles, safely stored credentials, environments, and minimum connectivity for Apple/Google/EAS, APNs/FCM, isolated hosted Supabase staging/production, OAuth, Gemini, SMTP, crash monitoring, the optional cleanup-provider decision, and every billing provider selected by Gate C; separate acceptance-ready story evidence | Access-ready receipts unblock implementation; acceptance-ready signed device builds, email/OAuth/push/AI/billing flows, hosted recovery, redacted crash delivery, rollback and store submission close Gate D |
 | E. Pilot operations | Named moderator/support owner, monitored contact addresses, pilot users, SLA, reliability/safety/density thresholds, and circuit-breaker owners | Step 13 regional pilot |
 
 While a gate is pending, its feature remains behind development mode or a server-side kill switch. Other independent steps continue.
@@ -97,6 +97,8 @@ The evidence fields, capability-specific start conditions, secret boundary,
 rollback requirements, and current Gate D/E status are maintained in
 [`docs/gates/gate-d-e-readiness-pack.md`](../docs/gates/gate-d-e-readiness-pack.md).
 Account or environment-variable presence alone does not satisfy that contract.
+Gate D `access-ready` approval authorizes story start; each story produces its
+own `acceptance-ready` exit evidence, so no story depends on its own result.
 
 As of 2026-10-16, C23 was the last independently executable slice. The next
 product slices are blocked by external authority rather than an unresolved code
