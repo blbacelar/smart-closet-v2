@@ -20,6 +20,12 @@ const gates = [
     args: ['run', 'check:pii'],
   },
   {
+    name: 'External gate draft hashes',
+    display: 'npm run check:gate-drafts',
+    command: 'npm',
+    args: ['run', 'check:gate-drafts'],
+  },
+  {
     name: 'Expo Doctor',
     display: 'npm exec --offline expo-doctor',
     command: 'npm',

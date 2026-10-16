@@ -43,6 +43,9 @@ jobs:
       - name: Check for PII leakage
         run: npm run check:pii
 
+      - name: Verify external gate draft hashes
+        run: npm run check:gate-drafts
+
       - name: Validate Expo dependencies
         run: npm exec --offline expo-doctor
 

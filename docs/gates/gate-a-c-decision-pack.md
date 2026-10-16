@@ -332,6 +332,11 @@ and credentials:
 The following must be completed by humans with the stated authority. A blank
 box is a hard launch block.
 
+Exact unapproved outbound drafts for counsel, Apple, and Google are maintained
+in [`docs/gates/submissions`](./submissions/README.md). Their presence is not
+permission to send them; the manifest requires approval of the exact file hash
+and verified destination.
+
 - [ ] **Founder/product + finance:** accept or replace every Gate A lifecycle
   value and every numeric economy threshold, including fee, grants, bounds,
   samples, targets, and circuit breakers.

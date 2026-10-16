@@ -1,0 +1,37 @@
+Subject: Request for written Payments policy guidance for Fitly physical clothing exchange membership
+
+Fitly is preparing an invite-only British Columbia pilot and requests written policy guidance before enabling any purchase or external-purchase call to action in its Android app.
+
+The proposed first-release contract is:
+
+- one annual marketplace membership, proposed at CAD 59 plus applicable tax;
+- one server-issued grant of 60 Fitly Credits for a first paid period and 30 for a successful renewal period;
+- no separately sold credit packs;
+- credits are also earned only after a completed physical garment handoff;
+- credits are redeemable only for physical garments supplied by another member;
+- reciprocal one-garment-for-one-garment swaps can use zero credits;
+- members may give away a garment for zero credits;
+- no cash garment sale, seller payout, commission, shipping, auction, credit gifting, mixed cash/credit payment, or cash-out;
+- credits do not expire and cannot create a negative balance;
+- a separate optional digital AI Pro entitlement is not bundled with marketplace membership.
+
+Fitly understands that Google Play Billing generally applies to digital subscriptions and sold virtual currency, while physical goods and peer-to-peer payments are excluded and earned or awarded points may be issued without Play Billing. Google also describes consumption-only apps and mixed digital/physical SKUs. Because the proposed membership combines marketplace access with units usable only for physical garment exchanges, we do not want to infer the classification.
+
+Please confirm which of these contracts Google Play would accept for Canadian users:
+
+1. A consumption-only Android app that shows server-derived membership status but contains no purchase flow, purchase link, price promotion, or external-purchase call to action, with the annual marketplace membership purchased on the web.
+2. A Google Play subscription for marketplace membership that includes the first/renewal grant described above.
+3. A paid membership separated from credits, with credits only independently awarded or earned from physical exchanges.
+4. No paid membership in the app or pilot until a later reviewed submission.
+
+For the accepted option, please also confirm the permitted behavior for purchase, restore, account management, cancellation, renewal disclosure, refund/revocation, and a provider-initiated stop-sale or wind-down. Fitly will not enable production billing until its product, legal, tax, privacy, and storefront approvals all describe the same contract.
+
+Supporting implementation facts:
+
+- Membership and credit balances are server-authoritative.
+- Grants use immutable double-entry journal postings and provider-period idempotency.
+- Refund or revocation cannot create a negative balance or claw earned credits back from an innocent counterparty.
+- A lapsed member retains history, balance visibility, account deletion, and the ability to finish or dispute an already accepted physical handoff, but cannot start a new marketplace transaction.
+- Production billing is currently disabled; development activation is no-charge.
+
+We can provide a review account, build, terms, disclosures, and lifecycle diagrams after the appropriate developer account and submission channel are available.

@@ -25,6 +25,7 @@ describe('GitHub quality CI', () => {
     expect(workflow).toContain('run: npm ci');
     expect(workflow).toContain('run: npm run typecheck');
     expect(workflow).toContain('run: npm run test:coverage -- --ci');
+    expect(workflow).toContain('run: npm run check:gate-drafts');
     expect(workflow).toContain('run: npm exec --offline expo-doctor');
     expect(workflow).toContain('run: npm run build:web');
     expect(workflow).toContain('run: npm audit --omit=dev --audit-level=critical');
@@ -90,6 +91,7 @@ describe('dependency automation', () => {
       'npm run typecheck',
       'npm run test:coverage -- --ci',
       'npm run check:pii',
+      'npm run check:gate-drafts',
       'npm exec --offline expo-doctor',
       'npm run build:web',
       'npm audit --omit=dev --audit-level=critical',
