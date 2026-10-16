@@ -260,6 +260,17 @@ begin
   order by id
   for update;
 
+  -- A concurrent request may have committed while this call waited for the
+  -- account locks. Re-check ownership before validating balances so retries
+  -- return the original effect instead of observing the post-effect balance.
+  select id into v_journal_id
+  from private.marketplace_ledger_journals
+  where idempotency_key = p_idempotency_key
+     or (p_external_event_key is not null and external_event_key = p_external_event_key)
+  order by created_at, id
+  limit 1;
+  if found then return v_journal_id; end if;
+
   if not p_allow_migration_overdraft and v_member_kind like 'member_%' and (
     select balance + v_member_units
     from private.marketplace_ledger_accounts
