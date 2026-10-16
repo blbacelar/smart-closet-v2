@@ -23,7 +23,7 @@ type HandlerRequest = {
 };
 
 type HandlerDependencies = {
-  serviceKey: string;
+  accessToken: string;
   now: () => Date;
   readHealth: () => Promise<unknown>;
 };
@@ -77,6 +77,13 @@ export function parseOperationalHealthConfig(
     throw new Error('Invalid operational health configuration.');
   }
   return config;
+}
+
+export function parseOperationalHealthAccessToken(value: string | undefined) {
+  if (!value || value.length < 32 || value.length > 256 || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error('Invalid operational health access token configuration.');
+  }
+  return value;
 }
 
 const metricNames = new Set<OperationalMetricName>([
@@ -140,7 +147,8 @@ export async function handleOperationsHealth(
   dependencies: HandlerDependencies,
 ): Promise<HandlerResponse> {
   if (request.method !== 'GET') return { status: 405, body: { code: 'method_not_allowed' } };
-  if (!dependencies.serviceKey || request.authorization !== `Bearer ${dependencies.serviceKey}`) {
+  if (!dependencies.accessToken
+      || request.authorization !== `Bearer ${dependencies.accessToken}`) {
     return { status: 401, body: { code: 'unauthorized' } };
   }
   try {

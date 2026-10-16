@@ -78,7 +78,17 @@ const safePropertyKeys = new Set([
   'state',
   'status',
 ]);
-const safeStringValue = /^[a-z][a-z0-9_-]{0,47}$/i;
+const safeStringValues: Record<string, Set<string>> = {
+  category: new Set(['top', 'bottom', 'dress', 'outerwear', 'shoes', 'unknown']),
+  categoryMode: new Set(['manual', 'automatic']),
+  method: new Set(['email', 'apple', 'google']),
+  mode: new Set(['credits', 'swap', 'giveaway']),
+  platform: new Set(['ios', 'android', 'web']),
+  provider: new Set(['gemini', 'unknown']),
+  source: new Set(['launch', 'resume', 'capture_flow', 'quota', 'profile', 'unknown', 'test']),
+  state: new Set(['created', 'cached', 'queued', 'running', 'done', 'failed']),
+  status: new Set(['ok', 'warning', 'critical', 'succeeded', 'failed']),
+};
 const recognizedErrorNames = new Set<SafeErrorReport['name']>([
   'Error',
   'TypeError',
@@ -99,7 +109,7 @@ function sanitizeProperties(properties: Record<string, unknown>) {
   const safe: SafeTelemetryProperties = {};
   for (const [key, value] of Object.entries(properties)) {
     if (sensitiveKey.test(key) || !safePropertyKeys.has(key)) continue;
-    if (typeof value === 'string' && safeStringValue.test(value)) safe[key] = value;
+    if (typeof value === 'string' && safeStringValues[key]?.has(value)) safe[key] = value;
     else if (typeof value === 'boolean') safe[key] = value;
     else if (typeof value === 'number' && Number.isFinite(value)) safe[key] = value;
   }

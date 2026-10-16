@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(77);
+select plan(78);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -436,17 +436,19 @@ select is(
 );
 select is(has_table_privilege('authenticated', 'public.ai_cost_ledger', 'select'), false, 'member cannot read the cost ledger');
 select is(has_table_privilege('authenticated', 'public.analytics_events', 'select'), false, 'member cannot read analytics events');
+select is(
+  has_table_privilege('authenticated', 'public.analytics_events', 'insert'),
+  false,
+  'members cannot bypass the validated analytics ingress with direct inserts'
+);
 select lives_ok(
-  $$insert into public.analytics_events (user_id, event_name, properties)
-    values ('00000000-0000-4000-8000-000000000001', 'app_opened', '{"source":"test"}')$$,
-  'member can insert their own allowlisted analytics event'
+  $$select public.record_analytics_event('app_opened', '{"source":"launch"}')$$,
+  'members can record an allowlisted event through server-validated ingress'
 );
 select throws_ok(
-  $$insert into public.analytics_events (user_id, event_name, properties)
-    values ('00000000-0000-4000-8000-000000000002', 'app_opened', '{}')$$,
-  '42501',
-  'new row violates row-level security policy for table "analytics_events"',
-  'member cannot insert an analytics event for another member'
+  $$select public.record_analytics_event('app_opened', '{"source":"secret-token"}')$$,
+  '22023', 'Invalid analytics event properties',
+  'server validation rejects sensitive-looking values from modified clients'
 );
 
 select results_eq(

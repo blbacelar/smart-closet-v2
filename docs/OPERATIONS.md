@@ -20,9 +20,16 @@ vendor by default.
 
 ## Health endpoint
 
-Deploy `operations-health` as an authenticated Supabase Edge Function. A caller
-must use the current Supabase service secret as the Bearer credential. Do not put
-that credential in the mobile app, a browser, logs, screenshots, or tickets.
+Deploy `operations-health` as a server-only protected Supabase Edge Function. The
+Supabase service secret stays inside the function and is used only for its
+aggregate database RPCs. The monitor receives a separate high-entropy
+`OPERATIONS_HEALTH_ACCESS_TOKEN` Bearer credential with no database privileges.
+Do not put either credential in the mobile app, a browser, logs, screenshots, or
+tickets.
+
+`supabase/config.toml` sets `verify_jwt = false` only for this function so the
+gateway accepts the independent token. The handler still rejects every request
+whose exact Bearer token does not match; never disable that handler check.
 
 Responses use `Cache-Control: no-store`:
 
@@ -52,9 +59,15 @@ OPERATIONS_HEALTH_WARNING_COUNT=1
 OPERATIONS_HEALTH_CRITICAL_COUNT=10
 ```
 
+Generate `OPERATIONS_HEALTH_ACCESS_TOKEN` in the deployment secrets manager as
+an independent random value of at least 32 characters; never commit its value.
+
 The stale interval must be 1–1440 minutes, the warning count must be positive,
 and the critical count must exceed the warning count. Invalid configuration
-fails function startup instead of silently weakening alerts.
+fails function startup instead of silently weakening alerts. On each monitor
+check, the Edge Function synchronizes these bounds to a private database row;
+both the endpoint and scheduled snapshots then read that single authoritative
+configuration.
 
 ## Monitor integration
 

@@ -26,16 +26,27 @@ During GREEN verification, the real database linter found an ambiguous PL/pgSQL
 the executable pgTAP drill reached 20/23 assertions and identified an unavailable
 pgTAP helper; the equivalent privacy assertion was expressed in native SQL.
 
+Independent review then found four gaps and returned `CHANGES_REQUESTED`: the
+monitor would have received a Supabase service key, string telemetry values and
+direct table inserts could bypass privacy intent, unclaimed notification work
+was invisible, and cron used different thresholds from the endpoint. New RED
+tests reproduced each issue before the fixes.
+
 ## GREEN
 
 - Focused Jest: handler, migration, and observability privacy contracts pass.
 - TypeScript: `tsc --noEmit` passes.
-- Isolated database: schema lint, legacy forward migration, RLS, all marketplace
-  concurrency/deletion suites, and operational health 23/23 pass.
+- Isolated database: schema lint, legacy forward migration, RLS 78/78, all
+  marketplace concurrency/deletion suites, and operational health 31/31 pass.
 - The operational drill produces one aggregate warning snapshot, exposes no IDs,
   and deletes snapshots older than 30 days.
-- Complete `npm run quality`: 97 suites and 576 tests pass with 90.77%
-  statements, 81.04% branches, 85.29% functions, and 92.77% lines. PII scan,
+- The monitor uses an independent high-entropy token; the Supabase service secret
+  never leaves the function. Analytics ingestion is an exact server-validated
+  RPC, with direct authenticated table inserts revoked.
+- Dispatcher and receipt-worker stoppages are detected, and endpoint/cron
+  thresholds share one private authoritative configuration.
+- Complete `npm run quality`: 98 suites and 580 tests pass with 90.78%
+  statements, 81.12% branches, 85.32% functions, and 92.79% lines. PII scan,
   Expo Doctor 21/21, web export, critical production audit, and the repeated
   isolated database harness pass.
 

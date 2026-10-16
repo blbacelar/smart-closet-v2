@@ -209,8 +209,7 @@ select throws_ok(
   'the tombstone blocks late personal-data writes'
 );
 select throws_ok(
-  $$insert into public.analytics_events (user_id, event_name)
-    values ('00000000-0000-4000-8000-000000000020', 'app_opened')$$,
+  $$select public.record_analytics_event('app_opened', '{}'::jsonb)$$,
   'P0001',
   'Account deletion in progress',
   'the tombstone blocks late analytics writes'

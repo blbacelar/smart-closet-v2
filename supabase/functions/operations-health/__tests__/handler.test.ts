@@ -1,6 +1,13 @@
-import { handleOperationsHealth, parseOperationalHealthConfig } from '../handler';
+import {
+  handleOperationsHealth,
+  parseOperationalHealthAccessToken,
+  parseOperationalHealthConfig,
+} from '../handler';
 
-function request(method = 'GET', authorization = 'Bearer service-secret') {
+function request(
+  method = 'GET',
+  authorization = 'Bearer operations-monitor-secret-at-least-32-chars',
+) {
   return { method, authorization };
 }
 
@@ -37,7 +44,7 @@ const healthRows = [
 
 function dependencies() {
   return {
-    serviceKey: 'service-secret',
+    accessToken: 'operations-monitor-secret-at-least-32-chars',
     now: () => new Date('2026-10-16T12:00:00.000Z'),
     readHealth: jest.fn().mockResolvedValue(healthRows),
   };
@@ -60,6 +67,18 @@ describe('operations health handler', () => {
       OPERATIONS_HEALTH_WARNING_COUNT: '10',
       OPERATIONS_HEALTH_CRITICAL_COUNT: '10',
     }[name]))).toThrow('Invalid operational health configuration.');
+  });
+
+  it('requires an independent high-entropy monitor credential', () => {
+    expect(parseOperationalHealthAccessToken(
+      'operations-monitor-secret-at-least-32-chars',
+    )).toBe('operations-monitor-secret-at-least-32-chars');
+    expect(() => parseOperationalHealthAccessToken('service-secret')).toThrow(
+      'Invalid operational health access token configuration.',
+    );
+    expect(() => parseOperationalHealthAccessToken('x'.repeat(33) + ' ')).toThrow(
+      'Invalid operational health access token configuration.',
+    );
   });
 
   it('rejects unsupported methods and non-service credentials', async () => {

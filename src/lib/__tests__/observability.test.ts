@@ -83,14 +83,16 @@ describe('privacy-safe observability', () => {
     const client = createObservability(target, consent);
 
     client.track('app_opened', {
-      source: 'member@example.com',
       category: '49.2827,-123.1207',
       method: 'Bearer secret-token',
-      state: 'user/private/body.jpg',
       mode: 'https://private.example/item',
       message: 'private chat copy',
       count: 3,
       cached: true,
+      provider: 'brunobacelar',
+      status: 'secret-token',
+      state: 'a0000000-0000-4000-8000-000000000001',
+      source: 'sk_live_ABC123',
     });
 
     expect(target.track).toHaveBeenCalledWith('app_opened', {

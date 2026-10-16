@@ -6,7 +6,7 @@ import type {
   SafeTelemetryProperties,
 } from './observability';
 
-type AnalyticsClient = Pick<SupabaseClient, 'from'>;
+type AnalyticsClient = Pick<SupabaseClient, 'rpc'>;
 
 export function createSupabaseObservabilityAdapter(
   client: AnalyticsClient | null,
@@ -19,10 +19,9 @@ export function createSupabaseObservabilityAdapter(
   ) => {
     if (!client || !userId) return;
 
-    void Promise.resolve(client.from('analytics_events').insert({
-      user_id: userId,
-      event_name: eventName,
-      properties,
+    void Promise.resolve(client.rpc('record_analytics_event', {
+      p_event_name: eventName,
+      p_properties: properties,
     })).catch(() => undefined);
   };
 

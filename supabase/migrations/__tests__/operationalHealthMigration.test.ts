@@ -2,9 +2,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const migrationPath = resolve(__dirname, '../20261016120000_operational_health.sql');
+const configPath = resolve(__dirname, '../../config.toml');
 
 describe('operational health migration', () => {
   const sql = readFileSync(migrationPath, 'utf8').toLowerCase();
+  const config = readFileSync(configPath, 'utf8');
+
+  it('delegates edge authentication to the independent monitor-token handler', () => {
+    expect(config).toMatch(/\[functions\.operations-health\]\s+verify_jwt = false/);
+  });
 
   it('stores only private aggregate snapshots', () => {
     expect(sql).toContain('create table private.operational_health_snapshots');
@@ -29,6 +35,9 @@ describe('operational health migration', () => {
   });
 
   it('captures aggregate snapshots on a bounded schedule', () => {
+    expect(sql).toContain('create table private.operational_health_config');
+    expect(sql).toContain('public.configure_operational_health');
+    expect(sql).toContain('from private.operational_health_config');
     expect(sql).toContain('private.capture_operational_health');
     expect(sql).toContain("'fitly-operational-health'");
     expect(sql).toContain("'*/5 * * * *'");

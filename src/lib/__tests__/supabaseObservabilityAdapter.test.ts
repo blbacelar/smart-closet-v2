@@ -2,18 +2,18 @@ import { createSupabaseObservabilityAdapter } from '../supabaseObservabilityAdap
 
 describe('Supabase observability adapter', () => {
   it('does not write until an opaque member id is set', () => {
-    const insert = jest.fn().mockResolvedValue({ error: null });
-    const client = { from: jest.fn(() => ({ insert })) };
+    const rpc = jest.fn().mockResolvedValue({ error: null });
+    const client = { rpc };
     const adapter = createSupabaseObservabilityAdapter(client as never);
 
     adapter.track('app_opened', { source: 'launch' });
 
-    expect(insert).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('writes allowlisted events and safe errors for the current member', async () => {
-    const insert = jest.fn().mockResolvedValue({ error: null });
-    const client = { from: jest.fn(() => ({ insert })) };
+    const rpc = jest.fn().mockResolvedValue({ error: null });
+    const client = { rpc };
     const adapter = createSupabaseObservabilityAdapter(client as never);
     adapter.setUser({ id: 'user-1' });
 
@@ -26,21 +26,18 @@ describe('Supabase observability adapter', () => {
     });
     await Promise.resolve();
 
-    expect(client.from).toHaveBeenCalledWith('analytics_events');
-    expect(insert).toHaveBeenNthCalledWith(1, {
-      user_id: 'user-1',
-      event_name: 'tryon_requested',
-      properties: { cached: false },
+    expect(rpc).toHaveBeenNthCalledWith(1, 'record_analytics_event', {
+      p_event_name: 'tryon_requested',
+      p_properties: { cached: false },
     });
-    expect(insert).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      user_id: 'user-1',
-      event_name: 'app_error',
+    expect(rpc).toHaveBeenNthCalledWith(2, 'record_analytics_event', expect.objectContaining({
+      p_event_name: 'app_error',
     }));
   });
 
   it('swallows an unavailable analytics backend', async () => {
     const client = {
-      from: jest.fn(() => ({ insert: jest.fn().mockRejectedValue(new Error('offline')) })),
+      rpc: jest.fn().mockRejectedValue(new Error('offline')),
     } as never;
     const adapter = createSupabaseObservabilityAdapter(client);
     adapter.setUser({ id: 'user-1' });
