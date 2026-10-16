@@ -52,6 +52,10 @@ set tier = 'pro',
     adult_confirmed_at = now()
 where id = '00000000-0000-4000-8000-000000000001';
 
+update public.profiles
+set tier = 'pro'
+where id = '00000000-0000-4000-8000-000000000002';
+
 insert into public.body_photos (id, user_id, storage_path, status)
 values (
   '10000000-0000-4000-8000-000000000003',
@@ -164,7 +168,6 @@ select throws_ok(
 reset role;
 delete from public.body_photos where id = '10000000-0000-4000-8000-000000000004';
 delete from public.garments where id = '20000000-0000-4000-8000-000000000004';
-delete from storage.objects where id = '40000000-0000-4000-8000-000000000005';
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
