@@ -197,9 +197,15 @@ select results_eq(
   'available pending work becomes stale when the dispatcher stops before claim'
 );
 
-update private.notification_outbox
-set status = 'awaiting_receipts', updated_at = '2026-10-16 11:00:00+00'
+delete from private.notification_outbox
 where id = '40000000-0000-4000-8000-000000000124';
+insert into private.notification_outbox (
+  id, event_key, recipient_user_id, kind, status, available_at, created_at, updated_at
+) values (
+  '40000000-0000-4000-8000-000000000124', 'health-notification-event',
+  '00000000-0000-4000-8000-000000000124', 'account_update', 'awaiting_receipts',
+  '2026-10-16 11:00:00+00', '2026-10-16 11:00:00+00', '2026-10-16 11:00:00+00'
+);
 insert into private.notification_deliveries (
   outbox_id, token_id, status, provider_ticket_id, receipt_available_at,
   created_at, updated_at

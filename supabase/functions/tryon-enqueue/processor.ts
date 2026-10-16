@@ -60,9 +60,17 @@ export type TryOnProcessingDependencies = {
 };
 
 export class TryOnProcessingFailure extends Error {
-  constructor(public readonly code: 'generation_failed' | 'timeout') {
+  public readonly provider?: string;
+  public readonly costUsd?: number;
+
+  constructor(
+    public readonly code: 'generation_failed' | 'timeout',
+    metadata: { provider?: string; costUsd?: number } = {},
+  ) {
     super('Virtual try-on failed. Try again.');
     this.name = 'TryOnProcessingFailure';
+    this.provider = metadata.provider;
+    this.costUsd = metadata.costUsd;
   }
 }
 
@@ -75,7 +83,7 @@ export async function processTryOn(
 
   const now = dependencies.now ?? Date.now;
   const startedAt = now();
-  let provider = 'gemini';
+  let provider = 'openrouter';
   let costUsd = 0;
   let providerCompleted = false;
   let resultUploaded = false;
@@ -131,12 +139,18 @@ export async function processTryOn(
     const failure = error instanceof TryOnProcessingFailure
       ? error
       : new TryOnProcessingFailure('generation_failed');
+    if (failure.provider) provider = failure.provider;
+    const failureCostUsd = typeof failure.costUsd === 'number'
+      && Number.isFinite(failure.costUsd)
+      && failure.costUsd >= 0
+      ? failure.costUsd
+      : 0;
     await dependencies.fail({
       jobId: input.jobId,
       userId: input.userId,
       failureCode: failure.code,
       provider,
-      costUsd: providerCompleted ? costUsd : 0,
+      costUsd: providerCompleted ? costUsd : failureCostUsd,
     }).catch(() => undefined);
     throw failure;
   }

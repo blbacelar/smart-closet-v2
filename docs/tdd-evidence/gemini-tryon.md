@@ -1,4 +1,6 @@
-# TDD Evidence: Direct Gemini Try-On Adapter
+# Historical TDD Evidence: Direct Gemini Try-On Adapter
+
+> Replaced by the reactivated OpenRouter adapter on 2026-10-16. See `docs/tdd-evidence/openrouter-tryon.md` for the current try-on provider contract.
 
 - Source: owner decision to call Google Gemini directly
 - Completed: 2026-09-02
