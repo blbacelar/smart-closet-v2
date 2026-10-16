@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(3);
+select plan(5);
 
 select is(
   (select count(*) from private.account_deletion_requests
@@ -22,6 +22,22 @@ select is(
    where id = '60000000-0000-4000-8000-000000000123'),
   0::bigint,
   'a post-tombstone storage write is rejected'
+);
+select results_eq(
+  $$select status, auth_user_id, completed_at is not null
+    from private.account_deletion_requests
+    where party_id = (
+      select party_id from public.marketplace_credit_ledger
+      where idempotency_key = 'deletion-auth-commit-opening'
+    )$$,
+  $$values ('completed'::text, null::uuid, true)$$,
+  'Auth deletion completes after the database purge transaction has committed'
+);
+select is(
+  (select user_id from public.marketplace_credit_ledger
+   where idempotency_key = 'deletion-auth-commit-opening'),
+  null::uuid,
+  'the separate Auth transaction detaches retained ledger history'
 );
 
 select * from finish();

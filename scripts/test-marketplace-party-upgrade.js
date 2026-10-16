@@ -157,6 +157,45 @@ async function verifyDeletionWriteFence(databaseUrl) {
   }
 }
 
+async function verifyCommittedAuthDeletion(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000024', 'deletion-auth-commit@example.com');
+      insert into public.marketplace_credit_accounts (user_id, available_balance)
+      values ('00000000-0000-4000-8000-000000000024', 5);
+      insert into public.marketplace_credit_ledger (
+        user_id, kind, delta_available, idempotency_key, description
+      ) values (
+        '00000000-0000-4000-8000-000000000024',
+        'adjustment', 5, 'deletion-auth-commit-opening', 'Committed Auth deletion fixture'
+      );
+      create temporary table committed_deletion_request as
+      select * from public.account_deletion_start(
+        '00000000-0000-4000-8000-000000000024'
+      );
+      select public.account_deletion_mark_storage_step(request_id, step)
+      from committed_deletion_request,
+        unnest(array['body', 'garments', 'results']) step;
+      select public.account_deletion_purge_database(request_id)
+      from committed_deletion_request;
+    `,
+    'Commit database purge before Auth deletion',
+  );
+
+  const authDeletion = await concurrentQuery(
+    databaseUrl,
+    `delete from auth.users
+     where id = '00000000-0000-4000-8000-000000000024';`,
+  );
+  if (authDeletion.code !== 0) {
+    throw new UpgradeTestError(
+      `Auth deletion could not complete after a committed purge: ${authDeletion.stderr}`,
+    );
+  }
+}
+
 async function verifyConcurrentReservation(databaseUrl) {
   psql(
     databaseUrl,
@@ -438,6 +477,7 @@ async function main() {
     );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
     await verifyDeletionWriteFence(latestDatabaseUrl);
+    await verifyCommittedAuthDeletion(latestDatabaseUrl);
     run(
       'supabase',
       withWorkdir([

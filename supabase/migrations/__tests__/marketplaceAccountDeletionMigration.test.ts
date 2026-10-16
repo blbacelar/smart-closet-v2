@@ -41,6 +41,8 @@ describe('marketplace-aware account deletion migration', () => {
     expect(sql).toContain('private.complete_account_deletion_after_auth_delete');
     expect(sql).toContain('private.guard_account_deletion_before_auth_delete');
     expect(sql).toMatch(/create trigger guard_account_deletion_before_auth_delete[\s\S]*before delete on auth\.users/i);
+    expect(sql).toMatch(/guard_account_deletion_before_auth_delete[\s\S]*set_config\('app\.account_deletion_request_id'/i);
+    expect(sql).toMatch(/guard_account_deletion_before_auth_delete[\s\S]*set_config\('app\.account_deletion_internal_cleanup'/i);
     expect(sql).toMatch(/grant execute on function public\.account_deletion_start\(uuid\) to service_role/i);
     expect(sql).toMatch(/revoke all on function public\.account_deletion_start\(uuid\) from public, anon, authenticated/i);
   });
