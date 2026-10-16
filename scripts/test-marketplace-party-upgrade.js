@@ -110,6 +110,39 @@ async function verifyConcurrentReservation(databaseUrl) {
       'Concurrent reservation did not produce exactly one winner and one insufficient-balance loser.',
     );
   }
+
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000013', 'ledger-idempotency-race@example.com');
+      insert into public.marketplace_credit_accounts (user_id, available_balance)
+      values ('00000000-0000-4000-8000-000000000013', 100);
+      insert into public.marketplace_credit_ledger (
+        user_id, kind, delta_available, idempotency_key, description
+      ) values (
+        '00000000-0000-4000-8000-000000000013',
+        'adjustment', 100, 'ledger-idempotency-opening', 'Idempotency fixture'
+      );
+    `,
+    'Create the committed idempotency-concurrency fixture',
+  );
+  const sameOperation = `
+    select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000013'),
+      'reserve', 80, 'ledger-idempotency-race', 'test-v1'
+    );
+  `;
+  const replayResults = await Promise.all([
+    concurrentQuery(databaseUrl, sameOperation),
+    concurrentQuery(databaseUrl, sameOperation),
+  ]);
+  if (replayResults.some((result) => result.code !== 0)) {
+    throw new UpgradeTestError(
+      'Concurrent retries with the same idempotency key did not both resolve successfully.',
+    );
+  }
 }
 
 function allocatePort(excludedPorts) {
