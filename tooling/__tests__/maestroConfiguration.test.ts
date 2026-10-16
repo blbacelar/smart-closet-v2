@@ -8,6 +8,10 @@ const expoGoActivationFlowPath = resolve(root, '.maestro/expo-go-signup-to-tryon
 const bodyFixturePath = resolve(root, '.maestro/fixtures/synthetic-adult-body.jpg');
 const garmentFixturePath = resolve(root, '.maestro/fixtures/synthetic-green-overshirt.jpg');
 const guidePath = resolve(root, '.maestro/README.md');
+const twoAccountFlowPath = resolve(root, '.maestro/two-account-marketplace-smoke.yaml');
+const appConfigPath = resolve(root, 'app.json');
+const easConfigPath = resolve(root, 'eas.json');
+const packagePath = resolve(root, 'package.json');
 
 describe('Maestro activation journey', () => {
   it('covers signup, onboarding, body photo, garment, and try-on', () => {
@@ -66,5 +70,43 @@ describe('Maestro activation journey', () => {
     expect(flow).toContain('Save private photo');
     expect(flow).toContain('Add to my closet');
     expect(flow).toContain('Your Fitly fitting is ready');
+  });
+
+  it('defines an SDK 57 development-client and staging build contract', () => {
+    const appConfig = JSON.parse(readFileSync(appConfigPath, 'utf8'));
+    const easConfig = JSON.parse(readFileSync(easConfigPath, 'utf8'));
+    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+
+    expect(packageJson.dependencies['expo-dev-client']).toMatch(/^~57\./);
+    expect(appConfig.expo.runtimeVersion).toEqual({ policy: 'appVersion' });
+    expect(easConfig.build.development).toEqual(expect.objectContaining({
+      developmentClient: true,
+      distribution: 'internal',
+    }));
+    expect(easConfig.build['development-simulator']).toEqual(expect.objectContaining({
+      developmentClient: true,
+      distribution: 'internal',
+      ios: expect.objectContaining({ simulator: true }),
+    }));
+    expect(easConfig.build.staging).toEqual(expect.objectContaining({
+      distribution: 'internal',
+      environment: 'preview',
+      android: expect.objectContaining({ buildType: 'apk' }),
+    }));
+    expect(packageJson.scripts['e2e:seed']).toBe('node scripts/seed-e2e-accounts.js');
+  });
+
+  it('provides an installed-build two-account marketplace smoke', () => {
+    expect(existsSync(twoAccountFlowPath)).toBe(true);
+    const flow = readFileSync(twoAccountFlowPath, 'utf8');
+
+    expect(flow).toContain('appId: app.fitly.mobile');
+    expect(flow).toContain('${E2E_SELLER_EMAIL}');
+    expect(flow).toContain('${E2E_SELLER_PASSWORD}');
+    expect(flow).toContain('${E2E_BUYER_EMAIL}');
+    expect(flow).toContain('${E2E_BUYER_PASSWORD}');
+    expect(flow.match(/E2E green overshirt/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(flow).toContain('500 available');
+    expect(flow).toContain('Sign out');
   });
 });
