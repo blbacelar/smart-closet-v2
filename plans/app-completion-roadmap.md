@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C05, C07-C10, and C12 merged; C23 implementation and verification in progress; C06 waits on External Gate B)
+**Status:** ECC-reviewed; execution in progress (C01-C05, C07-C10, C12, and C23 merged; every remaining slice is tracked and waits on the prerequisites recorded below)
 
 **Created:** 2026-10-15
 
@@ -88,10 +88,17 @@ These tracks start immediately but may not be completed by code alone:
 | A. Economy | Final annual price, first/renewal grant, pricing bounds, lapse, refund/revocation, wind-down, final credit name, and measurable cost/liquidity thresholds | Step 10 paid membership; paid staging and launch |
 | B. Legal/tax/privacy | Approved terms, retention/destruction schedule, barter/platform reporting and seller-due-diligence requirements, dispute/evidence policy, takedown process | Step 3 final retention schema, Step 7 dispute policy, Step 11 compliance tooling, any production pilot |
 | C. Storefront | Written iOS, Android, and web payment-rail decision; approved product disclosures and provider-operable wind-down actions | Step 10 billing; paid mobile launch |
-| D. Accounts and credentials | Apple Developer, Google Play, EAS/Expo token, OAuth credentials, funded Gemini project, optional cleanup-provider decision | Signed device builds, OAuth, push, real-provider smoke tests, store submission |
+| D. Accounts and credentials | Apple Developer, Google Play, EAS/Expo token, OAuth credentials, funded Gemini project, production SMTP, approved crash-provider account, optional cleanup-provider decision | Signed device builds, email confirmation, OAuth, push, real-provider smoke tests, redacted crash delivery, store submission |
 | E. Pilot operations | Named moderator/support owner, monitored contact addresses, pilot users, SLA, reliability/safety/density thresholds, and circuit-breaker owners | Step 13 regional pilot |
 
 While a gate is pending, its feature remains behind development mode or a server-side kill switch. Other independent steps continue.
+
+As of 2026-10-16, C23 was the last independently executable slice. The next
+product slices are blocked by external authority rather than an unresolved code
+task: C06/C13-C16/C21 need Gate B policy; C17/C20/C22/C24 need Gate D accounts
+or credentials; C16/C26A/C26 need a Gate E operator; and C19-C20 need the
+approved Gate A-C economy and storefront contract. These gates must not be
+replaced with invented defaults or represented as engineering completion.
 
 Before pilot approval, owners must commit numeric thresholds and measurement windows for crash-free sessions, API/Edge Function success, stale reservations, ledger imbalance, notification delivery latency, AI success/latency/cost, dispute and report response time, fraud loss, marketplace inventory density by region/category/size, and support capacity. Step 13 verifies those exact values; it does not invent them during release review.
 
@@ -105,29 +112,30 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 | C02 | Minimal EAS dev-client/staging profiles and seeded two-account device harness; `app.json`, `eas.json`, E2E config | C01, Gate D for signed builds | #34 rewrite | Verified in an installed SDK 57 iOS simulator build with an idempotent two-account seed and Maestro smoke; signed physical build remains Gate D/C24 |
 | C03 | Pseudonymous marketplace party identity and FK migration; `supabase/migrations` | C01 | #48 + #71 | Forward migration/RLS tests; old data backfilled |
 | C04 | Double-entry account/journal/posting/cohort/reversal foundation and reconciliation | C03, Gate A for final cohort policy | #48 + #73 | Balanced journal and concurrency pgTAP tests |
-| C05 | Deletion tombstone, write barrier, durable checkpoints, private-media purge | C03, C04, Gate B retention rules | #30 replacement/new issue | Deletion races with uploads/workers safely |
-| C06 | Retention expiry/hold release, backup re-deletion, purge evidence | C05, Gate B | same as C05 | Scheduled purge and restore/re-delete drill |
+| C05 | Deletion tombstone, write barrier, durable checkpoints, private-media purge | C03, C04 | #75 | Deletion races with uploads/workers safely |
+| C06 | Retention expiry/hold release, backup re-deletion, purge evidence | C05, Gate B | #93 | Scheduled purge and restore/re-delete drill |
 | C07 | Offer/transaction state contract, timeout policy, immutable snapshots, kill-switch semantics | C04, C05 | #41 | State transitions and deletion tombstone races tested |
 | C08 | Expiry worker and exactly-once reservation/credit release | C07 | #78 | Time-travel/concurrency tests; no stranded state |
 | C09 | Sanitized acquired-garment copies for credit/swap/give-away settlement | C07 | #80 | All three modes populate recipient closets once |
 | C10 | Push token lifecycle and notification outbox/provider adapter | C02 | #43 rewrite | Device push/token rotation tests |
-| C11 | Marketplace event notification/deep-link integration | C07, C10, C15 | #43 | Idempotent safe-copy delivery for all final states |
-| C12 | PostGIS coarse geography and authenticated nearby RPC | C03 | #36/#37 rewrite | RLS/radius/precision tests |
-| C13 | Listing moderation/takedown pipeline and real filter/pagination queries | C12, Gate B takedown rules | #37/#38 rewrite | Moderated listings excluded; filters are server-backed |
-| C14 | Report/block primitives and block-aware discovery/contact | C03, C13, Gate B | #47 rewrite | Authorization/abuse tests |
-| C15 | Dispute state machine, evidence boundary, settlement freeze and resolutions | C07, C14, Gate B | #46/#47 rewrite | Every resolution reconciles exactly once |
-| C16 | Ratings plus least-privilege operator case tools and audited dual approval | C15, Gate E operator | #47 rewrite | Operator drill and anti-retaliation tests |
-| C17 | Real-provider AI smoke, marketplace try-on privacy, color suggestions, circuit breakers | C02, C09, Gate D Gemini | #39 rewrite + new AI issue | Real-image staging evidence and privacy tests |
-| C18A | Localization catalog/language selector, common accessibility primitives, shared loading/error/offline states | C11, C13, C16, C17 | new product-quality issue | Shared EN/PT-BR and accessibility foundations pass |
-| C19 | Provider-neutral entitlement event contract and server membership lifecycle | C04, Gates A–C | #27/#48 rewrite | Duplicate/reordered/refund fixtures reconcile |
-| C20 | Store/provider adapters, live disclosure UI, sandbox purchase/restore/cancel | C19, Gate D store credentials | #27 | Store sandbox device evidence |
-| C21 | Conditional seller due diligence, restricted identity, valuation/reporting/receipts | Gate B decision, C03, C04 | replacement for #44 | Approved reporting fixtures and access audit |
-| C22 | OAuth/account-linking/reauthentication | C02, Gate D OAuth | new identity issue | Real-device link/revoke/collision tests |
-| C23 | Redacted crash monitoring, health/reconciliation alerts, support runbooks | C01, C04 | new operations issue | Synthetic incident and privacy tests |
-| C18B | Final cross-feature i18n/accessibility/visual-state audit including billing, seller compliance, and OAuth | C18A, C20, C21, C22 | same product-quality issue | Launch-critical EN/PT-BR and accessibility acceptance |
-| C24 | Production EAS profiles, signing, runtime/min-version compatibility, OTA/rollback | C02, C18B, C19–C23 | new release issue | Production-candidate builds and rollback drill |
-| C25 | Accumulated Maestro suites, two-device acceptance, security/performance/recovery | C05–C17, C18B–C24 | #34 rewrite | Full green release evidence and reconciliation |
-| C26 | Regional pilot decision, issue closure by evidence, docs/ADR release sync | C25, Gates A–E | #48 epic | Signed pilot gate; only reconciled issues closed |
+| C11 | Marketplace event notification/deep-link integration | C07, C10, C15 | #88 | Idempotent safe-copy delivery for all final states |
+| C12 | PostGIS coarse geography and authenticated nearby RPC | C03 | #36 | RLS/radius/precision tests |
+| C13 | Listing moderation/takedown pipeline and real filter/pagination queries | C12, Gate B takedown rules | #37 | Moderated listings excluded; filters are server-backed |
+| C14 | Report/block primitives and block-aware discovery/contact | C03, C13, Gate B | #47 | Authorization/abuse tests |
+| C15 | Dispute state machine, evidence boundary, settlement freeze and resolutions | C07, C14, Gate B | #46 | Every resolution reconciles exactly once |
+| C16 | Ratings plus least-privilege operator case tools and audited dual approval | C15, Gate E operator | #87 | Operator drill and anti-retaliation tests |
+| C17 | Real-provider AI smoke, marketplace try-on privacy, color suggestions, circuit breakers | C02, C09, Gate D Gemini | #39 | Real-image staging evidence and privacy tests |
+| C18A | Localization catalog/language selector, common accessibility primitives, shared loading/error/offline states | C11, C13, C16, C17 | #91 | Shared EN/PT-BR and accessibility foundations pass |
+| C19 | Provider-neutral entitlement event contract and server membership lifecycle | C04, Gates A–C | #27 + #48 | Duplicate/reordered/refund fixtures reconcile |
+| C20 | Store/provider adapters, live disclosure UI, sandbox purchase/restore/cancel | C19, Gate C payment-rail matrix, Gate D store credentials | #90 | Store sandbox device evidence |
+| C21 | Conditional seller due diligence, restricted identity, valuation/reporting/receipts | Gate B decision, C03, C04 | #44 | Approved reporting fixtures and access audit |
+| C22 | OAuth/account-linking/reauthentication | C02, Gate D OAuth | #92 | Real-device link/revoke/collision tests |
+| C23 | Redacted crash monitoring, health/reconciliation alerts, support runbooks | C01, C04 | #84 | Synthetic incident and privacy tests |
+| C18B | Final cross-feature i18n/accessibility/visual-state audit including billing, seller compliance, and OAuth | C18A, C20, C21, C22 | #91 | Launch-critical EN/PT-BR and accessibility acceptance |
+| C24 | Production EAS/signing, SMTP confirmation, crash-provider deployment, runtime/min-version compatibility, OTA/rollback | C02, C18B, C19–C23, Gate D | #89 | Production-candidate builds, redacted diagnostics, and rollback drill |
+| C25 | Accumulated Maestro suites, two-device acceptance, security/performance/recovery | C05–C17, C18B–C24 | #86 | Full green release evidence and reconciliation |
+| C26A | Regional waitlist enrollment and aggregate activation metrics | C12, Gate E thresholds/owner | #38 | Privacy-safe waitlist and density counters match the approved pilot definition |
+| C26 | Regional pilot decision, issue closure by evidence, docs/ADR release sync | C25, C26A, Gates A–E | #48 epic | Signed pilot gate; only reconciled issues closed |
 
 All code slices use the strongest available review for schema, ledger, deletion, payment, authorization, and release-boundary changes; routine UI/test implementation may use the default model but must pass the same ECC verification gates.
 
@@ -135,9 +143,12 @@ All code slices use the strongest available review for schema, ledger, deletion,
 
 ## Step 1 — Restore a Trustworthy Engineering and Device-Test Baseline
 
-### Context brief
+### Historical context
 
-Main is currently functionally tested but CI is red. The dependency job reports a critical transitive `shell-quote` advisory, while the database job has failed during Supabase container pulls. Every later change needs a reliable signal, so this is the first implementation slice.
+Before C01, main was functionally tested but CI was red because of a critical
+transitive `shell-quote` advisory and intermittent Supabase container pulls.
+C01 resolved that baseline; current slices inherit its reproducible local and
+GitHub quality gates.
 
 ### Tasks
 
@@ -516,12 +527,12 @@ Native, E2E, provider, and store-sandbox checks are added to the relevant step a
 
 - [Expo SDK 57 versioned reference](https://docs.expo.dev/versions/v57.0.0/) — React Native/React/Node and supported Android/iOS toolchain baseline.
 - [Expo SDK 57 notifications reference](https://docs.expo.dev/versions/v57.0.0/sdk/notifications/) — Android remote push requires a development build rather than Expo Go.
-- [Latest failed Quality checks run](https://github.com/blbacelar/smart-closet-v2/actions/runs/38487390058) — type/tests/export passed; production dependency audit and database RLS job failed.
+- [Current green main Quality checks](https://github.com/blbacelar/smart-closet-v2/actions/runs/38878697734) — C23 main passed application, security, export, and isolated database gates.
 - [`docs/ONBOARDING.md`](../docs/ONBOARDING.md) — implemented capabilities and explicit backlog.
 - [`docs/MARKETPLACE.md`](../docs/MARKETPLACE.md) — current development transaction loop and production gates.
 - [`docs/adr/0001-marketplace-membership-and-exchange-credits.md`](../docs/adr/0001-marketplace-membership-and-exchange-credits.md) — proposed economy, retention, dispute, and launch decisions.
 - [`plans/marketplace-loops-economy.md`](marketplace-loops-economy.md) — predecessor design and compliance requirements.
-- `package.json`, `.github/workflows/ci.yml`, current migrations, marketplace routes/repositories, and open GitHub issues #27 and #34–#48 inspected on 2026-10-15.
+- `package.json`, `.github/workflows/ci.yml`, current migrations, marketplace routes/repositories, and authoritative GitHub issues inspected through 2026-10-16.
 
 ## Plan Mutation Protocol
 
@@ -533,11 +544,13 @@ Native, E2E, provider, and store-sandbox checks are added to the relevant step a
 
 ## Immediate Execution Order
 
-1. Start Step 1 and restore green CI.
-2. Begin External Gates A–E in parallel.
-3. Establish Step 2 before changing deletion, settlement, disputes, billing, or seller compliance.
-4. Execute Steps 3–6 only according to the slice prerequisites; do not merge overlapping state/FK migrations concurrently.
-5. Complete Steps 7–8 and Step 9A while the billing/store decisions mature.
-6. Execute Step 10 only after Gates A–C; execute Step 11’s compliance slice only after Gate B.
-7. Return to Step 9B for the final cross-feature language/accessibility audit.
-8. Complete Step 12, then finish with Step 13 and open only the controlled regional pilot.
+1. Preserve the merged C01-C05, C07-C10, C12, and C23 baseline with green CI.
+2. Obtain and record External Gates A–E; no remaining production slice is
+   independently executable without one of them.
+3. After Gate B, execute C06 and C13-C15/C21 in dependency order; C16 also
+   requires the named Gate E operator.
+4. After funded/provider Gate D inputs, execute C17 and C22. Execute C19 only
+   after Gates A-C, then C20 with the approved payment rail and credentials.
+5. Complete C11, C18A/B, C24, C25, and the Gate-E waitlist/activation slice
+   only when their complete prerequisite sets are satisfied.
+6. Finish with C26 and open only the signed, controlled regional pilot.
