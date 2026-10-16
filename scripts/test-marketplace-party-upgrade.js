@@ -308,6 +308,20 @@ async function main() {
       ], workspace),
       'Verify concurrent credit reservation reconciliation',
     );
+    run(
+      'supabase',
+      withWorkdir(['db', 'reset', '--local'], workspace),
+      'Reset the isolated database to the latest clean schema',
+    );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/rls.test.sql'),
+      ], workspace),
+      'Verify the complete isolated database RLS contract',
+    );
   } catch (error) {
     failure = error;
   } finally {

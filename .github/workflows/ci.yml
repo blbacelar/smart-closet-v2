@@ -68,15 +68,5 @@ jobs:
         with:
           version: 2.113.0
 
-      - name: Start local Supabase
-        run: supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-
-      - name: Test marketplace party legacy upgrade
+      - name: Test isolated database upgrade, ledger, concurrency, and RLS
         run: npm run test:db:upgrade
-
-      - name: Test database policies
-        run: npm run test:db
-
-      - name: Stop local Supabase
-        if: always()
-        run: supabase stop --no-backup
