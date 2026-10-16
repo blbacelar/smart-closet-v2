@@ -292,7 +292,6 @@ begin
       (old.status = 'awaiting_handoff' and new.status in (
         'completed', 'cancelled', 'disputed', 'expired'
       ))
-      or (old.status = 'disputed' and new.status in ('completed', 'cancelled'))
     ) then
       raise exception 'Invalid marketplace transaction transition';
     end if;
@@ -459,6 +458,224 @@ begin
 end;
 $$;
 
+-- Marketplace writers use a listing-scoped advisory gate before deletion
+-- fences and row locks. This makes the participant set stable while a listing
+-- is withdrawn and gives crossed swaps one deterministic lock order.
+create or replace function private.marketplace_lock_listings(
+  p_listing_ids uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_listing_id uuid;
+begin
+  for v_listing_id in
+    select distinct listing_id
+    from unnest(coalesce(p_listing_ids, '{}'::uuid[])) listing_id
+    where listing_id is not null
+    order by listing_id
+  loop
+    perform pg_advisory_xact_lock(
+      hashtextextended('marketplace-listing:' || v_listing_id::text, 7042026)
+    );
+  end loop;
+end;
+$$;
+
+create or replace function public.marketplace_publish_listing(
+  p_garment_id uuid,
+  p_accepts_credits boolean,
+  p_accepts_swap boolean,
+  p_is_giveaway boolean,
+  p_credit_price integer,
+  p_pickup_area text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_listing_id uuid;
+  v_status text;
+begin
+  if v_user_id is null then raise exception 'Authentication required'; end if;
+  if not private.marketplace_has_active_membership(v_user_id) then
+    raise exception 'Active marketplace membership required';
+  end if;
+  if not (p_accepts_credits or p_accepts_swap or p_is_giveaway) then
+    raise exception 'Choose at least one listing mode';
+  end if;
+  if (p_accepts_credits and (
+      p_credit_price is null or p_credit_price not between 1 and 10000
+    )) or (not p_accepts_credits and p_credit_price is not null) then
+    raise exception 'Invalid credit price';
+  end if;
+  if char_length(trim(coalesce(p_pickup_area, ''))) not between 2 and 80 then
+    raise exception 'Invalid pickup area';
+  end if;
+
+  -- Enter the account-deletion fence before locking the garment or listing.
+  perform private.account_deletion_lock_subjects(
+    array[v_user_id], '{}'::uuid[]
+  );
+
+  perform 1 from public.garments
+  where id = p_garment_id
+    and user_id = v_user_id
+    and status = 'ready'
+    and marketplace_archived_at is null
+  for update;
+  if not found then raise exception 'Garment is not eligible for listing'; end if;
+
+  select id, status into v_listing_id, v_status
+  from public.marketplace_listings
+  where garment_id = p_garment_id and status in ('active', 'reserved')
+  for update;
+
+  if v_status = 'reserved' then
+    raise exception 'Reserved listings cannot be edited';
+  end if;
+  if v_listing_id is not null then
+    update public.marketplace_listings
+    set accepts_credits = p_accepts_credits,
+        accepts_swap = p_accepts_swap,
+        is_giveaway = p_is_giveaway,
+        credit_price = p_credit_price,
+        pickup_area = trim(p_pickup_area),
+        updated_at = now()
+    where id = v_listing_id;
+    return v_listing_id;
+  end if;
+
+  insert into public.marketplace_listings (
+    garment_id, seller_id, accepts_credits, accepts_swap,
+    is_giveaway, credit_price, pickup_area
+  ) values (
+    p_garment_id, v_user_id, p_accepts_credits, p_accepts_swap,
+    p_is_giveaway, p_credit_price, trim(p_pickup_area)
+  ) returning id into v_listing_id;
+  return v_listing_id;
+end;
+$$;
+
+create or replace function public.marketplace_withdraw_listing(p_listing_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_listing public.marketplace_listings%rowtype;
+  v_user_ids uuid[];
+  v_party_ids uuid[];
+  v_offer record;
+begin
+  select * into v_listing
+  from public.marketplace_listings
+  where id = p_listing_id;
+  if not found or v_listing.seller_id <> v_user_id
+    or v_listing.status <> 'active' then
+    raise exception 'Only an active listing can be withdrawn';
+  end if;
+
+  -- No create/accept writer can change the participant set past this point.
+  perform private.marketplace_lock_listings(array[p_listing_id]);
+
+  select
+    array_agg(distinct participant.user_id)
+      filter (where participant.user_id is not null),
+    array_agg(distinct participant.party_id)
+      filter (where participant.party_id is not null)
+  into v_user_ids, v_party_ids
+  from (
+    select v_listing.seller_id as user_id,
+           v_listing.seller_party_id as party_id
+    union all
+    select offer.buyer_id, offer.buyer_party_id
+    from public.marketplace_offers offer
+    where offer.status = 'pending'
+      and (offer.listing_id = p_listing_id
+        or offer.swap_listing_id = p_listing_id)
+    union all
+    select offer.seller_id, offer.seller_party_id
+    from public.marketplace_offers offer
+    where offer.status = 'pending'
+      and (offer.listing_id = p_listing_id
+        or offer.swap_listing_id = p_listing_id)
+  ) participant;
+
+  perform private.account_deletion_lock_subjects(
+    coalesce(v_user_ids, '{}'::uuid[]),
+    coalesce(v_party_ids, '{}'::uuid[])
+  );
+
+  select * into v_listing
+  from public.marketplace_listings
+  where id = p_listing_id
+  for update;
+  if not found or v_listing.seller_id <> v_user_id
+    or v_listing.status <> 'active' then
+    raise exception 'Only an active listing can be withdrawn';
+  end if;
+
+  for v_offer in
+    select id from public.marketplace_offers
+    where status = 'pending'
+      and (listing_id = p_listing_id or swap_listing_id = p_listing_id)
+    order by id
+    for update
+  loop
+    perform private.marketplace_release_offer(v_offer.id, 'superseded');
+  end loop;
+
+  update public.marketplace_listings
+  set status = 'withdrawn', updated_at = now()
+  where id = p_listing_id;
+end;
+$$;
+
+create or replace function public.marketplace_withdraw_offer(p_offer_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_offer public.marketplace_offers%rowtype;
+begin
+  select * into v_offer
+  from public.marketplace_offers
+  where id = p_offer_id;
+  if not found or v_offer.buyer_id <> v_user_id
+    or v_offer.status <> 'pending' then
+    raise exception 'Pending offer not found';
+  end if;
+
+  perform private.account_deletion_lock_subjects(
+    array[v_offer.buyer_id, v_offer.seller_id],
+    array[v_offer.buyer_party_id, v_offer.seller_party_id]
+  );
+
+  select * into v_offer
+  from public.marketplace_offers
+  where id = p_offer_id
+  for update;
+  if not found or v_offer.buyer_id <> v_user_id
+    or v_offer.status <> 'pending' then
+    raise exception 'Pending offer not found';
+  end if;
+
+  perform private.marketplace_release_offer(p_offer_id, 'withdrawn');
+end;
+$$;
+
 create or replace function public.marketplace_create_offer(
   p_listing_id uuid,
   p_mode text,
@@ -509,6 +726,10 @@ begin
   if v_listing.seller_id = v_user_id then
     raise exception 'You cannot make an offer on your own listing';
   end if;
+
+  perform private.marketplace_lock_listings(
+    array[p_listing_id, p_swap_listing_id]
+  );
 
   perform private.account_deletion_lock_subjects(
     array[v_user_id, v_listing.seller_id],
@@ -633,6 +854,10 @@ begin
     end if;
     return v_transaction_id;
   end if;
+
+  perform private.marketplace_lock_listings(
+    array[v_offer.listing_id, v_offer.swap_listing_id]
+  );
 
   perform private.account_deletion_lock_subjects(
     array[v_offer.buyer_id, v_offer.seller_id],
@@ -1135,6 +1360,7 @@ revoke all on function private.marketplace_guard_listing_write() from public, an
 revoke all on function private.marketplace_guard_offer_state() from public, anon, authenticated;
 revoke all on function private.marketplace_guard_transaction_state() from public, anon, authenticated;
 revoke all on function private.marketplace_guard_credit_event() from public, anon, authenticated;
+revoke all on function private.marketplace_lock_listings(uuid[]) from public, anon, authenticated;
 revoke all on function private.marketplace_capture_transaction_terms() from public, anon, authenticated;
 revoke all on function private.marketplace_reject_immutable_change() from public, anon, authenticated;
 

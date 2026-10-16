@@ -199,6 +199,20 @@ select throws_ok(
 );
 reset role;
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000031', true);
+select throws_ok(
+  format('select public.marketplace_cancel_transaction(%L)', (select id from buyer_partial_transaction)),
+  'P0001', 'A confirmed handoff cannot be cancelled',
+  'the seller cannot cancel after the buyer confirms handoff'
+);
+select throws_ok(
+  format('select public.marketplace_cancel_transaction(%L)', (select id from seller_partial_transaction)),
+  'P0001', 'A confirmed handoff cannot be cancelled',
+  'the seller cannot cancel after confirming handoff'
+);
+reset role;
+
 update public.marketplace_transactions
 set status = 'disputed', updated_at = now()
 where id = (select id from seller_partial_transaction);
@@ -214,20 +228,6 @@ select throws_ok(
   'P0001', 'Invalid marketplace transaction transition',
   'a disputed transaction cannot bypass the future atomic resolver to cancel'
 );
-
-set local role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000031', true);
-select throws_ok(
-  format('select public.marketplace_cancel_transaction(%L)', (select id from buyer_partial_transaction)),
-  'P0001', 'A confirmed handoff cannot be cancelled',
-  'the seller cannot cancel after the buyer confirms handoff'
-);
-select throws_ok(
-  format('select public.marketplace_cancel_transaction(%L)', (select id from seller_partial_transaction)),
-  'P0001', 'A confirmed handoff cannot be cancelled',
-  'the seller cannot cancel after confirming handoff'
-);
-reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000039', true);

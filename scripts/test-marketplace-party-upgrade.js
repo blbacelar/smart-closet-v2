@@ -518,22 +518,22 @@ async function verifyLegacyWriterDeletionLockOrder(databaseUrl) {
     return diagnostics;
   };
 
-  const publishResults = await Promise.all([
-    concurrentQuery(
-      databaseUrl,
-      deletionWithPause('00000000-0000-4000-8000-000000000044'),
+  const deletionFirstRace = async (userId, writerQuery) => {
+    const deletion = concurrentQuery(databaseUrl, deletionWithPause(userId));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    return Promise.all([deletion, concurrentQuery(databaseUrl, writerQuery)]);
+  };
+
+  const publishResults = await deletionFirstRace(
+    '00000000-0000-4000-8000-000000000044',
+    authenticated(
+      '00000000-0000-4000-8000-000000000044',
+      `select public.marketplace_publish_listing(
+        '20000000-0000-4000-8000-000000000044',
+        false, false, true, null, 'Changed publish area'
+      );`,
     ),
-    concurrentQuery(
-      databaseUrl,
-      authenticated(
-        '00000000-0000-4000-8000-000000000044',
-        `select public.marketplace_publish_listing(
-          '20000000-0000-4000-8000-000000000044',
-          false, false, true, null, 'Changed publish area'
-        );`,
-      ),
-    ),
-  ]);
+  );
   let diagnostics = assertNoDeadlock(publishResults, 'Listing publication');
   if (publishResults[0].code !== 0
     || publishResults[1].code === 0
@@ -541,21 +541,15 @@ async function verifyLegacyWriterDeletionLockOrder(databaseUrl) {
     throw new UpgradeTestError('Listing publication did not yield to the deletion tombstone.');
   }
 
-  const listingResults = await Promise.all([
-    concurrentQuery(
-      databaseUrl,
-      deletionWithPause('00000000-0000-4000-8000-000000000045'),
+  const listingResults = await deletionFirstRace(
+    '00000000-0000-4000-8000-000000000045',
+    authenticated(
+      '00000000-0000-4000-8000-000000000045',
+      `select public.marketplace_withdraw_listing(
+        '40000000-0000-4000-8000-000000000045'
+      );`,
     ),
-    concurrentQuery(
-      databaseUrl,
-      authenticated(
-        '00000000-0000-4000-8000-000000000045',
-        `select public.marketplace_withdraw_listing(
-          '40000000-0000-4000-8000-000000000045'
-        );`,
-      ),
-    ),
-  ]);
+  );
   diagnostics = assertNoDeadlock(listingResults, 'Listing withdrawal');
   if (listingResults[0].code !== 0
     || listingResults[1].code === 0
@@ -563,21 +557,15 @@ async function verifyLegacyWriterDeletionLockOrder(databaseUrl) {
     throw new UpgradeTestError('Listing withdrawal did not yield to the deletion tombstone.');
   }
 
-  const offerResults = await Promise.all([
-    concurrentQuery(
-      databaseUrl,
-      deletionWithPause('00000000-0000-4000-8000-000000000047'),
+  const offerResults = await deletionFirstRace(
+    '00000000-0000-4000-8000-000000000047',
+    authenticated(
+      '00000000-0000-4000-8000-000000000047',
+      `select public.marketplace_withdraw_offer(
+        '50000000-0000-4000-8000-000000000047'
+      );`,
     ),
-    concurrentQuery(
-      databaseUrl,
-      authenticated(
-        '00000000-0000-4000-8000-000000000047',
-        `select public.marketplace_withdraw_offer(
-          '50000000-0000-4000-8000-000000000047'
-        );`,
-      ),
-    ),
-  ]);
+  );
   diagnostics = assertNoDeadlock(offerResults, 'Offer withdrawal');
   if (offerResults[1].code !== 0
     || offerResults[0].code === 0

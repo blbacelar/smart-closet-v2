@@ -25,6 +25,10 @@ The first independent review rejected the slice and identified six untested boun
 
 The same audit exposed a transaction-local deletion-cleanup bypass that remained enabled after database purge. The replacement purge function now clears both internal settings before returning. Confirmation and cancellation also enter the deletion fence before transaction row locks, matching the corrected offer paths.
 
+The second independent review found two remaining release blockers. The legacy publish, listing-withdrawal, and offer-withdrawal RPCs still acquired row locks before the deletion fence; and the generic transaction trigger allowed a privileged writer to resolve `disputed` work without the future C15 atomic resolver. Regression tests reproduced both issues. The legacy RPCs now enter the deletion fence before row locks, and disputed transactions remain frozen. A listing-scoped advisory gate also stabilizes the participant set across create, accept, and withdrawal races without reintroducing crossed-swap deadlocks.
+
+During verification, database lint caught an invalid `distinct` ordering expression in the new advisory helper, and the first concurrency harness run exposed nondeterministic process startup. The helper now orders directly by UUID, and the harness explicitly establishes the deletion lock before releasing the competing writer. The complete isolated database run then passed.
+
 ## Contract coverage
 
 - `supabase/migrations/__tests__/marketplaceStateContractMigration.test.ts` checks the migration surface and recovery semantics.
@@ -32,6 +36,7 @@ The same audit exposed a transaction-local deletion-cleanup bypass that remained
 - `supabase/upgrade-tests/marketplace-state-concurrency.test.sql` verifies the committed result of competing acceptance: one transaction, one accepted offer, one superseded offer, and one terms snapshot.
 - `scripts/test-marketplace-party-upgrade.js` runs the competing acceptance in real concurrent `psql` sessions and then executes the deletion fence, account-deletion lifecycle, RLS, ledger, and legacy-upgrade suites against an isolated Supabase database.
 - The same harness runs acceptance against a deletion session that deliberately holds the advisory lock before requesting listing rows, plus two reciprocal swap offers created from separate sessions. Deadlock output is a hard failure.
+- The harness also races legacy publication, listing withdrawal, and offer withdrawal against account deletion. It asserts the expected winner, tombstone behavior, and absence of deadlocks in separate database sessions.
 
 ## Verification gate
 

@@ -33,6 +33,9 @@ describe('marketplace state contract migration', () => {
     expect(sql).toContain("'expired'");
     expect(sql).toContain('expires_at');
     expect(sql).toContain('handoff_deadline');
+    expect(sql).not.toContain(
+      "old.status = 'disputed' and new.status in ('completed', 'cancelled')",
+    );
   });
 
   it('captures immutable typed terms without personal content', () => {
@@ -69,11 +72,37 @@ describe('marketplace state contract migration', () => {
     const sql = readFileSync(migrationPath, 'utf8').toLowerCase();
 
     expect(sql).toMatch(
-      /function public\.marketplace_create_offer[\s\S]*?account_deletion_lock_subjects[\s\S]*?order by id\s+for update;[\s\S]*?pending offer payload conflicts with existing offer/,
+      /function public\.marketplace_create_offer[\s\S]*?marketplace_lock_listings[\s\S]*?account_deletion_lock_subjects[\s\S]*?order by id\s+for update;[\s\S]*?pending offer payload conflicts with existing offer/,
     );
     expect(sql).toMatch(
-      /function public\.marketplace_respond_to_offer[\s\S]*?account_deletion_lock_subjects[\s\S]*?order by id\s+for update;/,
+      /function public\.marketplace_respond_to_offer[\s\S]*?marketplace_lock_listings[\s\S]*?account_deletion_lock_subjects[\s\S]*?order by id\s+for update;/,
     );
+  });
+
+  it('fences legacy marketplace writers before taking row locks', () => {
+    const sql = readFileSync(migrationPath, 'utf8').toLowerCase();
+
+    for (const functionName of [
+      'marketplace_publish_listing',
+      'marketplace_withdraw_listing',
+      'marketplace_withdraw_offer',
+    ]) {
+      const body = sql.match(
+        new RegExp(
+          `create or replace function public\\.${functionName}\\([\\s\\S]*?\\n\\$\\$;`,
+        ),
+      )?.[0];
+      expect(body).toBeDefined();
+      expect(body).toMatch(/account_deletion_lock_subjects[\s\S]*?for update;/);
+    }
+
+    const withdrawal = sql.match(
+      /create or replace function public\.marketplace_withdraw_listing\([\s\S]*?\n\$\$;/,
+    )?.[0];
+    expect(withdrawal).toMatch(
+      /marketplace_lock_listings[\s\S]*?account_deletion_lock_subjects[\s\S]*?for update;/,
+    );
+    expect(withdrawal).toContain('offer.swap_listing_id = p_listing_id');
   });
 
   it('fences settlement and forbids cancellation after confirmation', () => {
