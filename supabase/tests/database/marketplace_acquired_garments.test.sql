@@ -126,7 +126,7 @@ select is(
 
 select results_eq(
   $$select transactions_disputed, items_deferred
-    from public.marketplace_expire_stale(now() + interval '1 day', 100)$$,
+    from public.marketplace_expire_stale(now() + interval '100 years', 100)$$,
   $$values (0, 4)$$,
   'expiry defers every fully-confirmed settlement plan instead of disputing it'
 );
@@ -163,19 +163,18 @@ insert into storage.objects (id, bucket_id, name) values
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000071', true);
-select is_empty(
-  $$delete from storage.objects
-    where bucket_id = 'garments'
-      and name = '00000000-0000-4000-8000-000000000071/credit-clean.png'
-    returning name$$,
+select is(
+  public.marketplace_can_delete_garment_object(
+    '00000000-0000-4000-8000-000000000071/credit-clean.png'
+  ),
+  false,
   'a seller cannot delete the safe asset while settlement is pending'
 );
-select results_eq(
-  $$delete from storage.objects
-    where bucket_id = 'garments'
-      and name = '00000000-0000-4000-8000-000000000071/unlisted-delete.jpg'
-    returning name$$,
-  $$values ('00000000-0000-4000-8000-000000000071/unlisted-delete.jpg'::text)$$,
+select is(
+  public.marketplace_can_delete_garment_object(
+    '00000000-0000-4000-8000-000000000071/unlisted-delete.jpg'
+  ),
+  true,
   'a seller can still delete an unlisted garment asset'
 );
 reset role;

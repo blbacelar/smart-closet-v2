@@ -2,10 +2,8 @@ export type HandoffState = 'awaiting_handoff' | 'settlement_pending' | 'complete
 
 export type AcquisitionManifestItem = {
   acquiredGarmentId: string;
-  sourceOriginalPath: string;
-  sourceCleanPath: string | null;
-  destinationOriginalPath: string;
-  destinationCleanPath: string | null;
+  sourceMarketplacePath: string;
+  destinationPath: string;
 };
 
 export type SettlementDependencies = {
@@ -17,21 +15,13 @@ export type SettlementDependencies = {
 };
 
 function assertSafePath(item: AcquisitionManifestItem) {
-  const originalSuffix = `/acquired/${item.acquiredGarmentId}/original`;
-  const cleanSuffix = `/acquired/${item.acquiredGarmentId}/clean`;
+  const destinationSuffix = `/acquired/${item.acquiredGarmentId}/asset`;
   const invalid =
-    !item.sourceOriginalPath
-    || item.sourceOriginalPath === item.destinationOriginalPath
-    || !item.destinationOriginalPath.endsWith(originalSuffix)
-    || item.destinationOriginalPath.startsWith('/')
-    || item.destinationOriginalPath.includes('..')
-    || (item.sourceCleanPath === null) !== (item.destinationCleanPath === null)
-    || (item.sourceCleanPath !== null && (
-      item.sourceCleanPath === item.destinationCleanPath
-      || !item.destinationCleanPath?.endsWith(cleanSuffix)
-      || item.destinationCleanPath.startsWith('/')
-      || item.destinationCleanPath.includes('..')
-    ));
+    !item.sourceMarketplacePath
+    || item.sourceMarketplacePath === item.destinationPath
+    || !item.destinationPath.endsWith(destinationSuffix)
+    || item.destinationPath.startsWith('/')
+    || item.destinationPath.includes('..');
 
   if (invalid) throw new Error('Unsafe acquired garment path');
 }
@@ -61,17 +51,10 @@ export async function settleHandoff(
   for (const item of manifest) {
     assertSafePath(item);
     await ensureCopy(
-      item.sourceOriginalPath,
-      item.destinationOriginalPath,
+      item.sourceMarketplacePath,
+      item.destinationPath,
       dependencies,
     );
-    if (item.sourceCleanPath && item.destinationCleanPath) {
-      await ensureCopy(
-        item.sourceCleanPath,
-        item.destinationCleanPath,
-        dependencies,
-      );
-    }
   }
 
   return dependencies.finalize(transactionId);

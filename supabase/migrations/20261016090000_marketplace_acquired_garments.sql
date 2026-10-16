@@ -64,6 +64,34 @@ create trigger marketplace_acquisition_guard
 before update or delete on private.marketplace_acquisitions
 for each row execute function private.marketplace_guard_acquisition();
 
+-- The second handoff confirmation creates acquisition plans before Storage is
+-- copied. Prevent every terminal writer, including the C08 expiry worker, from
+-- moving that transaction away from settlement while those plans are pending.
+create or replace function private.marketplace_guard_settlement_fence()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.status = 'awaiting_handoff'
+    and new.status in ('cancelled', 'disputed', 'expired')
+    and exists (
+      select 1 from private.marketplace_acquisitions acquisition
+      where acquisition.transaction_id = old.id
+        and acquisition.completed_at is null
+    ) then
+    raise exception 'Marketplace acquisitions are pending'
+      using errcode = '55000';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger marketplace_settlement_fence
+before update on public.marketplace_transactions
+for each row execute function private.marketplace_guard_settlement_fence();
+
 create trigger account_deletion_write_barrier
 before insert on private.marketplace_acquisitions
 for each row execute function private.account_deletion_reject_write(
@@ -223,10 +251,8 @@ create or replace function public.marketplace_acquisition_manifest(
 )
 returns table (
   acquired_garment_id uuid,
-  source_original_path text,
-  source_clean_path text,
-  destination_original_path text,
-  destination_clean_path text
+  source_marketplace_path text,
+  destination_path text
 )
 language sql
 stable
@@ -235,16 +261,10 @@ set search_path = ''
 as $$
   select
     acquisition.planned_garment_id,
-    source.original_path,
-    source.clean_path,
+    coalesce(source.clean_path, source.original_path),
     private.marketplace_acquisition_path(
-      party.user_id, acquisition.planned_garment_id, 'original'
-    ),
-    case when source.clean_path is null then null else
-      private.marketplace_acquisition_path(
-        party.user_id, acquisition.planned_garment_id, 'clean'
-      )
-    end
+      party.user_id, acquisition.planned_garment_id, 'asset'
+    )
   from private.marketplace_acquisitions acquisition
   join public.marketplace_transactions transaction_record
     on transaction_record.id = acquisition.transaction_id
@@ -320,17 +340,10 @@ begin
       acquisition.recipient_party_id,
       acquisition.planned_garment_id,
       party.user_id recipient_user_id,
-      source.original_path source_original_path,
-      source.clean_path source_clean_path,
       source.name, source.category, source.color, source.size, source.season,
       private.marketplace_acquisition_path(
-        party.user_id, acquisition.planned_garment_id, 'original'
-      ) destination_original_path,
-      case when source.clean_path is null then null else
-        private.marketplace_acquisition_path(
-          party.user_id, acquisition.planned_garment_id, 'clean'
-        )
-      end destination_clean_path
+        party.user_id, acquisition.planned_garment_id, 'asset'
+      ) destination_path
     from private.marketplace_acquisitions acquisition
     join public.marketplace_listings listing
       on listing.id = acquisition.source_listing_id
@@ -344,15 +357,7 @@ begin
       or not exists (
         select 1 from storage.objects object_record
         where object_record.bucket_id = 'garments'
-          and object_record.name = v_acquisition.destination_original_path
-      )
-      or (
-        v_acquisition.destination_clean_path is not null
-        and not exists (
-          select 1 from storage.objects object_record
-          where object_record.bucket_id = 'garments'
-            and object_record.name = v_acquisition.destination_clean_path
-        )
+          and object_record.name = v_acquisition.destination_path
       ) then
       raise exception 'Acquired garment storage copy is incomplete';
     end if;
@@ -365,8 +370,8 @@ begin
     ) values (
       v_acquisition.planned_garment_id,
       v_acquisition.recipient_user_id,
-      v_acquisition.destination_original_path,
-      v_acquisition.destination_clean_path,
+      v_acquisition.destination_path,
+      null,
       null, 0, null, null, v_now,
       v_acquisition.name, v_acquisition.category, v_acquisition.color,
       v_acquisition.size, v_acquisition.season, 'ready'
@@ -377,8 +382,8 @@ begin
     from public.garments garment
     where garment.id = v_acquisition.planned_garment_id
       and garment.user_id = v_acquisition.recipient_user_id
-      and garment.original_path = v_acquisition.destination_original_path
-      and garment.clean_path is not distinct from v_acquisition.destination_clean_path
+      and garment.original_path = v_acquisition.destination_path
+      and garment.clean_path is null
     for update;
     if not found then
       raise exception 'Acquired garment identity is inconsistent';
@@ -429,6 +434,8 @@ begin
   update public.marketplace_transactions
   set status = 'completed', completed_at = v_now, updated_at = v_now
   where id = v_tx.id;
+  delete from private.marketplace_expiry_failures
+  where resource_type = 'transaction' and resource_id = v_tx.id;
   update public.marketplace_listings
   set status = 'completed', updated_at = v_now
   where id = v_tx.listing_id or id = v_tx.swap_listing_id;
@@ -478,12 +485,58 @@ as $$
       or acquisition.acquired_garment_id is null
       or garment.user_id is distinct from party.user_id
       or garment.original_path is distinct from private.marketplace_acquisition_path(
-        party.user_id, acquisition.planned_garment_id, 'original'
+        party.user_id, acquisition.planned_garment_id, 'asset'
       )
+      or garment.clean_path is not null
     );
 $$;
 
+create or replace function public.marketplace_can_delete_garment_object(p_name text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select not exists (
+    select 1
+    from public.marketplace_listings listing
+    join public.garments garment on garment.id = listing.garment_id
+    where p_name in (garment.original_path, garment.clean_path)
+      and (
+        listing.status in ('active', 'reserved')
+        or exists (
+          select 1 from public.marketplace_transactions transaction_record
+          where (
+              transaction_record.listing_id = listing.id
+              or transaction_record.swap_listing_id = listing.id
+            )
+            and transaction_record.status in ('awaiting_handoff', 'disputed')
+        )
+      )
+  );
+$$;
+
+revoke all on function public.marketplace_can_delete_garment_object(text) from public, anon;
+grant execute on function public.marketplace_can_delete_garment_object(text) to authenticated;
+
+drop policy if exists "private_image_delete" on storage.objects;
+create policy "private_image_delete" on storage.objects for delete to authenticated
+using (
+  bucket_id in ('body', 'garments', 'results')
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+  and exists (
+    select 1 from public.profiles where id = (select auth.uid())
+  )
+  and public.account_deletion_write_allowed()
+  and (
+    bucket_id <> 'garments'
+    or public.marketplace_can_delete_garment_object(name)
+  )
+);
+
 revoke all on function private.marketplace_guard_acquisition() from public, anon, authenticated;
+revoke all on function private.marketplace_guard_settlement_fence() from public, anon, authenticated;
 revoke all on function private.marketplace_acquisition_path(uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.marketplace_record_handoff_confirmation(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.marketplace_confirm_handoff(uuid) from public, anon;

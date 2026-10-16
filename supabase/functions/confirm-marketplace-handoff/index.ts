@@ -45,12 +45,8 @@ function mapManifest(input: unknown): AcquisitionManifestItem[] {
     const row = value as Record<string, unknown>;
     return {
       acquiredGarmentId: String(row.acquired_garment_id ?? ''),
-      sourceOriginalPath: String(row.source_original_path ?? ''),
-      sourceCleanPath: row.source_clean_path === null ? null : String(row.source_clean_path ?? ''),
-      destinationOriginalPath: String(row.destination_original_path ?? ''),
-      destinationCleanPath: row.destination_clean_path === null
-        ? null
-        : String(row.destination_clean_path ?? ''),
+      sourceMarketplacePath: String(row.source_marketplace_path ?? ''),
+      destinationPath: String(row.destination_path ?? ''),
     };
   });
 }

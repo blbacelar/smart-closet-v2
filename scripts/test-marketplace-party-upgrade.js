@@ -474,7 +474,7 @@ async function verifyAcquiredGarmentFinalization(databaseUrl) {
         transaction_record.id, '00000000-0000-4000-8000-000000000076'
       ) from public.acquired_race_transactions transaction_record;
       insert into storage.objects (id, bucket_id, name)
-      select gen_random_uuid(), 'garments', manifest.destination_original_path
+      select gen_random_uuid(), 'garments', manifest.destination_path
       from public.acquired_race_transactions transaction_record
       cross join lateral public.marketplace_acquisition_manifest(transaction_record.id) manifest;
     `,
@@ -493,10 +493,14 @@ async function verifyAcquiredGarmentFinalization(databaseUrl) {
   const results = await Promise.all([
     concurrentQuery(databaseUrl, finalization),
     concurrentQuery(databaseUrl, finalization),
+    concurrentQuery(
+      databaseUrl,
+      "select * from public.marketplace_expire_stale(now() + interval '1 year', 100);",
+    ),
   ]);
   if (results.some((result) => result.code !== 0)) {
     throw new UpgradeTestError(
-      `Concurrent acquired-garment finalization failed: ${results.map((result) => result.stderr).join('\n')}`,
+      `Concurrent finalization and expiry failed: ${results.map((result) => result.stderr).join('\n')}`,
     );
   }
 
@@ -519,7 +523,7 @@ async function verifyAcquiredGarmentFinalization(databaseUrl) {
   ).trim();
   if (exactlyOnce !== '1|2|1') {
     throw new UpgradeTestError(
-      `Concurrent finalization duplicated settlement effects: ${exactlyOnce}`,
+      `Concurrent finalization/expiry duplicated or disputed settlement effects: ${exactlyOnce}`,
     );
   }
 
