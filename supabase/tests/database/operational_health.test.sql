@@ -237,21 +237,29 @@ select is(
   'snapshot capture purges data beyond the thirty-day retention window'
 );
 select is(
-  (select count(*) from private.operational_health_snapshots),
+  (select count(*) from private.operational_health_snapshots
+   where checked_at = '2026-10-16 12:00:00+00'),
   1::bigint,
-  'capture retains only the current aggregate snapshot in this fixture'
+  'capture records exactly one aggregate snapshot for the requested instant'
 );
 select ok(
-  position('@' in (select metrics::text from private.operational_health_snapshots)) = 0,
+  not exists (
+    select 1 from private.operational_health_snapshots
+    where position('@' in metrics::text) > 0
+  ),
   'captured metrics contain no email-like content'
 );
 select ok(
-  (select metrics::text from private.operational_health_snapshots)
-    !~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+  not exists (
+    select 1 from private.operational_health_snapshots
+    where metrics::text
+      ~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+  ),
   'captured metrics contain no UUIDs'
 );
 select is(
-  (select overall_status from private.operational_health_snapshots),
+  (select overall_status from private.operational_health_snapshots
+   where checked_at = '2026-10-16 12:00:00+00'),
   'warning'::text,
   'the aggregate snapshot records the synthetic incident severity'
 );

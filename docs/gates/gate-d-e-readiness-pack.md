@@ -46,12 +46,12 @@ Both stages require these common fields:
 | Gate and capability | Exact row name from this pack |
 | Receipt stage | Exact `access-ready` or `acceptance-ready` stage |
 | Environment | Staging, sandbox, or production |
-| Account owner | Named accountable human; keep contact details private |
-| Authorized approver | Named human authorized to accept this stage for Fitly |
+| Account owner | Safe opaque reference to the named accountable human in the private register; keep identity/contact details private |
+| Authorized approver | Safe opaque reference to the human authorized to accept this stage for Fitly |
 | Least-privilege operator | Human/role permitted to configure and rotate access |
 | Evidence reference | Non-sensitive console, case, build, or private-register ID |
 | Verified at | ISO-8601 timestamp |
-| Reviewer | Independent human who checked the evidence |
+| Reviewer | Safe opaque reference to the independent human who checked the evidence |
 | Open findings | Exact `none`, or the stage remains open |
 | Decision | Exact `approved` or `rejected` by the authorized approver |
 | Decision time | ISO-8601 timestamp |
@@ -94,6 +94,56 @@ rejected, conditional, expired, inaccessible, or partially completed receipt
 leaves its stage open. Editing the provider configuration invalidates both
 stages affected by the change.
 
+### Private receipt validator
+
+The repository includes a fail-closed structural validator for the three
+receipt types in this pack. Keep the receipt JSON in an approved private
+register or a temporary local directory outside the repository, then run:
+
+```bash
+npm run validate:gate-receipt -- /absolute/private/path/receipt.json
+```
+
+Multiple paths may be supplied in one run. Exit code `0` means every supplied
+receipt passed the structural contract; `1` means at least one receipt has a
+finding; `2` means no receipt path was supplied. Output contains only each file
+index plus a trusted schema location and finding type. Unknown JSON keys are
+reported by opaque index. The command never intentionally prints a path,
+filename, untrusted key, field value, or receipt body. A receipt file, including
+a symlink target, inside this repository is rejected; keep it in the approved
+private register or an outside temporary directory.
+
+List the source-controlled capability manifest before authoring a receipt:
+
+```bash
+npm run validate:gate-receipt -- --requirements
+```
+
+The manifest is authoritative for allowed stages/environments, exact stable
+access/acceptance/end-to-end check IDs, native build requirements, and
+reconciliation policy. Every required check ID must appear exactly once with
+`result: "passed"`; missing, duplicate, or unknown IDs fail closed.
+
+The validator requires schema version `1`, exact stage/capability identifiers,
+timezone-qualified ISO-8601 timestamps, current review dates, approved/no-open-
+finding state, chronological verification/approval/review order, passed stage
+checks, safe opaque `scheme:identifier` references, and no unknown fields. It
+rejects common secret patterns, personal email/phone values, user home paths,
+and private storage URLs. Pattern scanning is defense in depth, not proof that
+arbitrary secret formats can never be present. Access and acceptance checks are
+objects containing only `name` and `result`; acceptance reconciliation contains
+only `result` and optional `rationale`; decision reconsideration uses exactly
+one of the documented forms.
+The dated form requires both `trigger` and future `reviewAt`. A `deferred`
+decision must use that dated form; `permanent-for-release` is valid only for an
+`excluded` decision and requires a non-empty `statement`.
+
+This command validates the receipt's shape and declared results. It cannot
+prove that a provider fact is true, that an approver has authority, or that a
+private evidence reference is accessible/current. The independent reviewer
+must inspect the referenced source and establish those facts before approval.
+Passing the validator alone never closes a gate or authorizes provider use.
+
 ### Decision-only exception for optional image cleanup
 
 If product/privacy decides that the optional image-cleanup provider is
@@ -104,12 +154,12 @@ fabricating provider access and acceptance receipts. It requires:
 | --- | --- |
 | Gate and capability | `Optional image cleanup provider` |
 | Receipt type and decision | Exact `decision-only` plus exact `deferred` or `excluded` |
-| Decision owner and authorized approver | Named accountable humans; keep contact details private |
+| Decision owner and authorized approver | Safe opaque references to named accountable humans in the private register |
 | Rationale and product/privacy review | Approved reason, user-impact analysis, and confirmation that original-image behavior remains safe |
 | No-provider assertion | Explicit confirmation that no provider account/credential was created and no image/member data was sent |
 | Reconsideration | Trigger and ISO-8601 review/expiry date, or an approved statement that exclusion is permanent for this release |
 | Evidence reference and decision time | Non-sensitive private-register/issue reference and ISO-8601 timestamp |
-| Independent reviewer and findings | Named reviewer and exact `none` open findings |
+| Independent reviewer and findings | Safe opaque reviewer reference and exact `none` open findings |
 
 For an approved `deferred`/`excluded` decision, provider account owner,
 least-privilege provider operator, environment, provider terms/funding, secret
