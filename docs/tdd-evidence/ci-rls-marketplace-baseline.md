@@ -54,6 +54,8 @@ GitHub authority: #67
 
 ## Remote exit gate
 
-Issue #67 remains open until two consecutive GitHub Actions runs pass. The first run is
-triggered by the C01 pull request; after it passes, the branch receives a no-op-equivalent
-documentation update or rerun so the second independent run can be recorded before merge.
+The first independent GitHub Actions run passed both the app-quality and database-security
+jobs: [`38833995875`](https://github.com/blbacelar/smart-closet-v2/actions/runs/38833995875).
+
+Issue #67 remains open until the second consecutive run, triggered by this evidence update,
+also passes.
