@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(47);
+select plan(50);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -48,7 +48,8 @@ values
   ('00000000-0000-4000-8000-000000000002', 'tryon', 'test-provider', 0.02);
 
 update public.profiles
-set tier = 'pro'
+set tier = 'pro',
+    adult_confirmed_at = now()
 where id = '00000000-0000-4000-8000-000000000001';
 
 insert into public.body_photos (id, user_id, storage_path, status)
@@ -119,6 +120,51 @@ insert into storage.objects (id, bucket_id, name)
 values
   ('40000000-0000-4000-8000-000000000001', 'body', '00000000-0000-4000-8000-000000000001/body-one.jpg'),
   ('40000000-0000-4000-8000-000000000002', 'body', '00000000-0000-4000-8000-000000000002/body-two.jpg');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
+
+select throws_ok(
+  $$insert into public.body_photos (id, user_id, storage_path, status)
+    values (
+      '10000000-0000-4000-8000-000000000004',
+      '00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000002/unconfirmed-body.jpg',
+      'pending'
+    )$$,
+  '42501',
+  'new row violates row-level security policy for table "body_photos"',
+  'unconfirmed member cannot create a body photo record'
+);
+select throws_ok(
+  $$insert into public.garments (id, user_id, original_path, name, category)
+    values (
+      '20000000-0000-4000-8000-000000000004',
+      '00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000002/unconfirmed-garment.jpg',
+      'Unconfirmed garment',
+      null
+    )$$,
+  '42501',
+  'new row violates row-level security policy for table "garments"',
+  'unconfirmed member cannot create a garment record'
+);
+select throws_ok(
+  $$insert into storage.objects (id, bucket_id, name)
+    values (
+      '40000000-0000-4000-8000-000000000005',
+      'body',
+      '00000000-0000-4000-8000-000000000002/unconfirmed-body.jpg'
+    )$$,
+  '42501',
+  'new row violates row-level security policy for table "objects"',
+  'unconfirmed member cannot upload private source media'
+);
+
+reset role;
+delete from public.body_photos where id = '10000000-0000-4000-8000-000000000004';
+delete from public.garments where id = '20000000-0000-4000-8000-000000000004';
+delete from storage.objects where id = '40000000-0000-4000-8000-000000000005';
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);

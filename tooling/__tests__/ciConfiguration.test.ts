@@ -72,3 +72,15 @@ describe('dependency automation', () => {
     expect(read('.nvmrc').trim()).toBe('22.13.0');
   });
 });
+
+describe('coverage ownership', () => {
+  it('includes the launch-critical marketplace implementation', () => {
+    const packageJson = JSON.parse(read('package.json')) as {
+      jest?: { collectCoverageFrom?: string[] };
+    };
+
+    expect(packageJson.jest?.collectCoverageFrom).toContain(
+      'src/features/marketplace/**/*.{ts,tsx}',
+    );
+  });
+});
