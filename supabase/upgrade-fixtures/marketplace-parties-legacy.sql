@@ -122,4 +122,13 @@ insert into public.marketplace_credit_ledger (
     -5,
     'legacy-buyer-mixed-adjustment',
     'Legacy mixed-bucket adjustment'
+  ),
+  (
+    '96000000-0000-4000-8000-000000000005',
+    '91000000-0000-4000-8000-000000000002',
+    'adjustment',
+    -2147483648,
+    2147483647,
+    'legacy-buyer-boundary-adjustment',
+    'Legacy signed integer boundary adjustment'
   );

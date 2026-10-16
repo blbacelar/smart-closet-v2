@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(13);
+select plan(15);
 
 select is(
   (select count(*) from private.marketplace_parties),
@@ -63,7 +63,7 @@ select is(
    from public.marketplace_credit_ledger record
    join private.marketplace_parties party
      on party.id = record.party_id and party.user_id = record.user_id),
-  4::bigint,
+  5::bigint,
   'legacy ledger entries are backfilled'
 );
 select results_eq(
@@ -75,8 +75,22 @@ select results_eq(
 select results_eq(
   $$select sum(delta_available)::bigint, sum(delta_reserved)::bigint
     from public.marketplace_credit_ledger$$,
-  $$values (110::bigint, 25::bigint)$$,
+  $$values (-2147483538::bigint, 2147483672::bigint)$$,
   'the upgrade preserves existing ledger deltas exactly'
+);
+select is(
+  (select count(*) from private.marketplace_ledger_journals
+   where idempotency_key = 'legacy:legacy-buyer-boundary-adjustment'),
+  1::bigint,
+  'signed integer boundary adjustments migrate exactly once'
+);
+select results_eq(
+  $$select count(*)::bigint, sum(posting.units)::bigint
+    from private.marketplace_ledger_postings posting
+    join private.marketplace_ledger_journals journal on journal.id = posting.journal_id
+    where journal.idempotency_key = 'legacy:legacy-buyer-boundary-adjustment'$$,
+  $$values (3::bigint, 0::bigint)$$,
+  'signed integer boundary adjustments become balanced bigint postings'
 );
 select is(
   (select count(*)
