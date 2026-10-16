@@ -196,6 +196,77 @@ async function verifyCommittedAuthDeletion(databaseUrl) {
   }
 }
 
+async function verifyConcurrentOfferAcceptance(databaseUrl) {
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email) values
+        ('00000000-0000-4000-8000-000000000035', 'accept-race-seller@example.com'),
+        ('00000000-0000-4000-8000-000000000036', 'accept-race-one@example.com'),
+        ('00000000-0000-4000-8000-000000000037', 'accept-race-two@example.com');
+      insert into public.marketplace_memberships (user_id, expires_at) values
+        ('00000000-0000-4000-8000-000000000035', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000036', now() + interval '1 year'),
+        ('00000000-0000-4000-8000-000000000037', now() + interval '1 year');
+      insert into public.garments (
+        id, user_id, original_path, image_hash, name, category, status
+      ) values (
+        '20000000-0000-4000-8000-000000000035',
+        '00000000-0000-4000-8000-000000000035',
+        '00000000-0000-4000-8000-000000000035/race.jpg',
+        'accept-race', 'Acceptance race', 'top', 'ready'
+      );
+      insert into public.marketplace_listings (
+        id, garment_id, seller_id, accepts_credits, accepts_swap,
+        is_giveaway, pickup_area
+      ) values (
+        '40000000-0000-4000-8000-000000000035',
+        '20000000-0000-4000-8000-000000000035',
+        '00000000-0000-4000-8000-000000000035',
+        false, false, true, 'Race area'
+      );
+      insert into public.marketplace_offers (
+        id, listing_id, buyer_id, seller_id, mode
+      ) values
+        ('50000000-0000-4000-8000-000000000036',
+         '40000000-0000-4000-8000-000000000035',
+         '00000000-0000-4000-8000-000000000036',
+         '00000000-0000-4000-8000-000000000035', 'giveaway'),
+        ('50000000-0000-4000-8000-000000000037',
+         '40000000-0000-4000-8000-000000000035',
+         '00000000-0000-4000-8000-000000000037',
+         '00000000-0000-4000-8000-000000000035', 'giveaway');
+    `,
+    'Create the committed competing-acceptance fixture',
+  );
+
+  const accept = (offerId) => `
+    begin;
+    set local role authenticated;
+    select set_config(
+      'request.jwt.claim.sub',
+      '00000000-0000-4000-8000-000000000035',
+      true
+    );
+    select public.marketplace_respond_to_offer('${offerId}', true);
+    commit;
+  `;
+  const results = await Promise.all([
+    concurrentQuery(databaseUrl, accept('50000000-0000-4000-8000-000000000036')),
+    concurrentQuery(databaseUrl, accept('50000000-0000-4000-8000-000000000037')),
+  ]);
+  const successes = results.filter((result) => result.code === 0);
+  const unavailable = results.filter((result) =>
+    result.stderr.includes('Listing is no longer available')
+      || result.stderr.includes('duplicate key value'),
+  );
+  if (successes.length !== 1 || unavailable.length !== 1) {
+    throw new UpgradeTestError(
+      'Concurrent offer acceptance did not produce one winner and one unavailable loser.',
+    );
+  }
+}
+
 async function verifyConcurrentReservation(databaseUrl) {
   psql(
     databaseUrl,
@@ -484,7 +555,26 @@ async function main() {
       ], workspace),
       'Verify the complete isolated database RLS contract',
     );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/marketplace_state_contract.test.sql'),
+      ], workspace),
+      'Verify the server-authoritative marketplace state contract',
+    );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
+    await verifyConcurrentOfferAcceptance(latestDatabaseUrl);
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/upgrade-tests/marketplace-state-concurrency.test.sql'),
+      ], workspace),
+      'Verify competing marketplace acceptance serialization',
+    );
     await verifyDeletionWriteFence(latestDatabaseUrl);
     await verifyCommittedAuthDeletion(latestDatabaseUrl);
     run(

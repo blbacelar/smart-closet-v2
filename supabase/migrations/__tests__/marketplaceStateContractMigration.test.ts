@@ -41,7 +41,11 @@ describe('marketplace state contract migration', () => {
     expect(sql).toContain('create table private.marketplace_transaction_terms');
     expect(sql).toContain('private.marketplace_capture_transaction_terms');
     expect(sql).toContain('private.marketplace_reject_immutable_change');
-    expect(sql).not.toMatch(/marketplace_transaction_terms[\s\S]*\b(image|message|pickup_area)\b/);
+    const termsTable = sql.match(
+      /create table private\.marketplace_transaction_terms \(([\s\S]*?)\n\);/,
+    )?.[1];
+    expect(termsTable).toBeDefined();
+    expect(termsTable).not.toMatch(/\b(image|message|pickup_area)\b/);
   });
 
   it('keeps safe recovery available while controls are paused', () => {

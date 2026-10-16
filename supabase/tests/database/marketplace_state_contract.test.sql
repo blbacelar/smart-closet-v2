@@ -94,6 +94,7 @@ select ok(
    from public.marketplace_transactions where id = (select id from state_transaction)),
   'accepted handoffs receive an immutable future deadline'
 );
+reset role;
 select is(
   (select count(*) from private.marketplace_transaction_terms
    where transaction_id = (select id from state_transaction)),
@@ -107,6 +108,8 @@ select is(
   0::bigint,
   'terms snapshots exclude media, private chat, and location'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000031', true);
 select is(
   public.marketplace_respond_to_offer((select id from state_offer_one), true),
   (select id from state_transaction),

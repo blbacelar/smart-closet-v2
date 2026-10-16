@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(15);
+select plan(16);
 
 select is(
   (select count(*) from private.marketplace_parties),
@@ -57,6 +57,13 @@ select is(
      on seller.id = record.seller_party_id and seller.user_id = record.seller_id),
   1::bigint,
   'legacy transactions are backfilled for both participants'
+);
+select is(
+  (select count(*)
+   from private.marketplace_transaction_terms terms
+   where terms.transaction_id = '95000000-0000-4000-8000-000000000001'),
+  1::bigint,
+  'legacy accepted transactions receive one immutable terms snapshot'
 );
 select is(
   (select count(*)
