@@ -63,7 +63,7 @@ select is(
    from public.marketplace_credit_ledger record
    join private.marketplace_parties party
      on party.id = record.party_id and party.user_id = record.user_id),
-  2::bigint,
+  4::bigint,
   'legacy ledger entries are backfilled'
 );
 select results_eq(
@@ -75,7 +75,7 @@ select results_eq(
 select results_eq(
   $$select sum(delta_available)::bigint, sum(delta_reserved)::bigint
     from public.marketplace_credit_ledger$$,
-  $$values (100::bigint, 25::bigint)$$,
+  $$values (110::bigint, 25::bigint)$$,
   'the upgrade preserves existing ledger deltas exactly'
 );
 select is(

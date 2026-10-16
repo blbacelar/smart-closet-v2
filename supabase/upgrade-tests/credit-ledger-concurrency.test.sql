@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(7);
+select plan(10);
 
 select is(
   (select count(*) from private.marketplace_ledger_journals
@@ -58,6 +58,31 @@ select results_eq(
     )$$,
   $$values (true)$$,
   'the concurrent idempotent retry remains reconciled'
+);
+select is(
+  (select count(*) from private.marketplace_ledger_journals
+   where reversal_of = (
+     select id from private.marketplace_ledger_journals
+     where idempotency_key = 'ledger-reversal-source'
+   )),
+  1::bigint,
+  'concurrent identical reversal retries create one reversal journal'
+);
+select results_eq(
+  $$select available_balance, reserved_balance
+    from public.marketplace_credit_accounts
+    where user_id = '00000000-0000-4000-8000-000000000014'$$,
+  $$values (100, 0)$$,
+  'concurrent identical reversal retries restore credit exactly once'
+);
+select results_eq(
+  $$select balanced from public.marketplace_reconcile_credit_ledger()
+    where party_id = (
+      select party_id from public.marketplace_credit_accounts
+      where user_id = '00000000-0000-4000-8000-000000000014'
+    )$$,
+  $$values (true)$$,
+  'the concurrent reversal retry remains reconciled'
 );
 
 select * from finish();

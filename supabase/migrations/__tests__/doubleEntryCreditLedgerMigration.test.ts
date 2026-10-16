@@ -28,18 +28,25 @@ describe('double-entry marketplace credit ledger migration', () => {
     expect(sql).toMatch(/constraint trigger marketplace_ledger_balance_check[\s\S]*deferrable initially deferred/i);
     expect(sql).toContain('marketplace_reject_ledger_mutation');
     expect(sql).toContain('marketplace_reverse_credit_journal');
+    expect(sql).toContain('request_party_id uuid not null');
+    expect(sql).toContain('request_units bigint not null');
+    expect(sql).toContain('marketplace_validate_existing_credit_journal');
+    expect(sql).toMatch(/unique index marketplace_ledger_grant_cohort_issuance_idx/i);
   });
 
   it('backfills and mirrors the compatibility ledger without exposing platform accounts', () => {
     const sql = migration();
 
     expect(sql).toContain('marketplace_mirror_legacy_credit_entry');
+    expect(sql).toContain('marketplace_post_legacy_adjustment');
     expect(sql).toContain('marketplace_credit_ledger_double_entry');
     expect(sql).toContain("'legacy:' ||");
     expect(sql).toContain('marketplace_reconcile_credit_ledger');
     expect(sql).toContain('marketplace_my_credit_history');
     expect(sql).toMatch(/revoke all on function public\.marketplace_reconcile_credit_ledger\(\) from public, anon, authenticated/i);
     expect(sql).toMatch(/grant execute on function public\.marketplace_reconcile_credit_ledger\(\) to service_role/i);
+    expect(sql).toContain('posting_available');
+    expect(sql).toContain('posting_held');
   });
 
   it('keeps sensitive functions on an empty search path and restricts mutation entry points', () => {

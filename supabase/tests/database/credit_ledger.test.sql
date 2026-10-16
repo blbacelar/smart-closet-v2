@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(35);
+select plan(43);
 
 select has_table('private', 'marketplace_grant_cohorts', 'grant cohorts are restricted records');
 select has_table('private', 'marketplace_ledger_accounts', 'double-entry accounts exist');
@@ -200,10 +200,115 @@ select is(
   1::bigint,
   'a credit issuance event owns one immutable grant cohort'
 );
+select throws_ok(
+  $$select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000010'),
+      'grant_available', 5, 'ledger-test-cohort-reuse', 'test-v1', null,
+      (select id from private.marketplace_grant_cohorts
+       where source_event_key = 'provider-event-one')
+    )$$,
+  'P0001',
+  'Grant cohort already issued',
+  'one grant cohort cannot issue value twice under a new retry key'
+);
+select throws_ok(
+  $$select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000011'),
+      'grant_available', 5, 'ledger-test-wrong-cohort-party', 'test-v1', null,
+      (select id from private.marketplace_grant_cohorts
+       where source_event_key = 'provider-event-one')
+    )$$,
+  'P0001',
+  'Grant cohort conflicts with the requested issuance',
+  'a grant cohort cannot be issued to a different party'
+);
+select throws_ok(
+  $$select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000010'),
+      'reserve', 29, 'ledger-test-reserve', 'test-v1'
+    )$$,
+  'P0001',
+  'Marketplace credit request conflicts with an existing idempotency or event key',
+  'an idempotency key cannot be replayed with different economic terms'
+);
+select throws_ok(
+  $$select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000011'),
+      'grant_available', 5, 'ledger-test-event-wrong-owner', 'test-v1',
+      'provider-event-one'
+    )$$,
+  'P0001',
+  'Marketplace credit request conflicts with an existing idempotency or event key',
+  'an external event cannot be replayed for a different party'
+);
+select throws_ok(
+  $$select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000010'),
+      'grant_available', 5, 'ledger-test-reserve', 'test-v1',
+      'provider-event-one'
+    )$$,
+  'P0001',
+  'Marketplace credit request conflicts with an existing idempotency or event key',
+  'crossed idempotency and event keys cannot select an arbitrary journal'
+);
+select throws_ok(
+  $$select private.marketplace_reverse_credit_journal(
+      (select id from private.marketplace_ledger_journals
+       where idempotency_key = 'ledger-test-reserve'),
+      'ledger-test-release'
+    )$$,
+  'P0001',
+  'Marketplace reversal request conflicts with an existing idempotency key',
+  'a reversal key cannot resolve to a non-reversal journal'
+);
 select is(
   (select count(*) from public.marketplace_reconcile_credit_ledger() where not balanced),
   0::bigint,
   'new server operations preserve compatibility reconciliation'
+);
+
+update private.marketplace_ledger_accounts
+set balance = balance + 1
+where party_id = (
+    select party_id from public.marketplace_credit_accounts
+    where user_id = '00000000-0000-4000-8000-000000000010'
+  )
+  and kind = 'member_available';
+update public.marketplace_credit_accounts
+set available_balance = available_balance + 1
+where user_id = '00000000-0000-4000-8000-000000000010';
+select is(
+  (select balanced from public.marketplace_reconcile_credit_ledger()
+   where party_id = (
+     select party_id from public.marketplace_credit_accounts
+     where user_id = '00000000-0000-4000-8000-000000000010'
+   )),
+  false,
+  'reconciliation detects matching cache drift by deriving truth from postings'
+);
+update private.marketplace_ledger_accounts
+set balance = balance - 1
+where party_id = (
+    select party_id from public.marketplace_credit_accounts
+    where user_id = '00000000-0000-4000-8000-000000000010'
+  )
+  and kind = 'member_available';
+update public.marketplace_credit_accounts
+set available_balance = available_balance - 1
+where user_id = '00000000-0000-4000-8000-000000000010';
+select is(
+  (select balanced from public.marketplace_reconcile_credit_ledger()
+   where party_id = (
+     select party_id from public.marketplace_credit_accounts
+     where user_id = '00000000-0000-4000-8000-000000000010'
+   )),
+  true,
+  'reconciliation returns to balanced after cache repair'
 );
 
 select throws_ok(

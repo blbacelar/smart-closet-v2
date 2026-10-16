@@ -143,6 +143,44 @@ async function verifyConcurrentReservation(databaseUrl) {
       'Concurrent retries with the same idempotency key did not both resolve successfully.',
     );
   }
+
+  psql(
+    databaseUrl,
+    `
+      insert into auth.users (id, email)
+      values ('00000000-0000-4000-8000-000000000014', 'ledger-reversal-race@example.com');
+      insert into public.marketplace_credit_accounts (user_id, available_balance)
+      values ('00000000-0000-4000-8000-000000000014', 100);
+      insert into public.marketplace_credit_ledger (
+        user_id, kind, delta_available, idempotency_key, description
+      ) values (
+        '00000000-0000-4000-8000-000000000014',
+        'adjustment', 100, 'ledger-reversal-opening', 'Reversal fixture'
+      );
+      select private.marketplace_post_credit_operation(
+        (select party_id from public.marketplace_credit_accounts
+         where user_id = '00000000-0000-4000-8000-000000000014'),
+        'reserve', 20, 'ledger-reversal-source', 'test-v1'
+      );
+    `,
+    'Create the committed reversal-concurrency fixture',
+  );
+  const sameReversal = `
+    select private.marketplace_reverse_credit_journal(
+      (select id from private.marketplace_ledger_journals
+       where idempotency_key = 'ledger-reversal-source'),
+      'ledger-reversal-race'
+    );
+  `;
+  const reversalResults = await Promise.all([
+    concurrentQuery(databaseUrl, sameReversal),
+    concurrentQuery(databaseUrl, sameReversal),
+  ]);
+  if (reversalResults.some((result) => result.code !== 0)) {
+    throw new UpgradeTestError(
+      'Concurrent retries of the same reversal did not both resolve successfully.',
+    );
+  }
 }
 
 function allocatePort(excludedPorts) {
