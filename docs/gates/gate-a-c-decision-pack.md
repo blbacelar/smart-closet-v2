@@ -1,9 +1,13 @@
 # Gate A-C decision pack: Fitly Credits, membership, and storefronts
 
-**Prepared:** 2026-10-16  
-**Status:** recommendation for founder, legal, tax, accounting, and storefront review  
-**Scope:** invite-only British Columbia pilot  
-**Related authority:** GitHub #27, #48, #90; ADR 0001  
+**Prepared:** 2026-10-16
+
+**Status:** recommendation for founder, legal, tax, accounting, and storefront review
+
+**Scope:** invite-only British Columbia pilot
+
+**Related authority:** GitHub #27, #48, #90; ADR 0001
+
 **Not legal, tax, accounting, or App Review advice.** The named approvers must
 record their decisions before production billing or a paid pilot is enabled.
 
@@ -79,7 +83,7 @@ itself is not approval.
 
 | Decision | Proposed pilot contract | Why |
 | --- | --- | --- |
-| Customer-facing name | Fitly Credits | Clear and unambiguous while trademark and bilingual review remain pending. Internal code stays `market_credit`. |
+| Working customer-facing name | Fitly Credits | Clear and unambiguous for development. It is not the launch name until trademark, common-law, domain, App Store, bilingual, pronunciation, and confusion checks are attached and product signs the final-name field below. Internal code stays `market_credit`. |
 | Annual fee | CAD 59 plus applicable tax | Existing base research anchor; low enough for a narrow pilot, but high enough that the full B.C. subscription obligations should be designed rather than avoided. |
 | First paid membership grant | 60 credits, once per marketplace party | Conservative initial liquidity; preserves the HomeExchange 2:1 first/renewal pattern. |
 | On-time renewal grant | 30 credits, once per successful renewal period | Limits automatic stock accumulation while rewarding renewal. |
@@ -93,6 +97,11 @@ itself is not approval.
 | Account limit | One marketplace party and one first-year grant per verified person; linked accounts require operator review | Prevents repeated onboarding grants without silently merging balances. |
 | New-account hold | Grant is available immediately; listings/offers require completed profile and verified email; operator may freeze—not erase—value through an audited case | Supports onboarding without client-authored balance changes. |
 | Membership lapse | Browse, retain balance, read history/chat, confirm or dispute an already accepted handoff, and finish account deletion. Cannot create a new listing/offer, accept an offer, or start a new transaction. | Existing obligations remain recoverable while new value-creating actions stop. |
+| Billing grace | Keep the entitlement active only while the provider reports an active billing-grace period. Do not issue the renewal grant until payment recovery succeeds. If grace ends unpaid, apply lapse behavior at the provider effective time. | Avoids granting new value before a successful renewal while respecting provider recovery state. |
+| Subscription cancellation | Cancellation stops automatic renewal and takes effect at the paid period end. Access and the period's valid grant remain until then unless the provider issues a refund or revocation. | Separates turning off renewal from reversing a paid period. |
+| Restore | Server fetches or receives authoritative provider history and replays normalized events. Restore never activates directly from the client and never creates a second grant for the same provider period. | Makes reinstall and device change idempotent. |
+| Family sharing | Disabled for marketplace membership. Each participant needs an individual adult account and marketplace party. | Credits, identity, safety history, and seller obligations are person-specific. |
+| Account merge | No automatic balance or identity merge. Freeze the duplicate account's new transactions, verify common ownership, preserve party/journal provenance, select one surviving login, and use a dual-approved migration that cannot duplicate a first-year grant. | Avoids destroying audit identity or combining grants silently. |
 | Accepted transaction at lapse | Terms and eligibility are snapshotted at acceptance; both parties may complete, cancel where allowed, or dispute | Avoids stranding a physical handoff because a renewal date passed. |
 | Cancellation before acceptance | Withdraw/reject; release reservations exactly once; no transfer | No completed physical exchange. |
 | Cancellation after acceptance but before either confirmation | Either party may cancel; release credits and listings exactly once | Current development contract. |
@@ -103,7 +112,7 @@ itself is not approval.
 | Chargeback/provider revocation | Same as refund: idempotent provider event, no balance rewrite, operator case if value moved | Preserves accounting and innocent counterparties. |
 | Wind-down | Disable new grants/offers/acceptance first; allow completion/cancellation/dispute/history; notify members; preserve balances and records for the counsel-approved period | Production shutdown must not abandon accepted handoffs or erase audit history. |
 
-### Issuance and liquidity circuit breakers
+### Gate A economy thresholds and circuit breakers
 
 The prior three-year scenarios show that transfer volume does not retire
 credits; every grant increases outstanding stock. The 60/30 proposal therefore
@@ -114,17 +123,33 @@ ships only with these pilot controls:
 - no operator-created grants except a dual-approved, reason-coded adjustment;
 - freeze new grants if reconciliation is not exactly balanced, if provider event
   lag exceeds the approved SLA, or if any grant cohort duplicates;
-- monthly review of outstanding credits per active member, transfer velocity,
-  dormant balances, top-1% concentration, completed handoffs, and grants versus
-  earned credits;
+- monthly review of the exact metrics below;
 - no increase to grants or price bounds until at least two complete monthly
   cohorts have enough active supply by region, category, and size;
 - no credit burn introduced merely to improve metrics; any expiry, fee, or
   retirement mechanic requires a new legal conclusion and ADR amendment.
 
-Numeric launch thresholds for density, velocity, support cost, fraud loss, and
-dispute volume remain Gate E decisions because no real pilot distribution
-exists yet. Engineering must measure them but must not invent pass/fail values.
+The following are proposed Gate A values. Product and finance must accept or
+replace every number before Gate A closes. Measurements begin with the first
+paid cohort; a directional decision requires at least 100 paid member-periods,
+60 completed handoffs, and two complete calendar months. Reconciliation and
+duplicate-grant controls apply immediately and do not wait for a sample.
+
+| Metric | Formula and window | Proposed pass value | Circuit breaker | Owner |
+| --- | --- | --- | --- | --- |
+| Ledger imbalance | Absolute difference between all debit and credit postings, checked continuously and in a daily reconciliation | Exactly 0 credits | Disable new grants, offers, and acceptance immediately; keep recovery/history available | Finance + engineering |
+| Duplicate grant rate | Provider periods with more than one effective first/renewal grant ÷ provider periods, daily and monthly | Exactly 0% | Disable new grants and reconcile through immutable reversals | Finance + engineering |
+| Outstanding credits per active paid member | Month-end member-held available + reserved credits ÷ active paid members | At most 90 | Stop new paid enrollment and discretionary adjustments; honor already-contracted periods while product reviews grant size | Product + finance |
+| 30-day transfer velocity | Credit amount settled in trailing 30 days ÷ average daily member-held outstanding credits | At least 0.08 after the minimum sample | Stop expanding the pilot after two consecutive failed months and reassess grant and price bounds | Product |
+| 60-day initial-grant utilization | First-year credits spent or reserved within 60 days ÷ first-year credits granted to eligible mature cohorts | At least 30% | Stop expanding the pilot after two consecutive failed cohorts | Product |
+| Dormant balance share | Credits held by parties with no listing, offer, or settlement activity for 90 days ÷ member-held outstanding credits, monthly | At most 40% | Stop expansion and research inactivity; do not expire or fee balances | Product + finance |
+| Top-1% concentration | Credits held by the highest-balance 1% of eligible members ÷ member-held outstanding credits, monthly | At most 20% | Freeze suspicious accounts only through audited cases; stop discretionary grants and investigate | Risk + finance |
+| Platform-loss ratio | Credits issued through dispute/refund protection journals ÷ credit volume settled, trailing 90 days | At most 3% | Stop expansion and review abuse, policy, and evidence handling | Risk + finance |
+| Variable cost per paid member-year | Store/payment fees + AI + notifications + moderation + support + fraud/platform loss, excluding tax and fixed corporate overhead, ÷ paid member-years, trailing 90 days annualized | At most CAD 35 and at least 40% contribution margin at the approved fee | Stop expansion and re-price only after a new approved disclosure/store review | Product + finance |
+
+Gate E separately owns inventory-density, moderator capacity, response-time,
+reliability, and regional safety thresholds. It may use the same observations,
+but it cannot approve or replace the Gate A economic values above.
 
 ## Gate B — questions requiring written Canadian approval
 
@@ -136,8 +161,9 @@ These are classification and policy questions, not conclusions in this report.
    regulatory exceptions. Counsel must decide whether a membership grant,
    earned credit, or both fall inside that definition. Source:
    [B.C. Business Practices and Consumer Protection Act, Part 4.1](https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/04002_05).
-2. **Automatic renewal.** A yearly renewal exceeds 60 days. Consumer Protection
-   BC describes cancellation at any time, a 30-to-60-day renewal notice, a
+2. **Automatic renewal.** The proposed CAD 59 cumulative price exceeds the
+   page's CAD 50 scope threshold and a yearly renewal exceeds 60 days. Consumer
+   Protection BC describes cancellation at any time, a 30-to-60-day renewal notice, a
    usage-based refund where eligible, refund within 15 days, and no further
    charges after cancellation. Counsel must approve the contract, notice copy,
    cancellation channel, and refund formula. Source:
@@ -237,9 +263,45 @@ Fitly must not silently choose different rails to exploit a policy gap. Each
 storefront can have different purchase UI, but the member contract, entitlement
 state, journal, refund safety, and disclosure must remain coherent.
 
+### Required selected storefront matrix
+
+Store responses are evidence, not the product decision. After receiving them,
+product, legal, and finance must select exactly one compatible topology and
+complete every cell below. “TBD,” multiple selected fallbacks, or conflicting
+rails leave Gate C open.
+
+- [ ] **Selected topology:** consumption-only mobile + web membership
+- [ ] **Selected topology:** StoreKit + Play subscription + approved web equivalent
+- [ ] **Selected topology:** paid membership unbundled from independently awarded/earned credits
+- [ ] **Selected topology:** no paid membership; no-charge invite-only pilot
+
+Exactly one box above must be selected.
+
+| Required decision | Approved value |
+| --- | --- |
+| iOS rail and SKU topology | __________ |
+| iOS purchase/restore/manage/cancel CTA behavior | __________ |
+| Android rail and SKU topology | __________ |
+| Android purchase/restore/manage/cancel CTA behavior | __________ |
+| Web rail, provider, and SKU topology | __________ |
+| Cross-provider account ownership and duplicate-purchase behavior | __________ |
+| Price/tax, period, automatic-renewal, grant, no-cash-value, cancellation, refund, restore, Terms, Privacy, and support disclosures | __________ |
+| Stop-renewal action for each provider | __________ |
+| Stop-new-purchase action for each provider and storefront | __________ |
+| Existing-member access, balance, open-transaction, refund, export, retention, and notice behavior during wind-down | __________ |
+| Evidence that Apple, Google, counsel, and the selected web provider accept the same contract | __________ |
+
+Gate C closes only when the selected matrix is signed by product, legal, and
+finance, the final customer disclosures are attached, and each provider has an
+executable stop-sale/stop-renewal/wind-down action. Provider credentials and
+live SKU identifiers may remain Gate D, but their topology and operational
+actions may not remain undecided.
+
 ## Provider-neutral engineering contract after approval
 
-Approval of Gates A-C authorizes C19 before C20:
+Only a fully completed and signed Gate A product contract, Gate B lifecycle and
+retention conclusions, and Gate C selected storefront matrix authorize C19.
+C20 additionally requires the Gate D provider accounts and credentials:
 
 1. Store immutable normalized provider events with provider, event ID, product,
    original transaction/customer ownership, effective period, status, and a
@@ -261,23 +323,30 @@ Approval of Gates A-C authorizes C19 before C20:
 The following must be completed by humans with the stated authority. A blank
 box is a hard launch block.
 
-- [ ] **Founder/product:** accepts or replaces every Gate A value.  
+- [ ] **Founder/product:** accepts or replaces every Gate A lifecycle value and
+  every numeric economy threshold.
   Name: __________ Date: __________ Evidence/link: __________
+- [ ] **Founder/product:** approves the final launch credit name after the
+  required clearance checks.
+  Final name: __________ Date: __________ Evidence/link: __________
 - [ ] **Canadian legal counsel:** approves the classification, consumer terms,
   subscription/refund, stored-value, safety, dispute, privacy, retention, and
-  wind-down conclusions.  
+  wind-down conclusions.
   Name: __________ Date: __________ Evidence/link: __________
 - [ ] **Canadian tax/accounting adviser:** approves GST/HST, PST, digital-platform
   reporting, fair-market-value, seller due-diligence, amendment, and retention
-  treatment.  
+  treatment.
   Name: __________ Date: __________ Evidence/link: __________
-- [ ] **Apple:** written classification or accepted review position attached.  
+- [ ] **Apple:** written classification or accepted review position attached.
   Case/build: __________ Date: __________ Evidence/link: __________
 - [ ] **Google Play:** written classification or accepted review position
-  attached.  
+  attached.
   Case/build: __________ Date: __________ Evidence/link: __________
+- [ ] **Product + legal + finance:** select and sign the single final storefront
+  matrix, disclosures, and provider wind-down actions above.
+  Names: __________ Date: __________ Evidence/link: __________
 - [ ] **Security/privacy owner:** approves provider-event retention, restricted
-  identity access, operator roles, and audit controls.  
+  identity access, operator roles, and audit controls.
   Name: __________ Date: __________ Evidence/link: __________
 
 ## Stop conditions
