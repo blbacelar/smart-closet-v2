@@ -94,7 +94,7 @@ describe('notification registration', () => {
   });
 
   it('re-registers the Expo token when the native push token rotates', async () => {
-    let tokenChanged: (() => void) | undefined;
+    let tokenChanged: ((token: { type: string; data: string }) => void) | undefined;
     const remove = jest.fn();
     const deps = dependencies({
       getPermissions: jest.fn().mockResolvedValue({ granted: true, iosStatus: 'authorized' }),
@@ -106,8 +106,10 @@ describe('notification registration', () => {
 
     const stop = maintainPushNotifications(deps, jest.fn());
     await waitFor(() => expect(deps.register).toHaveBeenCalledTimes(1));
-    tokenChanged?.();
+    const rotated = { type: 'ios', data: 'native-token-2' };
+    tokenChanged?.(rotated);
     await waitFor(() => expect(deps.register).toHaveBeenCalledTimes(2));
+    expect(deps.getExpoPushToken).toHaveBeenLastCalledWith('project-1', rotated);
 
     stop();
     expect(remove).toHaveBeenCalledTimes(1);

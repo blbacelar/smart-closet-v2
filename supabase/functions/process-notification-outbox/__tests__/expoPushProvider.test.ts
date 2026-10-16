@@ -99,6 +99,23 @@ describe('Expo push provider adapter', () => {
     }]);
   });
 
+  it.each([
+    [{ status: 'ok' }],
+    [{}],
+    [{ status: 'error', details: { error: 'UnknownExpoError' } }],
+  ])('treats an unproven per-item result as ambiguous instead of retrying it', async (data) => {
+    const provider = createExpoPushProvider({
+      accessToken: '',
+      fetch: jest.fn().mockResolvedValue(response(true, 200, { data: [data] })),
+    });
+
+    await expect(provider.send([{
+      deliveryId: 'delivery-1', token: 'ExpoPushToken[token-1]', kind: 'account_update', route: null,
+    }])).resolves.toEqual([{
+      deliveryId: 'delivery-1', state: 'ambiguous-failure', code: 'provider_error',
+    }]);
+  });
+
   it('rejects malformed routes before contacting the provider', async () => {
     const fetch = jest.fn();
     const provider = createExpoPushProvider({ accessToken: '', fetch });
@@ -124,6 +141,22 @@ describe('Expo push provider adapter', () => {
     await expect(provider.receipts(['ticket-ok', 'ticket-gone'])).resolves.toEqual([
       { ticketId: 'ticket-ok', state: 'delivered' },
       { ticketId: 'ticket-gone', state: 'permanent-failure', code: 'DeviceNotRegistered' },
+    ]);
+  });
+
+  it.each([
+    [new Error('offline'), 'transient-failure', 'receipt_transport_error'],
+    [response(false, 400, {}), 'permanent-failure', 'receipt_http_400'],
+    [response(false, 429, {}), 'transient-failure', 'receipt_http_429'],
+  ] as const)('turns a receipt request failure into bounded per-ticket results', async (outcome, state, code) => {
+    const fetch = outcome instanceof Error
+      ? jest.fn().mockRejectedValue(outcome)
+      : jest.fn().mockResolvedValue(outcome);
+    const provider = createExpoPushProvider({ accessToken: '', fetch });
+
+    await expect(provider.receipts(['ticket-one', 'ticket-two'])).resolves.toEqual([
+      { ticketId: 'ticket-one', state, code },
+      { ticketId: 'ticket-two', state, code },
     ]);
   });
 

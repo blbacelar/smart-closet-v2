@@ -84,4 +84,16 @@ describe('notification outbox processor', () => {
     expect(deps.receipts).toHaveBeenCalledWith(['ticket-1']);
     expect(deps.recordReceipts).toHaveBeenCalledWith(expect.any(Array));
   });
+
+  it('records a bounded transient outcome when receipt polling throws unexpectedly', async () => {
+    const deps = dependencies();
+    deps.receipts.mockRejectedValue(new Error('provider unavailable'));
+
+    await expect(processNotificationReceipts(deps)).resolves.toEqual({ checked: 1 });
+    expect(deps.recordReceipts).toHaveBeenCalledWith([{
+      ticketId: 'ticket-1',
+      state: 'transient-failure',
+      code: 'receipt_worker_failure',
+    }]);
+  });
 });
