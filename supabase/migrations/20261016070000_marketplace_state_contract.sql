@@ -416,7 +416,8 @@ begin
 
   select * into v_offer
   from public.marketplace_offers
-  where id = p_offer_id;
+  where id = p_offer_id
+  for update;
 
   if not found or v_offer.status <> 'pending' then return; end if;
 

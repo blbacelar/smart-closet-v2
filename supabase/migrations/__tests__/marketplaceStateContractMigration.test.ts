@@ -56,4 +56,12 @@ describe('marketplace state contract migration', () => {
     expect(sql).toContain('if not p_accept');
     expect(sql).toContain("if v_tx.status = 'cancelled' then return");
   });
+
+  it('serializes offer release before moving reserved credits', () => {
+    const sql = readFileSync(migrationPath, 'utf8').toLowerCase();
+
+    expect(sql).toMatch(
+      /function private\.marketplace_release_offer[\s\S]*?from public\.marketplace_offers[\s\S]*?where id = p_offer_id\s+for update;[\s\S]*?insert into public\.marketplace_credit_ledger/,
+    );
+  });
 });
