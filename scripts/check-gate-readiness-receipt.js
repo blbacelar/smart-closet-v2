@@ -1,5 +1,5 @@
-const { readFileSync } = require('node:fs');
-const { resolve } = require('node:path');
+const { readFileSync, realpathSync } = require('node:fs');
+const { isAbsolute, relative, resolve, sep } = require('node:path');
 
 const capabilityIds = Object.freeze({
   appleStore: 'apple-developer-app-store-connect',
@@ -18,11 +18,125 @@ const capabilityIds = Object.freeze({
 });
 
 const knownCapabilities = new Set(Object.values(capabilityIds));
-const billingCapabilities = new Set([
-  capabilityIds.webBilling,
-  capabilityIds.storeKit,
-  capabilityIds.playBilling,
-]);
+const capabilityRequirements = Object.freeze({
+  [capabilityIds.appleStore]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['production'],
+    access: ['ownership-terms', 'least-privilege-operator', 'app-identifier-signing-boundary', 'authenticated-provider-access'],
+    acceptance: ['reproducible-signed-internal-build', 'physical-device-install-and-exercise', 'role-signing-review'],
+    endToEnd: ['distribution-halt-exercise', 'operator-signing-revocation-exercise'],
+    buildRequired: true,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.googlePlay]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['production'],
+    access: ['ownership-terms', 'least-privilege-operator', 'package-signing-boundary', 'internal-track-entitlement', 'authenticated-provider-access'],
+    acceptance: ['reproducible-signed-internal-build', 'internal-track-install-and-exercise', 'role-signing-review'],
+    endToEnd: ['track-halt-exercise', 'operator-signing-revocation-exercise'],
+    buildRequired: true,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.supabaseStaging]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['staging'],
+    access: ['project-ownership-isolation', 'least-privilege-secret-boundary', 'approved-seed-boundary', 'authenticated-health-connectivity'],
+    acceptance: ['migrations-functions-auth-storage', 'seed-isolation-smoke-tests', 'backup-isolated-restore', 'forward-fix-exercise'],
+    endToEnd: ['revoke-access-secrets', 'disable-affected-functions', 'rls-preserving-recovery'],
+    buildRequired: false,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.supabaseProduction]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['production'],
+    access: ['production-project-ownership-terms', 'least-privilege-secret-boundary', 'backup-entitlement', 'authenticated-health-connectivity'],
+    acceptance: ['production-config-deployment', 'backup-schedule-isolated-restore', 'client-schema-compatibility-window', 'forward-fix-drill'],
+    endToEnd: ['revoke-scoped-access', 'disable-affected-features', 'isolated-restore-forward-fix'],
+    buildRequired: false,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.easPush]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['staging', 'production'],
+    access: ['eas-project-ownership', 'scoped-automation-role', 'apns-fcm-credential-boundary', 'authenticated-push-connectivity'],
+    acceptance: ['reproducible-physical-builds', 'credential-rotation-revocation', 'push-ticket-receipt-reconciliation'],
+    endToEnd: ['ios-push-lifecycle', 'android-push-lifecycle', 'push-disable-and-rollout-halt'],
+    buildRequired: true,
+    reconciliation: 'required',
+  },
+  [capabilityIds.gemini]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['staging'],
+    access: ['funding-terms-budget', 'data-processing-secret-boundary', 'non-personal-fixture-policy', 'authenticated-model-connectivity'],
+    acceptance: ['moderation-tagging-color-tryon', 'latency-cost-privacy-observation'],
+    endToEnd: ['provider-failure-circuit-breaker', 'budget-circuit-breaker', 'disable-provider-enqueue'],
+    buildRequired: false,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.imageCleanup]: {
+    stages: ['access-ready', 'acceptance-ready', 'decision-only'],
+    environments: ['staging', 'production'],
+    access: ['product-privacy-provider-approval', 'funding-deletion-contract', 'credential-boundary', 'authenticated-cleanup-connectivity'],
+    acceptance: ['representative-cleanup-original-preservation', 'cost-timeout-deletion'],
+    endToEnd: ['provider-failure-behavior', 'disable-provider-preserve-original'],
+    buildRequired: false,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.smtp]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['production'],
+    access: ['provider-domain-ownership-terms', 'least-privilege-credential-boundary', 'authenticated-controlled-inbox'],
+    acceptance: ['spf-dkim-dmarc', 'reviewed-templates-confirmation', 'delivery-bounce-recovery'],
+    endToEnd: ['provider-failure-behavior', 'disable-rotate-credential-preserve-access'],
+    buildRequired: false,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.crash]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['staging', 'production'],
+    access: ['product-privacy-provider-approval', 'project-ownership-terms', 'retention-secret-boundary', 'authenticated-project-connectivity'],
+    acceptance: ['allowlist-deployed', 'synthetic-redacted-event-alert', 'retention-deletion-export'],
+    endToEnd: ['provider-outage-behavior', 'disable-adapter-startup-safe'],
+    buildRequired: false,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.oauth]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['staging', 'production'],
+    access: ['provider-client-ownership-terms', 'redirect-uri-registration', 'secret-boundary-consent-plan', 'provider-configuration-access'],
+    acceptance: ['physical-sign-in-link-redirect', 'revoke-collision-fallback-email', 'strong-reauthentication'],
+    endToEnd: ['provider-credential-revocation', 'email-login-preservation'],
+    buildRequired: true,
+    reconciliation: 'not-applicable-allowed',
+  },
+  [capabilityIds.webBilling]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['sandbox', 'production'],
+    access: ['account-ownership-terms', 'environment-product-tax-setup', 'api-webhook-secret-boundary', 'authenticated-provider-connectivity'],
+    acceptance: ['signed-webhook-idempotency', 'purchase-renew-cancel', 'refund-revoke-duplicate', 'disclosures-mobile-restore'],
+    endToEnd: ['sales-renewal-stop', 'webhook-reconciliation-history', 'refund-wind-down'],
+    buildRequired: false,
+    reconciliation: 'required',
+  },
+  [capabilityIds.storeKit]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['sandbox', 'production'],
+    access: ['app-store-agreements-ownership', 'sandbox-product-tax-banking', 'notification-configuration-access', 'credential-boundary-authenticated-access'],
+    acceptance: ['notification-idempotency', 'purchase-restore-renew', 'cancel-refund-revoke', 'disclosures-reconciliation'],
+    endToEnd: ['sales-renewal-stop', 'notification-reconciliation-history', 'refund-wind-down'],
+    buildRequired: true,
+    reconciliation: 'required',
+  },
+  [capabilityIds.playBilling]: {
+    stages: ['access-ready', 'acceptance-ready'],
+    environments: ['sandbox', 'production'],
+    access: ['play-agreements-ownership', 'sandbox-product-merchant-tax', 'rtdn-configuration-access', 'credential-boundary-authenticated-access'],
+    acceptance: ['rtdn-idempotency', 'purchase-restore-renew', 'cancel-refund-revoke', 'disclosures-reconciliation'],
+    endToEnd: ['sales-renewal-stop', 'notification-reconciliation-history', 'refund-wind-down'],
+    buildRequired: true,
+    reconciliation: 'required',
+  },
+});
 
 const commonFields = new Set([
   'schemaVersion',
@@ -84,6 +198,8 @@ const forbiddenFieldPattern = /(?:api[_-]?key|password|private[_-]?key|access[_-
 const secretValuePatterns = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
   /\b(?:sk|sb_secret)-[A-Za-z0-9_-]{16,}\b/,
+  /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{8,}\b/,
+  /\b(?:whsec|sb_secret)_[A-Za-z0-9_-]{8,}\b/,
   /\bAIza[A-Za-z0-9_-]{16,}\b/,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/,
 ];
@@ -94,6 +210,8 @@ const personalValuePatterns = [
   /https?:\/\/[^\s'"`]+\/storage\/v1\/object\/(?:authenticated|sign)\//i,
 ];
 const iso8601Pattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const safeReferencePattern = /^[a-z][a-z0-9-]{1,63}:[A-Za-z0-9][A-Za-z0-9._/-]{0,191}$/;
+const repositoryRoot = realpathSync(resolve(__dirname, '..'));
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -119,51 +237,76 @@ function checkNonEmptyStrings(receipt, fields, findings) {
   }
 }
 
+function checkReferences(receipt, fields, findings) {
+  for (const field of fields) {
+    if (receipt[field] !== undefined
+      && (!isNonEmptyString(receipt[field]) || !safeReferencePattern.test(receipt[field]))) {
+      findings.push(finding('invalid-reference', field));
+    }
+  }
+}
+
 function rejectUnexpectedFields(receipt, allowedFields, findings) {
+  let unexpectedIndex = 0;
   for (const field of Object.keys(receipt)) {
     if (!allowedFields.has(field)) {
-      findings.push(finding('unexpected-field', field));
+      unexpectedIndex += 1;
+      findings.push(finding('unexpected-field', `receipt.unexpected[${unexpectedIndex}]`));
     }
   }
 }
 
 function rejectUnexpectedObjectFields(value, allowedFields, path, findings) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  let unexpectedIndex = 0;
   for (const field of Object.keys(value)) {
     if (!allowedFields.has(field)) {
-      findings.push(finding('unexpected-field', `${path}.${field}`));
+      unexpectedIndex += 1;
+      findings.push(finding('unexpected-field', `${path}.unexpected[${unexpectedIndex}]`));
     }
   }
 }
 
-function walkValues(value, field, visit) {
+function walkValues(value, path, visit) {
   if (typeof value === 'string') {
-    visit(value, field);
+    visit(value, path);
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((item) => walkValues(item, field, visit));
+    value.forEach((item, index) => walkValues(item, `${path}.item[${index}]`, visit));
     return;
   }
   if (value && typeof value === 'object') {
-    Object.entries(value).forEach(([key, nested]) => walkValues(nested, key, visit));
+    Object.entries(value).forEach(([key, nested], index) => {
+      visit(key, `${path}.key[${index}]`);
+      walkValues(nested, `${path}.value[${index}]`, visit);
+    });
   }
 }
 
 function checkSensitiveValues(receipt, findings) {
-  for (const [field, value] of Object.entries(receipt)) {
+  Object.entries(receipt).forEach(([field, value], index) => {
+    const opaqueField = `receipt.field[${index + 1}]`;
     if (forbiddenFieldPattern.test(field)) {
-      findings.push(finding('sensitive-value', field));
+      findings.push(finding('sensitive-value', opaqueField));
     }
-    walkValues(value, field, (text, nestedField) => {
+    walkValues(value, `receipt.value[${index + 1}]`, (text, opaquePath) => {
       if (secretValuePatterns.some((pattern) => pattern.test(text))) {
-        findings.push(finding('sensitive-value', nestedField));
+        findings.push(finding('sensitive-value', opaquePath));
       }
       if (personalValuePatterns.some((pattern) => pattern.test(text))) {
-        findings.push(finding('personal-data', nestedField));
+        findings.push(finding('personal-data', opaquePath));
       }
     });
-  }
+    walkValues(field, opaqueField, (text, opaquePath) => {
+      if (secretValuePatterns.some((pattern) => pattern.test(text))) {
+        findings.push(finding('sensitive-value', opaquePath));
+      }
+      if (personalValuePatterns.some((pattern) => pattern.test(text))) {
+        findings.push(finding('personal-data', opaquePath));
+      }
+    });
+  });
 }
 
 function parseDate(value, field, findings) {
@@ -196,6 +339,7 @@ function checkPastDate(receipt, field, now, findings) {
   if (timestamp !== null && timestamp > now.getTime()) {
     findings.push(finding('future-evidence', field));
   }
+  return timestamp;
 }
 
 function checkFutureDate(receipt, field, now, findings) {
@@ -203,6 +347,7 @@ function checkFutureDate(receipt, field, now, findings) {
   if (timestamp !== null && timestamp <= now.getTime()) {
     findings.push(finding('expired-evidence', field));
   }
+  return timestamp;
 }
 
 function checkApproval(receipt, findings) {
@@ -220,12 +365,14 @@ function checkPassed(receipt, field, findings) {
   }
 }
 
-function checkList(receipt, field, findings) {
+function checkList(receipt, field, expectedIds, findings) {
   const checks = receipt[field];
   if (!Array.isArray(checks) || checks.length === 0) {
     findings.push(finding('missing-checks', field));
     return;
   }
+  const expected = new Set(expectedIds || []);
+  const counts = new Map();
   checks.forEach((check, index) => {
     rejectUnexpectedObjectFields(
       check,
@@ -236,6 +383,18 @@ function checkList(receipt, field, findings) {
     if (!check || !isNonEmptyString(check.name) || check.result !== 'passed') {
       findings.push(finding('failed-check', `${field}[${index}]`));
     }
+    if (isNonEmptyString(check?.name)) {
+      if (!expected.has(check.name)) {
+        findings.push(finding('unknown-check-id', `${field}[${index}]`));
+      } else {
+        counts.set(check.name, (counts.get(check.name) || 0) + 1);
+      }
+    }
+  });
+  expected.forEach((id) => {
+    const count = counts.get(id) || 0;
+    if (count === 0) findings.push(finding('missing-check-id', `${field}.${id}`));
+    if (count > 1) findings.push(finding('duplicate-check-id', `${field}.${id}`));
   });
 }
 
@@ -261,6 +420,10 @@ function validateCommon(receipt, now, findings) {
   if (!['staging', 'sandbox', 'production'].includes(receipt.environment)) {
     findings.push(finding('invalid-environment', 'environment'));
   }
+  const requirements = capabilityRequirements[receipt.capability];
+  if (requirements && !requirements.environments.includes(receipt.environment)) {
+    findings.push(finding('capability-environment-mismatch', 'environment'));
+  }
   checkNonEmptyStrings(receipt, [
     'accountOwnerReference',
     'authorizedApproverReference',
@@ -268,10 +431,22 @@ function validateCommon(receipt, now, findings) {
     'evidenceReference',
     'reviewerReference',
   ], findings);
+  checkReferences(receipt, [
+    'accountOwnerReference',
+    'authorizedApproverReference',
+    'evidenceReference',
+    'reviewerReference',
+  ], findings);
   checkApproval(receipt, findings);
-  checkPastDate(receipt, 'verifiedAt', now, findings);
-  checkPastDate(receipt, 'decisionAt', now, findings);
-  checkFutureDate(receipt, 'nextReviewAt', now, findings);
+  const verifiedAt = checkPastDate(receipt, 'verifiedAt', now, findings);
+  const decisionAt = checkPastDate(receipt, 'decisionAt', now, findings);
+  const nextReviewAt = checkFutureDate(receipt, 'nextReviewAt', now, findings);
+  if (verifiedAt !== null && decisionAt !== null && verifiedAt > decisionAt) {
+    findings.push(finding('invalid-chronology', 'decisionAt'));
+  }
+  if (decisionAt !== null && nextReviewAt !== null && decisionAt >= nextReviewAt) {
+    findings.push(finding('invalid-chronology', 'nextReviewAt'));
+  }
 }
 
 function validateAccess(receipt, now, findings) {
@@ -285,7 +460,7 @@ function validateAccess(receipt, now, findings) {
     'revocationPlan',
   ], findings);
   checkNonEmptyStrings(receipt, ['revocationPlan'], findings);
-  checkList(receipt, 'accessChecks', findings);
+  checkList(receipt, 'accessChecks', capabilityRequirements[receipt.capability]?.access, findings);
   checkPassed(receipt, 'termsFundingEntitlement', findings);
   checkPassed(receipt, 'secretBoundary', findings);
   checkPassed(receipt, 'minimumConnectivity', findings);
@@ -294,23 +469,27 @@ function validateAccess(receipt, now, findings) {
 function validateAcceptance(receipt, now, findings) {
   rejectUnexpectedFields(receipt, acceptanceFields, findings);
   validateCommon(receipt, now, findings);
-  requireFields(receipt, [
+  const requirements = capabilityRequirements[receipt.capability];
+  const requiredFields = [
     'accessReceiptReference',
     'commitSha',
     'acceptanceChecks',
     'endToEndChecks',
     'disableRollbackCheck',
     'reconciliationCheck',
-  ], findings);
+  ];
+  if (requirements?.buildRequired) requiredFields.push('buildIdentifier');
+  requireFields(receipt, requiredFields, findings);
   checkNonEmptyStrings(receipt, ['accessReceiptReference'], findings);
+  checkReferences(receipt, ['accessReceiptReference'], findings);
   if (receipt.buildIdentifier !== undefined) {
     checkNonEmptyStrings(receipt, ['buildIdentifier'], findings);
   }
   if (!isNonEmptyString(receipt.commitSha) || !/^[a-f0-9]{7,40}$/i.test(receipt.commitSha)) {
     findings.push(finding('invalid-commit', 'commitSha'));
   }
-  checkList(receipt, 'acceptanceChecks', findings);
-  checkList(receipt, 'endToEndChecks', findings);
+  checkList(receipt, 'acceptanceChecks', requirements?.acceptance, findings);
+  checkList(receipt, 'endToEndChecks', requirements?.endToEnd, findings);
   checkPassed(receipt, 'disableRollbackCheck', findings);
   rejectUnexpectedObjectFields(
     receipt.reconciliationCheck,
@@ -319,7 +498,7 @@ function validateAcceptance(receipt, now, findings) {
     findings,
   );
   const reconciliationResult = receipt.reconciliationCheck?.result;
-  if (billingCapabilities.has(receipt.capability) && reconciliationResult !== 'passed') {
+  if (requirements?.reconciliation === 'required' && reconciliationResult !== 'passed') {
     findings.push(finding('reconciliation-required', 'reconciliationCheck'));
   } else if (!['passed', 'not-applicable'].includes(reconciliationResult)) {
     findings.push(finding('failed-check', 'reconciliationCheck'));
@@ -371,8 +550,14 @@ function validateDecisionOnly(receipt, now, findings) {
     'evidenceReference',
     'reviewerReference',
   ], findings);
+  checkReferences(receipt, [
+    'decisionOwnerReference',
+    'authorizedApproverReference',
+    'evidenceReference',
+    'reviewerReference',
+  ], findings);
   checkApproval(receipt, findings);
-  checkPastDate(receipt, 'decidedAt', now, findings);
+  const decidedAt = checkPastDate(receipt, 'decidedAt', now, findings);
 
   const reconsideration = receipt.reconsideration;
   if (reconsideration?.kind === 'date') {
@@ -385,6 +570,9 @@ function validateDecisionOnly(receipt, now, findings) {
     const timestamp = parseDate(reconsideration.reviewAt, 'reconsideration.reviewAt', findings);
     if (timestamp !== null && timestamp <= now.getTime()) {
       findings.push(finding('expired-evidence', 'reconsideration.reviewAt'));
+    }
+    if (decidedAt !== null && timestamp !== null && decidedAt >= timestamp) {
+      findings.push(finding('invalid-chronology', 'reconsideration.reviewAt'));
     }
   } else if (reconsideration?.kind === 'permanent-for-release') {
     rejectUnexpectedObjectFields(
@@ -410,6 +598,10 @@ function validateReceipt(receipt, options = {}) {
   }
 
   checkSensitiveValues(receipt, findings);
+  const requirements = capabilityRequirements[receipt.capability];
+  if (requirements && !requirements.stages.includes(receipt.stage)) {
+    findings.push(finding('capability-stage-mismatch', 'stage'));
+  }
   if (receipt.stage === 'access-ready') {
     validateAccess(receipt, now, findings);
   } else if (receipt.stage === 'acceptance-ready') {
@@ -424,18 +616,36 @@ function validateReceipt(receipt, options = {}) {
 }
 
 function validateFile(filePath, options) {
+  const lexicalPath = resolve(filePath);
+  if (isPathWithin(repositoryRoot, lexicalPath)) {
+    return [finding('private-file-required')];
+  }
   let receipt;
   try {
-    receipt = JSON.parse(readFileSync(resolve(filePath), 'utf8'));
+    const resolvedPath = realpathSync(lexicalPath);
+    if (isPathWithin(repositoryRoot, resolvedPath)) {
+      return [finding('private-file-required')];
+    }
+    receipt = JSON.parse(readFileSync(resolvedPath, 'utf8'));
   } catch {
     return [finding('unreadable-or-invalid-json')];
   }
   return validateReceipt(receipt, options);
 }
 
+function isPathWithin(parentPath, candidatePath) {
+  const pathFromParent = relative(parentPath, candidatePath);
+  return pathFromParent === ''
+    || (!isAbsolute(pathFromParent)
+      && pathFromParent !== '..'
+      && !pathFromParent.startsWith(`..${sep}`));
+}
+
 if (require.main === module) {
   const filePaths = process.argv.slice(2);
-  if (filePaths.length === 0) {
+  if (filePaths.length === 1 && filePaths[0] === '--requirements') {
+    process.stdout.write(`${JSON.stringify(capabilityRequirements, null, 2)}\n`);
+  } else if (filePaths.length === 0) {
     process.stderr.write('Usage: node scripts/check-gate-readiness-receipt.js <receipt.json> [...receipt.json]\n');
     process.exitCode = 2;
   } else {
@@ -444,7 +654,7 @@ if (require.main === module) {
       const receiptLabel = `receipt[${index + 1}]`;
       const findings = validateFile(filePath);
       if (findings.length === 0) {
-        process.stdout.write(`${receiptLabel}: receipt verified.\n`);
+        process.stdout.write(`${receiptLabel}: receipt structure valid; external evidence not verified.\n`);
         return;
       }
       hasFindings = true;
@@ -456,4 +666,9 @@ if (require.main === module) {
   }
 }
 
-module.exports = { capabilityIds, validateFile, validateReceipt };
+module.exports = {
+  capabilityIds,
+  capabilityRequirements,
+  validateFile,
+  validateReceipt,
+};

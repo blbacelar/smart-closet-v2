@@ -3,7 +3,7 @@ const {
   validateFile,
   validateReceipt,
 } = require('../check-gate-readiness-receipt');
-const { mkdtempSync, writeFileSync } = require('node:fs');
+const { mkdtempSync, symlinkSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { spawnSync } = require('node:child_process');
@@ -33,8 +33,10 @@ function commonReceipt(overrides = {}) {
 function accessReceipt(overrides = {}) {
   return commonReceipt({
     accessChecks: [
-      { name: 'provider ownership and terms', result: 'passed' },
-      { name: 'budget and data-processing boundary', result: 'passed' },
+      { name: 'funding-terms-budget', result: 'passed' },
+      { name: 'data-processing-secret-boundary', result: 'passed' },
+      { name: 'non-personal-fixture-policy', result: 'passed' },
+      { name: 'authenticated-model-connectivity', result: 'passed' },
     ],
     termsFundingEntitlement: 'passed',
     secretBoundary: 'passed',
@@ -50,10 +52,13 @@ function acceptanceReceipt(overrides = {}) {
     accessReceiptReference: 'private-register:access-1',
     commitSha: 'a'.repeat(40),
     acceptanceChecks: [
-      { name: 'representative provider flow', result: 'passed' },
+      { name: 'moderation-tagging-color-tryon', result: 'passed' },
+      { name: 'latency-cost-privacy-observation', result: 'passed' },
     ],
     endToEndChecks: [
-      { name: 'provider failure recovery', result: 'passed' },
+      { name: 'provider-failure-circuit-breaker', result: 'passed' },
+      { name: 'budget-circuit-breaker', result: 'passed' },
+      { name: 'disable-provider-enqueue', result: 'passed' },
     ],
     disableRollbackCheck: 'passed',
     reconciliationCheck: {
@@ -107,7 +112,11 @@ describe('Gate D/E readiness receipt validator', () => {
   });
 
   it('rejects failed and empty access checks', () => {
-    const failed = accessReceipt({ accessChecks: [{ name: 'terms', result: 'failed' }] });
+    const failed = accessReceipt({
+      accessChecks: accessReceipt().accessChecks.map((check, index) => (
+        index === 0 ? { ...check, result: 'failed' } : check
+      )),
+    });
     const empty = accessReceipt({ accessChecks: [] });
     expect(validateReceipt(failed, { now })).toEqual(
       expect.arrayContaining([expect.objectContaining({ kind: 'failed-check' })]),
@@ -117,9 +126,51 @@ describe('Gate D/E readiness receipt validator', () => {
     );
   });
 
+  it('requires each capability check ID exactly once and rejects unknown IDs', () => {
+    const checks = accessReceipt().accessChecks;
+    const findings = validateReceipt(accessReceipt({
+      accessChecks: [checks[0], checks[0], checks[1], checks[2], { name: 'anything', result: 'passed' }],
+    }), { now });
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'duplicate-check-id', field: 'accessChecks.funding-terms-budget' }),
+      expect.objectContaining({ kind: 'unknown-check-id', field: 'accessChecks[4]' }),
+      expect.objectContaining({ kind: 'missing-check-id', field: 'accessChecks.authenticated-model-connectivity' }),
+    ]));
+  });
+
+  it('enforces capability environments and native build evidence', () => {
+    const wrongEnvironment = accessReceipt({
+      capability: capabilityIds.supabaseProduction,
+      environment: 'sandbox',
+    });
+    expect(validateReceipt(wrongEnvironment, { now })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'capability-environment-mismatch' })]),
+    );
+
+    const appleAcceptance = acceptanceReceipt({
+      capability: capabilityIds.appleStore,
+      environment: 'production',
+      acceptanceChecks: [
+        { name: 'reproducible-signed-internal-build', result: 'passed' },
+        { name: 'physical-device-install-and-exercise', result: 'passed' },
+        { name: 'role-signing-review', result: 'passed' },
+      ],
+      endToEndChecks: [
+        { name: 'distribution-halt-exercise', result: 'passed' },
+        { name: 'operator-signing-revocation-exercise', result: 'passed' },
+      ],
+      buildIdentifier: undefined,
+    });
+    expect(validateReceipt(appleAcceptance, { now })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'missing-field', field: 'buildIdentifier' })]),
+    );
+  });
+
   it('rejects acceptance-only fields on an access-ready receipt', () => {
     expect(validateReceipt(accessReceipt({ commitSha: 'a'.repeat(40) }), { now })).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: 'unexpected-field', field: 'commitSha' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'unexpected-field', field: 'receipt.unexpected[1]' }),
+      ]),
     );
   });
 
@@ -158,7 +209,10 @@ describe('Gate D/E readiness receipt validator', () => {
 
   it('rejects decision-only receipts for any other capability', () => {
     expect(validateReceipt(decisionOnlyReceipt({ capability: capabilityIds.gemini }), { now })).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: 'invalid-decision-capability' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'capability-stage-mismatch' }),
+        expect.objectContaining({ kind: 'invalid-decision-capability' }),
+      ]),
     );
   });
 
@@ -190,11 +244,36 @@ describe('Gate D/E readiness receipt validator', () => {
     });
     const findings = validateReceipt(receipt, { now });
     expect(findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'unexpected-field', field: 'apiKey' }),
-      expect.objectContaining({ kind: 'sensitive-value', field: 'apiKey' }),
-      expect.objectContaining({ kind: 'personal-data', field: 'evidenceReference' }),
+      expect.objectContaining({ kind: 'unexpected-field' }),
+      expect.objectContaining({ kind: 'sensitive-value' }),
+      expect.objectContaining({ kind: 'personal-data' }),
     ]));
     expect(JSON.stringify(findings)).not.toContain(secret);
+    expect(JSON.stringify(findings)).not.toContain('apiKey');
+    expect(JSON.stringify(findings)).not.toContain('owner@private-company.test');
+  });
+
+  it.each([
+    'sk_live_' + 'a'.repeat(24),
+    'rk_live_' + 'b'.repeat(24),
+    'whsec_' + 'c'.repeat(24),
+    'sb_secret_' + 'd'.repeat(24),
+  ])('rejects covered provider credential format without echoing it: %s', (secret) => {
+    const findings = validateReceipt(accessReceipt({ rationale: secret }), { now });
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'unexpected-field' }),
+      expect.objectContaining({ kind: 'sensitive-value' }),
+    ]));
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  it('constrains evidence references to opaque safe identifiers', () => {
+    expect(validateReceipt(accessReceipt({
+      evidenceReference: 'arbitrary free text with sk_live_' + 'q'.repeat(24),
+    }), { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-reference', field: 'evidenceReference' }),
+      expect.objectContaining({ kind: 'sensitive-value' }),
+    ]));
   });
 
   it('rejects malformed or future verification timestamps', () => {
@@ -260,10 +339,10 @@ describe('Gate D/E readiness receipt validator', () => {
     }), { now });
 
     expect(accessFindings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'unexpected-field', field: 'accessChecks[0].note' }),
+      expect.objectContaining({ kind: 'unexpected-field', field: 'accessChecks[0].unexpected[1]' }),
     ]));
     expect(acceptanceFindings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'unexpected-field', field: 'reconciliationCheck.assertion' }),
+      expect.objectContaining({ kind: 'unexpected-field', field: 'reconciliationCheck.unexpected[1]' }),
     ]));
   });
 
@@ -276,7 +355,7 @@ describe('Gate D/E readiness receipt validator', () => {
       },
     }), { now });
     expect(findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'unexpected-field', field: 'reconsideration.statement' }),
+      expect.objectContaining({ kind: 'unexpected-field', field: 'reconsideration.unexpected[1]' }),
     ]));
   });
 
@@ -314,6 +393,21 @@ describe('Gate D/E readiness receipt validator', () => {
     ]));
   });
 
+  it('rejects chronologically impossible approvals and reconsideration', () => {
+    expect(validateReceipt(accessReceipt({
+      verifiedAt: '2026-10-16T11:30:00.000Z',
+      decisionAt: '2026-10-16T11:00:00.000Z',
+    }), { now })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-chronology', field: 'decisionAt' }),
+    ]));
+    expect(validateReceipt(decisionOnlyReceipt({
+      decidedAt: '2027-01-16T11:00:00.000Z',
+      reconsideration: { kind: 'date', reviewAt: '2026-12-16T11:00:00.000Z' },
+    }), { now: new Date('2026-10-16T12:00:00.000Z') })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'invalid-chronology', field: 'reconsideration.reviewAt' }),
+    ]));
+  });
+
   it('validates JSON files without exposing their content', () => {
     const directory = mkdtempSync(join(tmpdir(), 'fitly-gate-receipt-'));
     const validPath = join(directory, 'valid.json');
@@ -324,6 +418,20 @@ describe('Gate D/E readiness receipt validator', () => {
     expect(validateFile(validPath, { now })).toEqual([]);
     expect(validateFile(malformedPath, { now })).toEqual([
       expect.objectContaining({ kind: 'unreadable-or-invalid-json' }),
+    ]);
+  });
+
+  it('rejects receipt files and symlinks inside the repository', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fitly-gate-symlink-'));
+    const symlinkPath = join(directory, 'outside-link.json');
+    const repositoryFile = join(__dirname, '..', '..', 'package.json');
+    symlinkSync(repositoryFile, symlinkPath);
+
+    expect(validateFile(repositoryFile, { now })).toEqual([
+      expect.objectContaining({ kind: 'private-file-required' }),
+    ]);
+    expect(validateFile(symlinkPath, { now })).toEqual([
+      expect.objectContaining({ kind: 'private-file-required' }),
     ]);
   });
 
@@ -343,17 +451,51 @@ describe('Gate D/E readiness receipt validator', () => {
     const scriptPath = join(__dirname, '..', 'check-gate-readiness-receipt.js');
 
     const usage = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8' });
+    const requirements = spawnSync(process.execPath, [scriptPath, '--requirements'], { encoding: 'utf8' });
     const valid = spawnSync(process.execPath, [scriptPath, validPath], { encoding: 'utf8' });
     const invalid = spawnSync(process.execPath, [scriptPath, invalidPath], { encoding: 'utf8' });
 
     expect(usage.status).toBe(2);
     expect(usage.stderr).toContain('Usage:');
+    expect(requirements.status).toBe(0);
+    expect(JSON.parse(requirements.stdout)[capabilityIds.gemini].access).toContain(
+      'authenticated-model-connectivity',
+    );
     expect(valid.status).toBe(0);
-    expect(valid.stdout).toContain('receipt[1]: receipt verified.');
+    expect(valid.stdout).toContain('receipt[1]: receipt structure valid; external evidence not verified.');
     expect(valid.stdout).not.toContain('owner@example.test.json');
     expect(invalid.status).toBe(1);
-    expect(invalid.stderr).toContain('receipt[1]: apiKey [sensitive-value]');
+    expect(invalid.stderr).toContain('receipt[1]: receipt.field[');
+    expect(invalid.stderr).toContain('[sensitive-value]');
     expect(invalid.stderr).not.toContain('private-owner-phone-555-555-1212.json');
     expect(invalid.stderr).not.toContain(secret);
+  });
+
+  it('does not echo adversarial unknown JSON keys in CLI output', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'fitly-gate-keys-'));
+    const invalidPath = join(directory, 'invalid.json');
+    const adversarialKeys = [
+      'owner@example.test',
+      '555-555-1212',
+      'sk_live_' + 'x'.repeat(24),
+      '/Users/private-owner/receipt',
+      'line\nbreak',
+      '\u001b[31mred',
+    ];
+    const currentTime = Date.now();
+    const receipt = accessReceipt({
+      verifiedAt: new Date(currentTime - 120_000).toISOString(),
+      decisionAt: new Date(currentTime - 60_000).toISOString(),
+      nextReviewAt: new Date(currentTime + 86_400_000).toISOString(),
+    });
+    adversarialKeys.forEach((key) => { receipt[key] = 'unexpected'; });
+    writeFileSync(invalidPath, JSON.stringify(receipt));
+
+    const scriptPath = join(__dirname, '..', 'check-gate-readiness-receipt.js');
+    const result = spawnSync(process.execPath, [scriptPath, invalidPath], { encoding: 'utf8' });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('receipt.unexpected[1] [unexpected-field]');
+    adversarialKeys.forEach((key) => expect(result.stderr).not.toContain(key));
+    expect(result.stderr).not.toContain('\u001b');
   });
 });

@@ -107,16 +107,33 @@ npm run validate:gate-receipt -- /absolute/private/path/receipt.json
 Multiple paths may be supplied in one run. Exit code `0` means every supplied
 receipt passed the structural contract; `1` means at least one receipt has a
 finding; `2` means no receipt path was supplied. Output contains only each file
-index plus finding type and field name. It never intentionally prints a path,
-filename, field value, or receipt body.
+index plus a trusted schema location and finding type. Unknown JSON keys are
+reported by opaque index. The command never intentionally prints a path,
+filename, untrusted key, field value, or receipt body. A receipt file, including
+a symlink target, inside this repository is rejected; keep it in the approved
+private register or an outside temporary directory.
+
+List the source-controlled capability manifest before authoring a receipt:
+
+```bash
+npm run validate:gate-receipt -- --requirements
+```
+
+The manifest is authoritative for allowed stages/environments, exact stable
+access/acceptance/end-to-end check IDs, native build requirements, and
+reconciliation policy. Every required check ID must appear exactly once with
+`result: "passed"`; missing, duplicate, or unknown IDs fail closed.
 
 The validator requires schema version `1`, exact stage/capability identifiers,
 timezone-qualified ISO-8601 timestamps, current review dates, approved/no-open-
-finding state, passed stage checks, and no unknown fields. It rejects common
-secret patterns, personal email/phone values, user home paths, and private
-storage URLs. Access and acceptance checks are objects containing only `name`
-and `result`; acceptance reconciliation contains only `result` and optional
-`rationale`; decision reconsideration uses exactly one of the documented forms.
+finding state, chronological verification/approval/review order, passed stage
+checks, safe opaque `scheme:identifier` references, and no unknown fields. It
+rejects common secret patterns, personal email/phone values, user home paths,
+and private storage URLs. Pattern scanning is defense in depth, not proof that
+arbitrary secret formats can never be present. Access and acceptance checks are
+objects containing only `name` and `result`; acceptance reconciliation contains
+only `result` and optional `rationale`; decision reconsideration uses exactly
+one of the documented forms.
 
 This command validates the receipt's shape and declared results. It cannot
 prove that a provider fact is true, that an approver has authority, or that a
