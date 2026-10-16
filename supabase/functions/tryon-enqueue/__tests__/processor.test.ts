@@ -17,7 +17,7 @@ function dependencies() {
       .mockResolvedValueOnce('data:image/png;base64,Z2FybWVudA=='),
     generateTryOn: jest.fn().mockResolvedValue({
       id: 'request-1',
-      provider: 'gemini',
+      provider: 'openrouter',
       costUsd: 0.0412,
       bytes: new ArrayBuffer(8),
       contentType: 'image/png' as const,
@@ -46,7 +46,7 @@ describe('processTryOn', () => {
     expect(deps.setProviderJob).toHaveBeenCalledWith({
       jobId: 'job-1',
       userId: 'user-1',
-      provider: 'gemini',
+      provider: 'openrouter',
       providerJobId: 'request-1',
     });
     expect(deps.uploadResult).toHaveBeenCalledWith('user-1/job-1.png', expect.any(ArrayBuffer), 'image/png');
@@ -54,7 +54,7 @@ describe('processTryOn', () => {
       jobId: 'job-1',
       userId: 'user-1',
       resultPath: 'user-1/job-1.png',
-      provider: 'gemini',
+      provider: 'openrouter',
       costUsd: 0.0412,
       latencyMs: 8_000,
     });
@@ -102,7 +102,7 @@ describe('processTryOn', () => {
       jobId: 'job-1',
       userId: 'user-1',
       failureCode: 'generation_failed',
-      provider: 'gemini',
+      provider: 'openrouter',
       costUsd: 0,
     });
   });
