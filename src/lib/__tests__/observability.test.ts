@@ -78,6 +78,29 @@ describe('privacy-safe observability', () => {
     });
   });
 
+  it('drops sensitive values even when a caller hides them under an allowed property name', () => {
+    const target = adapter();
+    const client = createObservability(target, consent);
+
+    client.track('app_opened', {
+      category: '49.2827,-123.1207',
+      method: 'Bearer secret-token',
+      mode: 'https://private.example/item',
+      message: 'private chat copy',
+      count: 3,
+      cached: true,
+      provider: 'brunobacelar',
+      status: 'secret-token',
+      state: 'a0000000-0000-4000-8000-000000000001',
+      source: 'sk_live_ABC123',
+    });
+
+    expect(target.track).toHaveBeenCalledWith('app_opened', {
+      count: 3,
+      cached: true,
+    });
+  });
+
   it('captures only a safe error descriptor, never the original message or object', () => {
     const target = adapter();
     const client = createObservability(target, consent);

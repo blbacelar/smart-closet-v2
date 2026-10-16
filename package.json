@@ -93,7 +93,8 @@
       "supabase/functions/delete-account/{handler,deleteAccount}.ts",
       "supabase/functions/delete-body-photo/{handler,deleteBodyPhoto}.ts",
       "supabase/functions/confirm-marketplace-handoff/{handler,settleHandoff}.ts",
-      "supabase/functions/process-notification-outbox/{expoPushProvider,processor}.ts"
+      "supabase/functions/process-notification-outbox/{expoPushProvider,processor}.ts",
+      "supabase/functions/operations-health/handler.ts"
     ],
     "coverageThreshold": {
       "global": {

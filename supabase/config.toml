@@ -393,6 +393,11 @@ port = 57327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
 
+# This server-only endpoint authenticates an independent high-entropy monitor
+# token in its handler. It never accepts a member JWT or exposes database access.
+[functions.operations-health]
+verify_jwt = false
+
 # Experimental features may be deprecated any time
 [experimental]
 # Configures Postgres storage engine to use OrioleDB (S3)

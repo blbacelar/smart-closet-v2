@@ -1541,6 +1541,15 @@ async function main() {
       ], workspace),
       'Verify private coarse marketplace discovery',
     );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
+        join(workspace, 'supabase/tests/database/operational_health.test.sql'),
+      ], workspace),
+      'Verify privacy-safe operational health and synthetic incident capture',
+    );
     const latestDatabaseUrl = isolatedDatabaseUrl(workspace);
     await verifyConcurrentNotificationClaims(latestDatabaseUrl);
     await verifyNotificationDeletionAuthorizationFence(latestDatabaseUrl);
