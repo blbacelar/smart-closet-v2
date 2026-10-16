@@ -61,6 +61,11 @@ describe('manual EAS build workflow', () => {
 });
 
 describe('dependency automation', () => {
+  const packageJson = JSON.parse(read('package.json')) as {
+    overrides?: Record<string, string>;
+    scripts?: Record<string, string>;
+  };
+
   const dependabot = read('.github/dependabot.yml');
 
   it.each(['npm', 'github-actions'])('checks %s dependencies weekly', (ecosystem) => {
@@ -70,6 +75,26 @@ describe('dependency automation', () => {
 
   it('uses the Expo 57 compatible Node baseline for CI', () => {
     expect(read('.nvmrc').trim()).toBe('22.13.0');
+  });
+
+  it('pins the audited shell quoting implementation used by React Native tooling', () => {
+    expect(packageJson.overrides?.['shell-quote']).toBe('1.11.0');
+  });
+
+  it('provides one local command for the non-Docker CI gates', () => {
+    expect(packageJson.scripts?.quality).toBe('node scripts/run-quality.js');
+
+    const qualityRunner = read('scripts/run-quality.js');
+    for (const command of [
+      'npm run typecheck',
+      'npm run test:coverage -- --ci',
+      'npm run check:pii',
+      'npx expo-doctor',
+      'npm run build:web',
+      'npm audit --omit=dev --audit-level=critical',
+    ]) {
+      expect(qualityRunner).toContain(command);
+    }
   });
 });
 
