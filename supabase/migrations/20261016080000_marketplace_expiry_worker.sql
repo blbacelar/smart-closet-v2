@@ -16,6 +16,22 @@ create index marketplace_open_handoff_expiry_idx
   on public.marketplace_transactions(handoff_deadline, id)
   where status = 'awaiting_handoff';
 
+create table private.marketplace_expiry_failures (
+  resource_type text not null check (resource_type in ('offer', 'transaction')),
+  resource_id uuid not null,
+  attempt_count integer not null default 1 check (attempt_count > 0),
+  last_sqlstate text not null,
+  next_retry_at timestamptz not null default (now() + interval '1 minute'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (resource_type, resource_id)
+);
+
+create index marketplace_expiry_failures_retry_idx
+  on private.marketplace_expiry_failures(next_retry_at, resource_type, resource_id);
+
+revoke all on private.marketplace_expiry_failures from public, anon, authenticated;
+
 alter table public.marketplace_credit_ledger
   drop constraint marketplace_credit_ledger_kind_check,
   add constraint marketplace_credit_ledger_kind_check
@@ -136,6 +152,108 @@ create trigger marketplace_expired_at_guard
 before insert or update on public.marketplace_transactions
 for each row execute function private.marketplace_guard_expired_at();
 
+-- The cron worker must never wait while holding a subset of its global lock
+-- order. Try-locks make a busy candidate deferrable instead of deadlockable.
+create or replace function private.marketplace_try_lock_listings(
+  p_listing_ids uuid[]
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_listing_id uuid;
+begin
+  for v_listing_id in
+    select distinct listing_id
+    from unnest(coalesce(p_listing_ids, '{}'::uuid[])) listing_id
+    where listing_id is not null
+    order by listing_id
+  loop
+    if not pg_try_advisory_xact_lock(
+      hashtextextended('marketplace-listing:' || v_listing_id::text, 7042026)
+    ) then
+      return false;
+    end if;
+  end loop;
+  return true;
+end;
+$$;
+
+create or replace function private.account_deletion_try_lock_subjects(
+  p_user_ids uuid[] default '{}'::uuid[],
+  p_party_ids uuid[] default '{}'::uuid[]
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid;
+begin
+  for v_user_id in
+    with subjects as (
+      select unnest(coalesce(p_user_ids, '{}'::uuid[])) as user_id
+      union
+      select party.user_id
+      from private.marketplace_parties party
+      where party.id = any(coalesce(p_party_ids, '{}'::uuid[]))
+      union
+      select request.auth_user_id
+      from private.account_deletion_requests request
+      where request.party_id = any(coalesce(p_party_ids, '{}'::uuid[]))
+    )
+    select user_id from subjects where user_id is not null order by user_id::text
+  loop
+    if not pg_try_advisory_xact_lock(
+      hashtextextended(v_user_id::text, 6042026)
+    ) then
+      return false;
+    end if;
+  end loop;
+  return true;
+end;
+$$;
+
+create or replace function private.marketplace_record_expiry_failure(
+  p_resource_type text,
+  p_resource_id uuid,
+  p_sqlstate text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_resource_type not in ('offer', 'transaction')
+    or p_resource_id is null or p_sqlstate is null then
+    raise invalid_parameter_value using message = 'Invalid expiry failure';
+  end if;
+
+  insert into private.marketplace_expiry_failures (
+    resource_type, resource_id, last_sqlstate
+  ) values (
+    p_resource_type, p_resource_id, p_sqlstate
+  )
+  on conflict (resource_type, resource_id) do update
+  set attempt_count = private.marketplace_expiry_failures.attempt_count + 1,
+      last_sqlstate = excluded.last_sqlstate,
+      next_retry_at = now() + (
+        least(
+          60,
+          power(
+            2,
+            least(private.marketplace_expiry_failures.attempt_count, 6)
+          )::integer
+        ) * interval '1 minute'
+      ),
+      updated_at = now();
+end;
+$$;
+
 create or replace function public.marketplace_expire_stale(
   p_now timestamptz default now(),
   p_limit integer default 100
@@ -143,7 +261,8 @@ create or replace function public.marketplace_expire_stale(
 returns table (
   offers_expired integer,
   transactions_expired integer,
-  transactions_disputed integer
+  transactions_disputed integer,
+  items_deferred integer
 )
 language plpgsql
 security definer
@@ -157,6 +276,8 @@ declare
   v_ledger_id uuid;
   v_expected_listings integer;
   v_reserved_listings integer;
+  v_reserved_balance bigint;
+  v_sqlstate text;
 begin
   if p_now is null then
     raise invalid_parameter_value using message = 'Expiry cutoff is required';
@@ -168,12 +289,30 @@ begin
   offers_expired := 0;
   transactions_expired := 0;
   transactions_disputed := 0;
+  items_deferred := 0;
+
+  -- Supabase cron can overlap after a slow run. Only one expiry batch needs to
+  -- make progress; the loser returns immediately instead of cross-deferring
+  -- candidates whose participant gates are held by the winning batch.
+  if not pg_try_advisory_xact_lock(
+    hashtextextended('marketplace-expiry-worker', 8042026)
+  ) then
+    return next;
+    return;
+  end if;
 
   for v_offer_id in
     select offer_record.id
     from public.marketplace_offers offer_record
     where offer_record.status = 'pending'
       and offer_record.expires_at <= p_now
+      and not exists (
+        select 1
+        from private.marketplace_expiry_failures failure
+        where failure.resource_type = 'offer'
+          and failure.resource_id = offer_record.id
+          and failure.next_retry_at > now()
+      )
     order by offer_record.expires_at, offer_record.id
     limit p_limit
   loop
@@ -185,27 +324,40 @@ begin
       continue;
     end if;
 
-    perform private.marketplace_lock_listings(
+    if not private.marketplace_try_lock_listings(
       array[v_offer.listing_id, v_offer.swap_listing_id]
-    );
-    perform private.account_deletion_lock_subjects(
+    ) or not private.account_deletion_try_lock_subjects(
       array[v_offer.buyer_id, v_offer.seller_id],
       array[v_offer.buyer_party_id, v_offer.seller_party_id]
-    );
-
-    select * into v_offer
-    from public.marketplace_offers
-    where id = v_offer_id
-    for update;
-    if not found or v_offer.status <> 'pending'
-      or v_offer.expires_at > p_now then
+    ) then
+      perform private.marketplace_record_expiry_failure('offer', v_offer_id, '55P03');
+      items_deferred := items_deferred + 1;
       continue;
     end if;
 
-    perform private.marketplace_release_offer(v_offer.id, 'expired');
-    if (select status from public.marketplace_offers where id = v_offer.id) = 'expired' then
-      offers_expired := offers_expired + 1;
-    end if;
+    begin
+      select * into v_offer
+      from public.marketplace_offers
+      where id = v_offer_id
+      for update nowait;
+      if not found or v_offer.status <> 'pending'
+        or v_offer.expires_at > p_now then
+        delete from private.marketplace_expiry_failures
+        where resource_type = 'offer' and resource_id = v_offer_id;
+        continue;
+      end if;
+
+      perform private.marketplace_release_offer(v_offer.id, 'expired');
+      if (select status from public.marketplace_offers where id = v_offer.id) = 'expired' then
+        offers_expired := offers_expired + 1;
+        delete from private.marketplace_expiry_failures
+        where resource_type = 'offer' and resource_id = v_offer_id;
+      end if;
+    exception when others then
+      get stacked diagnostics v_sqlstate = returned_sqlstate;
+      perform private.marketplace_record_expiry_failure('offer', v_offer_id, v_sqlstate);
+      items_deferred := items_deferred + 1;
+    end;
   end loop;
 
   for v_tx_id in
@@ -213,6 +365,13 @@ begin
     from public.marketplace_transactions transaction_record
     where transaction_record.status = 'awaiting_handoff'
       and transaction_record.handoff_deadline <= p_now
+      and not exists (
+        select 1
+        from private.marketplace_expiry_failures failure
+        where failure.resource_type = 'transaction'
+          and failure.resource_id = transaction_record.id
+          and failure.next_retry_at > now()
+      )
     order by transaction_record.handoff_deadline, transaction_record.id
     limit p_limit
   loop
@@ -224,63 +383,98 @@ begin
       continue;
     end if;
 
-    perform private.marketplace_lock_listings(
+    if not private.marketplace_try_lock_listings(
       array[v_tx.listing_id, v_tx.swap_listing_id]
-    );
-    perform private.account_deletion_lock_subjects(
+    ) or not private.account_deletion_try_lock_subjects(
       array[v_tx.buyer_id, v_tx.seller_id],
       array[v_tx.buyer_party_id, v_tx.seller_party_id]
-    );
-
-    perform 1
-    from public.marketplace_listings
-    where id = v_tx.listing_id or id = v_tx.swap_listing_id
-    order by id
-    for update;
-
-    select * into v_tx
-    from public.marketplace_transactions
-    where id = v_tx_id
-    for update;
-    if not found or v_tx.status <> 'awaiting_handoff'
-      or v_tx.handoff_deadline > p_now then
+    ) then
+      perform private.marketplace_record_expiry_failure('transaction', v_tx_id, '55P03');
+      items_deferred := items_deferred + 1;
       continue;
     end if;
 
-    -- A single confirmation may mean physical handoff already occurred. Freeze
-    -- value and listings for C15 rather than guessing that it is safe to undo.
-    if v_tx.buyer_confirmed_at is not null
-      or v_tx.seller_confirmed_at is not null then
-      update public.marketplace_transactions
-      set status = 'disputed', updated_at = now()
-      where id = v_tx.id;
-      transactions_disputed := transactions_disputed + 1;
-      continue;
-    end if;
+    begin
+      perform 1
+      from public.marketplace_listings
+      where id = v_tx.listing_id or id = v_tx.swap_listing_id
+      order by id
+      for update nowait;
 
-    v_expected_listings := case when v_tx.swap_listing_id is null then 1 else 2 end;
-    select count(*)::integer into v_reserved_listings
-    from public.marketplace_listings
-    where (id = v_tx.listing_id or id = v_tx.swap_listing_id)
-      and status = 'reserved';
-    if v_reserved_listings <> v_expected_listings then
-      raise exception 'Reserved listing state is inconsistent';
-    end if;
+      select * into v_tx
+      from public.marketplace_transactions
+      where id = v_tx_id
+      for update nowait;
+      if not found or v_tx.status <> 'awaiting_handoff'
+        or v_tx.handoff_deadline > p_now then
+        delete from private.marketplace_expiry_failures
+        where resource_type = 'transaction' and resource_id = v_tx_id;
+        continue;
+      end if;
 
-    if v_tx.mode = 'credits' then
-      insert into public.marketplace_credit_ledger (
-        user_id, party_id, offer_id, transaction_id, kind,
-        delta_available, delta_reserved, idempotency_key, description
-      ) values (
-        v_tx.buyer_id, v_tx.buyer_party_id, v_tx.offer_id, v_tx.id,
-        'expiration_release', v_tx.credit_amount, -v_tx.credit_amount,
-        'transaction:' || v_tx.id::text || ':expire',
-        'Credits released after marketplace handoff expiry'
-      )
-      on conflict (idempotency_key) do nothing
-      returning id into v_ledger_id;
+      -- A single confirmation may mean physical handoff already occurred. Freeze
+      -- value and listings for C15 rather than guessing that it is safe to undo.
+      if v_tx.buyer_confirmed_at is not null
+        or v_tx.seller_confirmed_at is not null then
+        update public.marketplace_transactions
+        set status = 'disputed', updated_at = now()
+        where id = v_tx.id;
+        transactions_disputed := transactions_disputed + 1;
+        delete from private.marketplace_expiry_failures
+        where resource_type = 'transaction' and resource_id = v_tx_id;
+        continue;
+      end if;
 
-      if v_ledger_id is not null then
+      v_expected_listings := case when v_tx.swap_listing_id is null then 1 else 2 end;
+      select count(*)::integer into v_reserved_listings
+      from public.marketplace_listings
+      where (id = v_tx.listing_id or id = v_tx.swap_listing_id)
+        and status = 'reserved';
+      if v_reserved_listings <> v_expected_listings then
+        update public.marketplace_transactions
+        set status = 'disputed', updated_at = now()
+        where id = v_tx.id;
+        perform private.marketplace_record_expiry_failure('transaction', v_tx_id, 'P0001');
+        transactions_disputed := transactions_disputed + 1;
+        continue;
+      end if;
+
+      if v_tx.mode = 'credits' then
+        select reserved_balance into v_reserved_balance
+        from public.marketplace_credit_accounts
+        where party_id = v_tx.buyer_party_id
+        for update nowait;
+        if not found or v_reserved_balance < v_tx.credit_amount then
+          update public.marketplace_transactions
+          set status = 'disputed', updated_at = now()
+          where id = v_tx.id;
+          perform private.marketplace_record_expiry_failure('transaction', v_tx_id, 'P0001');
+          transactions_disputed := transactions_disputed + 1;
+          continue;
+        end if;
+
+        v_ledger_id := null;
+        insert into public.marketplace_credit_ledger (
+          user_id, party_id, offer_id, transaction_id, kind,
+          delta_available, delta_reserved, idempotency_key, description
+        ) values (
+          v_tx.buyer_id, v_tx.buyer_party_id, v_tx.offer_id, v_tx.id,
+          'expiration_release', v_tx.credit_amount, -v_tx.credit_amount,
+          'transaction:' || v_tx.id::text || ':expire',
+          'Credits released after marketplace handoff expiry'
+        )
+        on conflict (idempotency_key) do nothing
+        returning id into v_ledger_id;
+
+        if v_ledger_id is null then
+          update public.marketplace_transactions
+          set status = 'disputed', updated_at = now()
+          where id = v_tx.id;
+          perform private.marketplace_record_expiry_failure('transaction', v_tx_id, '23505');
+          transactions_disputed := transactions_disputed + 1;
+          continue;
+        end if;
+
         update public.marketplace_credit_accounts
         set available_balance = available_balance + v_tx.credit_amount,
             reserved_balance = reserved_balance - v_tx.credit_amount,
@@ -291,16 +485,22 @@ begin
           raise exception 'Reserved credit balance is inconsistent';
         end if;
       end if;
-    end if;
 
-    update public.marketplace_transactions
-    set status = 'expired', updated_at = now()
-    where id = v_tx.id;
-    update public.marketplace_listings
-    set status = 'active', updated_at = now()
-    where (id = v_tx.listing_id or id = v_tx.swap_listing_id)
-      and status = 'reserved';
-    transactions_expired := transactions_expired + 1;
+      update public.marketplace_transactions
+      set status = 'expired', updated_at = now()
+      where id = v_tx.id;
+      update public.marketplace_listings
+      set status = 'active', updated_at = now()
+      where (id = v_tx.listing_id or id = v_tx.swap_listing_id)
+        and status = 'reserved';
+      transactions_expired := transactions_expired + 1;
+      delete from private.marketplace_expiry_failures
+      where resource_type = 'transaction' and resource_id = v_tx_id;
+    exception when others then
+      get stacked diagnostics v_sqlstate = returned_sqlstate;
+      perform private.marketplace_record_expiry_failure('transaction', v_tx_id, v_sqlstate);
+      items_deferred := items_deferred + 1;
+    end;
   end loop;
 
   return next;
@@ -308,6 +508,9 @@ end;
 $$;
 
 revoke all on function private.marketplace_guard_expired_at() from public, anon, authenticated;
+revoke all on function private.marketplace_try_lock_listings(uuid[]) from public, anon, authenticated;
+revoke all on function private.account_deletion_try_lock_subjects(uuid[], uuid[]) from public, anon, authenticated;
+revoke all on function private.marketplace_record_expiry_failure(text, uuid, text) from public, anon, authenticated;
 revoke all on function public.marketplace_expire_stale(timestamptz, integer) from public, anon, authenticated;
 grant execute on function public.marketplace_expire_stale(timestamptz, integer) to service_role;
 
