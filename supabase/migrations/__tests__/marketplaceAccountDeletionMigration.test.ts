@@ -25,7 +25,9 @@ describe('marketplace-aware account deletion migration', () => {
     expect(sql).toContain('Account deletion in progress');
     expect(sql).toMatch(/create trigger account_deletion_write_barrier[\s\S]*public\.garments/i);
     expect(sql).toMatch(/create trigger account_deletion_write_barrier[\s\S]*private\.marketplace_ledger_journals/i);
-    expect(sql).toMatch(/create policy "private_image_insert"[\s\S]*account_deletion_write_allowed/i);
+    expect(sql).toMatch(/create trigger account_deletion_storage_write_barrier[\s\S]*storage\.objects/i);
+    expect(sql).toMatch(/create policy "private_source_image_insert"[\s\S]*account_deletion_write_allowed/i);
+    expect(sql).toMatch(/marketplace_can_read_garment_object[\s\S]*account_deletion_active_request/i);
   });
 
   it('exposes only service-role orchestration and completes from auth deletion', () => {

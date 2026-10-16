@@ -14,6 +14,13 @@ type HandlerResponse = {
   body: Record<string, unknown>;
 };
 
+export class AccountDeletionBlockedError extends Error {
+  constructor() {
+    super('Account deletion blocked by unresolved marketplace activity');
+    this.name = 'AccountDeletionBlockedError';
+  }
+}
+
 function isExactConfirmation(body: unknown) {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
   const keys = Object.keys(body);
@@ -56,7 +63,16 @@ export async function handleDeleteAccountRequest(
   try {
     await dependencies.deleteAccount(userId);
     return { status: 200, body: { deleted: true } };
-  } catch {
+  } catch (error) {
+    if (error instanceof AccountDeletionBlockedError) {
+      return {
+        status: 409,
+        body: {
+          code: 'marketplace_activity_unresolved',
+          message: 'Finish or cancel your active marketplace exchanges before deleting your account.',
+        },
+      };
+    }
     return {
       status: 500,
       body: {

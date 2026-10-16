@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(20);
+select plan(25);
 
 select has_table('private', 'account_deletion_requests', 'deletion tombstones are restricted records');
 select has_table('private', 'account_deletion_checkpoints', 'deletion progress has durable checkpoints');
@@ -82,8 +82,21 @@ insert into public.marketplace_credit_ledger (
   'adjustment', 10, 'deletion-retained-ledger', 'Retained accounting fixture'
 );
 
-insert into public.marketplace_credit_accounts (user_id, reserved_balance)
-values ('00000000-0000-4000-8000-000000000021', 5);
+insert into public.marketplace_credit_accounts (
+  user_id, available_balance, reserved_balance
+) values ('00000000-0000-4000-8000-000000000021', 5, 5);
+insert into public.marketplace_credit_ledger (
+  user_id, kind, delta_available, idempotency_key, description
+) values (
+  '00000000-0000-4000-8000-000000000021',
+  'adjustment', 10, 'deletion-blocked-opening', 'Balanced blocked fixture opening'
+);
+insert into public.marketplace_credit_ledger (
+  user_id, kind, delta_available, delta_reserved, idempotency_key, description
+) values (
+  '00000000-0000-4000-8000-000000000021',
+  'offer_reserve', -5, 5, 'deletion-blocked-reserve', 'Balanced blocked fixture reserve'
+);
 
 create temporary table deletion_request_fixture as
 select * from public.account_deletion_start(
@@ -134,6 +147,52 @@ select is(
   public.account_deletion_write_allowed(),
   false,
   'the storage-policy helper denies the deleting member'
+);
+reset role;
+
+select ok(
+  (select with_check like '%account_deletion_write_allowed%'
+   from pg_policies
+   where schemaname = 'storage' and tablename = 'objects'
+     and policyname = 'private_source_image_insert'),
+  'owner source uploads require a live deletion boundary'
+);
+select ok(
+  (select qual like '%account_deletion_write_allowed%'
+   from pg_policies
+   where schemaname = 'storage' and tablename = 'objects'
+     and policyname = 'private_image_select'),
+  'owner media reads stop as soon as deletion starts'
+);
+
+set local role service_role;
+select throws_ok(
+  $$update public.garments set name = 'Late worker result'
+    where id = '20000000-0000-4000-8000-000000000020'$$,
+  'P0001',
+  'Account deletion in progress',
+  'service workers cannot write personal results after the tombstone'
+);
+select throws_ok(
+  $$insert into storage.objects (id, bucket_id, name) values (
+      '60000000-0000-4000-8000-000000000020',
+      'results',
+      '00000000-0000-4000-8000-000000000020/late-worker-result.png'
+    )$$,
+  'P0001',
+  'Account deletion in progress',
+  'the storage trigger blocks service-worker uploads after the tombstone'
+);
+select throws_ok(
+  $$select private.marketplace_post_credit_operation(
+      (select party_id from public.marketplace_credit_accounts
+       where user_id = '00000000-0000-4000-8000-000000000020'),
+      'grant_available', 1, 'deletion-late-grant', 'test-v1',
+      'deletion-late-grant-event'
+    )$$,
+  'P0001',
+  'Account deletion in progress',
+  'service credit events cannot post after the tombstone'
 );
 reset role;
 

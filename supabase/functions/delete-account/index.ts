@@ -1,7 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { accountStorageBuckets, deleteAccountData, type AccountStorageBucket } from './deleteAccount.ts';
-import { handleDeleteAccountRequest } from './handler.ts';
+import { AccountDeletionBlockedError, handleDeleteAccountRequest } from './handler.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,9 +76,39 @@ Deno.serve(async (request) => {
       },
       deleteAccount(userId) {
         return deleteAccountData(userId, {
+          async startDeletion(accountId) {
+            const { data, error } = await admin.rpc('account_deletion_start', {
+              p_user_id: accountId,
+            });
+            if (error?.message.includes('Account deletion blocked by unresolved marketplace activity')) {
+              throw new AccountDeletionBlockedError();
+            }
+            throwIfError(error);
+            const row = Array.isArray(data) ? data[0] : data;
+            if (!row?.request_id) throw new Error('Deletion request was not created.');
+            return {
+              requestId: row.request_id as string,
+              completedSteps: Array.isArray(row.completed_steps)
+                ? row.completed_steps as string[]
+                : [],
+            };
+          },
           listPaths: ({ bucket, userId: accountId, limit }) => listUserPaths(bucket, accountId, limit),
           async removePaths({ bucket, paths }) {
             const { error } = await admin.storage.from(bucket).remove(paths);
+            throwIfError(error);
+          },
+          async markStorageStep(requestId, step) {
+            const { error } = await admin.rpc('account_deletion_mark_storage_step', {
+              p_request_id: requestId,
+              p_step: step,
+            });
+            throwIfError(error);
+          },
+          async purgeDatabase(requestId) {
+            const { error } = await admin.rpc('account_deletion_purge_database', {
+              p_request_id: requestId,
+            });
             throwIfError(error);
           },
           async deleteUser(accountId) {

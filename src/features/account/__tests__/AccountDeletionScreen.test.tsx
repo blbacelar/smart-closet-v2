@@ -1,6 +1,10 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { AccountDeletionScreen } from '../AccountDeletionScreen';
+import {
+  AccountDeletionBlockedError,
+  unresolvedMarketplaceDeletionMessage,
+} from '../accountDeletionErrors';
 
 describe('AccountDeletionScreen', () => {
   it('explains permanent deletion and requires the exact confirmation phrase', async () => {
@@ -10,6 +14,7 @@ describe('AccountDeletionScreen', () => {
 
     expect(screen.getByText('This permanently removes:')).toBeTruthy();
     expect(screen.getByText('Your profile and sign-in access')).toBeTruthy();
+    expect(screen.getByText(/Limited exchange and accounting records may remain/)).toBeTruthy();
     expect(deleteButton.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
 
     await fireEvent.changeText(screen.getByLabelText('Type DELETE to confirm'), 'delete');
@@ -57,6 +62,16 @@ describe('AccountDeletionScreen', () => {
     expect(await screen.findByText("We couldn't delete your account. Please try again.")).toBeTruthy();
     expect(screen.queryByText('private backend detail')).toBeNull();
     expect(screen.getByDisplayValue('DELETE')).toBeTruthy();
+  });
+
+  it('explains when active marketplace exchanges must be resolved first', async () => {
+    const onDelete = jest.fn().mockRejectedValue(new AccountDeletionBlockedError());
+    const screen = await render(<AccountDeletionScreen onCancel={jest.fn()} onDelete={onDelete} />);
+
+    await fireEvent.changeText(screen.getByLabelText('Type DELETE to confirm'), 'DELETE');
+    await fireEvent.press(screen.getByRole('button', { name: 'Permanently delete account' }));
+
+    expect(await screen.findByText(unresolvedMarketplaceDeletionMessage)).toBeTruthy();
   });
 
   it('lets the user cancel without deleting', async () => {

@@ -356,6 +356,15 @@ async function main() {
       withWorkdir([
         'test',
         'db',
+        join(workspace, 'supabase/tests/database/account_deletion_lifecycle.test.sql'),
+      ], workspace),
+      'Verify marketplace-aware account deletion lifecycle',
+    );
+    run(
+      'supabase',
+      withWorkdir([
+        'test',
+        'db',
         join(workspace, 'supabase/tests/database/rls.test.sql'),
       ], workspace),
       'Verify the complete isolated database RLS contract',

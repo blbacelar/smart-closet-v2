@@ -1,6 +1,6 @@
 # Fitly App Completion Roadmap
 
-**Status:** ECC-reviewed; execution in progress (C01-C03 merged; C04 implementation in review)
+**Status:** ECC-reviewed; execution in progress (C01-C04 merged; C05 implementation in review)
 
 **Created:** 2026-10-15
 
