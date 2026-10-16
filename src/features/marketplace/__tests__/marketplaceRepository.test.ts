@@ -40,6 +40,40 @@ const messageRow = {
   created_at: '2026-10-13T10:05:00Z',
 };
 
+const offerRow = {
+  id: '44444444-4444-4444-8444-444444444444',
+  listing_id: listingRow.id,
+  listing_name: listingRow.garment_name,
+  image_path: listingRow.image_path,
+  buyer_id: '77777777-7777-4777-8777-777777777777',
+  seller_id: listingRow.seller_id,
+  mode: 'swap',
+  credit_amount: null,
+  swap_listing_id: '55555555-5555-4555-8555-555555555555',
+  swap_listing_name: 'Wool coat',
+  message: 'Would you like to swap?',
+  status: 'pending',
+  created_at: '2026-10-13T10:02:00Z',
+};
+
+const transactionRow = {
+  id: '88888888-8888-4888-8888-888888888888',
+  listing_id: listingRow.id,
+  listing_name: listingRow.garment_name,
+  image_path: listingRow.image_path,
+  buyer_id: offerRow.buyer_id,
+  seller_id: listingRow.seller_id,
+  mode: 'credits',
+  credit_amount: 75,
+  swap_listing_id: null,
+  swap_listing_name: null,
+  status: 'awaiting_handoff',
+  buyer_confirmed_at: null,
+  seller_confirmed_at: '2026-10-13T11:00:00Z',
+  completed_at: null,
+  created_at: '2026-10-13T10:10:00Z',
+};
+
 function createClient() {
   const rpc: jest.Mock = jest.fn(async (name: string) => {
     if (name === 'marketplace_my_summary') return { data: [summaryRow], error: null };
@@ -51,8 +85,12 @@ function createClient() {
       return { data: listingRow.id, error: null };
     }
     if (name === 'marketplace_create_offer') {
-      return { data: '44444444-4444-4444-8444-444444444444', error: null };
+      return { data: offerRow.id, error: null };
     }
+    if (name === 'marketplace_my_offers') return { data: [offerRow], error: null };
+    if (name === 'marketplace_respond_to_offer') return { data: transactionRow.id, error: null };
+    if (name === 'marketplace_my_transactions') return { data: [transactionRow], error: null };
+    if (name === 'marketplace_confirm_handoff') return { data: 'completed', error: null };
     if (name === 'marketplace_my_messages') return { data: [messageRow], error: null };
     if (name === 'marketplace_send_message') return { data: messageRow.id, error: null };
     return { data: null, error: null };
@@ -139,6 +177,90 @@ describe('marketplaceRepository', () => {
     });
   });
 
+  it('normalizes omitted optional offer fields to null', async () => {
+    const mocks = createClient();
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await repository.createOffer({ listingId: listingRow.id, mode: 'credits' });
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_create_offer', {
+      p_listing_id: listingRow.id,
+      p_mode: 'credits',
+      p_swap_listing_id: null,
+      p_message: null,
+    });
+  });
+
+  it('loads offers and supports accepting or withdrawing them', async () => {
+    const mocks = createClient();
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.listOffers()).resolves.toEqual([
+      expect.objectContaining({
+        id: offerRow.id,
+        listingName: 'Denim jacket',
+        mode: 'swap',
+        swapListingName: 'Wool coat',
+        imageUrl: 'https://signed.example/jacket',
+      }),
+    ]);
+    await expect(repository.respondToOffer(offerRow.id, true)).resolves.toBe(transactionRow.id);
+    await expect(repository.withdrawOffer(offerRow.id)).resolves.toBeUndefined();
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_respond_to_offer', {
+      p_offer_id: offerRow.id,
+      p_accept: true,
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_withdraw_offer', {
+      p_offer_id: offerRow.id,
+    });
+  });
+
+  it('maps transactions and completes or cancels their handoff', async () => {
+    const mocks = createClient();
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.listTransactions()).resolves.toEqual([
+      expect.objectContaining({
+        id: transactionRow.id,
+        listingName: 'Denim jacket',
+        mode: 'credits',
+        creditAmount: 75,
+        status: 'awaiting_handoff',
+        sellerConfirmedAt: '2026-10-13T11:00:00Z',
+      }),
+    ]);
+    await expect(repository.confirmHandoff(transactionRow.id)).resolves.toBe('completed');
+    await expect(repository.cancelTransaction(transactionRow.id)).resolves.toBeUndefined();
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_confirm_handoff', {
+      p_transaction_id: transactionRow.id,
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_cancel_transaction', {
+      p_transaction_id: transactionRow.id,
+    });
+  });
+
+  it('activates membership and withdraws a published listing', async () => {
+    const mocks = createClient();
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.activateMembership()).resolves.toEqual({ creditsGranted: 500 });
+    await expect(repository.withdrawListing(listingRow.id)).resolves.toBeUndefined();
+    expect(mocks.rpc).toHaveBeenCalledWith('marketplace_withdraw_listing', {
+      p_listing_id: listingRow.id,
+    });
+  });
+
+  it('returns a null transaction when an offer is rejected', async () => {
+    const mocks = createClient();
+    mocks.rpc.mockImplementation(async (name: string) => (
+      name === 'marketplace_respond_to_offer'
+        ? { data: null, error: null }
+        : { data: null, error: null }
+    ));
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.respondToOffer(offerRow.id, false)).resolves.toBeNull();
+  });
+
   it('loads and sends private messages scoped to an offer', async () => {
     const mocks = createClient();
     const repository = createMarketplaceRepository(mocks.client as never);
@@ -157,6 +279,25 @@ describe('marketplaceRepository', () => {
       p_offer_id: messageRow.offer_id,
       p_body: 'Sounds good.',
     });
+  });
+
+  it('treats null collection responses as empty marketplace collections', async () => {
+    const mocks = createClient();
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.listListings()).resolves.toEqual([]);
+    await expect(repository.listOffers()).resolves.toEqual([]);
+    await expect(repository.listTransactions()).resolves.toEqual([]);
+    await expect(repository.listMessages(offerRow.id)).resolves.toEqual([]);
+  });
+
+  it('rejects discovery when a private image cannot be signed', async () => {
+    const mocks = createClient();
+    mocks.createSignedUrl.mockResolvedValue({ data: null, error: new Error('Storage unavailable') });
+    const repository = createMarketplaceRepository(mocks.client as never);
+
+    await expect(repository.listListings()).rejects.toThrow('Storage unavailable');
   });
 
   it('propagates server errors instead of showing fake marketplace data', async () => {

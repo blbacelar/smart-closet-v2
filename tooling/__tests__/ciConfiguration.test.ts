@@ -25,7 +25,7 @@ describe('GitHub quality CI', () => {
     expect(workflow).toContain('run: npm ci');
     expect(workflow).toContain('run: npm run typecheck');
     expect(workflow).toContain('run: npm run test:coverage -- --ci');
-    expect(workflow).toContain('run: npx expo-doctor');
+    expect(workflow).toContain('run: npm exec --offline expo-doctor');
     expect(workflow).toContain('run: npm run build:web');
     expect(workflow).toContain('run: npm audit --omit=dev --audit-level=critical');
   });
@@ -61,6 +61,12 @@ describe('manual EAS build workflow', () => {
 });
 
 describe('dependency automation', () => {
+  const packageJson = JSON.parse(read('package.json')) as {
+    devDependencies?: Record<string, string>;
+    overrides?: Record<string, string>;
+    scripts?: Record<string, string>;
+  };
+
   const dependabot = read('.github/dependabot.yml');
 
   it.each(['npm', 'github-actions'])('checks %s dependencies weekly', (ecosystem) => {
@@ -70,5 +76,58 @@ describe('dependency automation', () => {
 
   it('uses the Expo 57 compatible Node baseline for CI', () => {
     expect(read('.nvmrc').trim()).toBe('22.13.0');
+  });
+
+  it('pins the audited shell quoting implementation used by React Native tooling', () => {
+    expect(packageJson.overrides?.['shell-quote']).toBe('1.11.0');
+  });
+
+  it('provides one local command for every CI gate', () => {
+    expect(packageJson.scripts?.quality).toBe('node scripts/run-quality.js');
+
+    const qualityRunner = read('scripts/run-quality.js');
+    for (const command of [
+      'npm run typecheck',
+      'npm run test:coverage -- --ci',
+      'npm run check:pii',
+      'npm exec --offline expo-doctor',
+      'npm run build:web',
+      'npm audit --omit=dev --audit-level=critical',
+      'npm run test:db',
+    ]) {
+      expect(qualityRunner).toContain(command);
+    }
+  });
+
+  it('locks Expo Doctor instead of downloading an untracked release', () => {
+    expect(packageJson.devDependencies?.['expo-doctor']).toBe('1.20.4');
+  });
+
+  it('starts only the local services required by the pgTAP database suite', () => {
+    expect(read('.github/workflows/ci.yml')).toContain(
+      'supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor',
+    );
+  });
+
+  it('makes the local quality command own and clean up a missing database stack', () => {
+    const qualityRunner = read('scripts/run-quality.js');
+    expect(qualityRunner).toContain("args: ['status']");
+    expect(qualityRunner).toContain("args: ['start', '-x', SUPABASE_DB_EXCLUSIONS]");
+    expect(qualityRunner).toContain("args: ['stop', '--no-backup']");
+    expect(qualityRunner).toContain("args: ['migration', 'up', '--local']");
+    expect(qualityRunner).toContain('databaseStartedByRunner');
+    expect(qualityRunner).toContain('finally');
+  });
+});
+
+describe('coverage ownership', () => {
+  it('includes the launch-critical marketplace implementation', () => {
+    const packageJson = JSON.parse(read('package.json')) as {
+      jest?: { collectCoverageFrom?: string[] };
+    };
+
+    expect(packageJson.jest?.collectCoverageFrom).toContain(
+      'src/features/marketplace/**/*.{ts,tsx}',
+    );
   });
 });

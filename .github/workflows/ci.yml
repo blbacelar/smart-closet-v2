@@ -44,7 +44,7 @@ jobs:
         run: npm run check:pii
 
       - name: Validate Expo dependencies
-        run: npx expo-doctor
+        run: npm exec --offline expo-doctor
 
       - name: Export web app
         run: npm run build:web
@@ -69,7 +69,7 @@ jobs:
           version: 2.113.0
 
       - name: Start local Supabase
-        run: supabase start
+        run: supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       - name: Test database policies
         run: npm run test:db
