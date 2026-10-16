@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(50);
+select plan(58);
 
 select is((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), true, 'profiles has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.body_photos'::regclass), true, 'body_photos has RLS enabled');
@@ -123,8 +123,58 @@ select results_eq(
 insert into storage.objects (id, bucket_id, name)
 values
   ('40000000-0000-4000-8000-000000000001', 'body', '00000000-0000-4000-8000-000000000001/body-one.jpg'),
-  ('40000000-0000-4000-8000-000000000002', 'body', '00000000-0000-4000-8000-000000000002/body-two.jpg');
+  ('40000000-0000-4000-8000-000000000002', 'body', '00000000-0000-4000-8000-000000000002/body-two.jpg'),
+  ('40000000-0000-4000-8000-000000000007', 'garments', '00000000-0000-4000-8000-000000000001/garment-one.jpg'),
+  ('40000000-0000-4000-8000-000000000006', 'garments', '00000000-0000-4000-8000-000000000001/garment-one-clean.png'),
+  ('40000000-0000-4000-8000-000000000008', 'garments', '00000000-0000-4000-8000-000000000001/unlisted.jpg');
 
+insert into public.marketplace_listings (
+  id, garment_id, seller_id, accepts_credits, accepts_swap, is_giveaway, credit_price, pickup_area
+)
+values (
+  '50000000-0000-4000-8000-000000000001',
+  '20000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000001',
+  true,
+  false,
+  false,
+  100,
+  'Test pickup area'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
+
+select results_eq(
+  $$select name from storage.objects
+    where bucket_id = 'garments'
+      and name in (
+        '00000000-0000-4000-8000-000000000001/garment-one.jpg',
+        '00000000-0000-4000-8000-000000000001/garment-one-clean.png',
+        '00000000-0000-4000-8000-000000000001/unlisted.jpg'
+      )
+    order by name$$,
+  $$values ('00000000-0000-4000-8000-000000000001/garment-one-clean.png'::text)$$,
+  'a buyer reads only the cleaned image of another member active marketplace listing'
+);
+
+reset role;
+update public.marketplace_listings
+set status = 'withdrawn'
+where id = '50000000-0000-4000-8000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
+
+select is_empty(
+  $$select name from storage.objects
+    where name = '00000000-0000-4000-8000-000000000001/garment-one-clean.png'$$,
+  'a buyer cannot read the image after the marketplace listing is withdrawn'
+);
+
+reset role;
+update public.marketplace_listings
+set status = 'active'
+where id = '50000000-0000-4000-8000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
 
@@ -285,7 +335,17 @@ select results_eq(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 
-select results_eq('select count(*) from storage.objects', array[1::bigint], 'member sees only their private objects');
+select results_eq(
+  $$select count(*) from storage.objects
+    where name in (
+      '00000000-0000-4000-8000-000000000001/body-one.jpg',
+      '00000000-0000-4000-8000-000000000001/garment-one.jpg',
+      '00000000-0000-4000-8000-000000000001/garment-one-clean.png',
+      '00000000-0000-4000-8000-000000000001/unlisted.jpg'
+    )$$,
+  array[4::bigint],
+  'member sees every object in their private folder'
+);
 select is(
   (select count(*)::integer from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'private_image_delete' and cmd = 'DELETE'),
   1,
@@ -311,6 +371,13 @@ select is_empty(
 );
 
 reset role;
+select is(has_table_privilege('service_role', 'public.profiles', 'select'), true, 'service role can read profiles for server administration');
+select is(has_table_privilege('service_role', 'public.profiles', 'insert'), true, 'service role can seed profiles');
+select is(has_table_privilege('service_role', 'public.garments', 'insert'), true, 'service role can seed garments');
+select is(has_table_privilege('service_role', 'public.marketplace_memberships', 'insert'), true, 'service role can seed memberships');
+select is(has_table_privilege('service_role', 'public.marketplace_credit_accounts', 'update'), true, 'service role can seed credit balances');
+select is(has_table_privilege('service_role', 'public.marketplace_listings', 'insert'), true, 'service role can seed listings');
+
 set local role anon;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000009', true);
 

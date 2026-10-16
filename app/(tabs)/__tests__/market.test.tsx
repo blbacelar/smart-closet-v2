@@ -81,4 +81,12 @@ describe('MarketScreen', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/marketplace/listing-1');
   });
+
+  it('exposes the available credit balance to assistive technology', async () => {
+    const screen = await render(<MarketScreen />);
+
+    expect(screen.getByRole('button', {
+      name: '425 Fitly credits available; view marketplace membership',
+    })).toBeTruthy();
+  });
 });

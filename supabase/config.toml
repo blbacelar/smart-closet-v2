@@ -65,10 +65,11 @@ schema_paths = []
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
-enabled = true
+enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed.sql"]
+# Device-test accounts and marketplace fixtures are provisioned explicitly by
+# `npm run e2e:seed`, which can enforce target-safety checks before any write.
 
 [db.network_restrictions]
 # Enable management of network restrictions.

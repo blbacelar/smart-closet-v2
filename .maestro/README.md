@@ -1,5 +1,52 @@
 # Fitly Maestro smoke test
 
+## Installed SDK 57 development build and two-account market
+
+Fitly uses `expo-dev-client` for native acceptance work. The EAS profiles are:
+
+- `development` for a signed physical-device development client;
+- `development-simulator` for an unsigned iOS Simulator development client;
+- `staging` for an internally distributed staging build (`.apk` on Android).
+
+The app uses the `appVersion` runtime policy. Increment `expo.version` whenever
+native dependencies or native app configuration change before publishing an
+update for a previously distributed binary.
+
+For a local smoke, start Supabase with Auth, Storage, and PostgREST available.
+Set unique temporary `E2E_SELLER_PASSWORD` and `E2E_BUYER_PASSWORD` values in
+your shell or secret manager, then run `npm run e2e:seed`. No password has a
+checked-in default. The command discovers the local URL and service-role key
+from `supabase status`, creates or refreshes two synthetic accounts, uploads the
+committed non-personal garment fixture, and idempotently prepares active
+memberships, credit balances, a ready garment, and one marketplace listing.
+
+For a remote target, use only a non-production staging project. Provide the
+following variables in the shell: `E2E_SUPABASE_URL`,
+`E2E_SUPABASE_SERVICE_ROLE_KEY`, `E2E_SEED_ALLOW_REMOTE` with the exact value
+`staging`, `E2E_SEED_STAGING_PROJECT_REF` matching the project ref in the URL,
+`E2E_SELLER_PASSWORD`, and `E2E_BUYER_PASSWORD`. Remote identities must use the
+reserved `fitly-e2e…@example.com` or `fitly-e2e…@example.test` namespace. The
+script refuses to take over an unmarked account or reset a fixture after offers,
+transactions, or non-seed ledger entries exist; use fresh identities or reset
+the isolated staging project instead. Never expose the service-role key to Expo,
+Maestro, a checked-in file, or a production build.
+
+After installing the development build and starting Metro against the same
+Supabase target, run:
+
+```bash
+maestro test \
+  -e EXPO_URL="exp+fitly://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" \
+  -e E2E_SELLER_EMAIL="fitly-e2e-seller@example.com" \
+  -e E2E_SELLER_PASSWORD="$E2E_SELLER_PASSWORD" \
+  -e E2E_BUYER_EMAIL="fitly-e2e-buyer@example.com" \
+  -e E2E_BUYER_PASSWORD="$E2E_BUYER_PASSWORD" \
+  .maestro/two-account-marketplace-smoke.yaml
+```
+
+Use only temporary synthetic credentials for this harness. Never reuse a member
+or production credential.
+
 `expo-go-auth-smoke.yaml` is a no-credential simulator check for the authentication shell. Start Fitly in Expo Go first, then run:
 
 ```bash
