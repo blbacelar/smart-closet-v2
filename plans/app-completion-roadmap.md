@@ -27,7 +27,7 @@ The repository already contains:
 
 Known baseline failures and gaps:
 
-- CI is red because the production dependency audit reports one critical transitive advisory and the Supabase CI job is vulnerable to container registry rate limiting.
+- CI is red because the production dependency audit reports one critical transitive advisory and the database suite exposes an adult-confirmation fixture/policy regression in private-media uploads.
 - Marketplace account deletion/retention is incompatible with permanent transaction records.
 - Abandoned reservations do not expire automatically and acquired garments are not copied into the recipient’s closet.
 - Disputes, reports, blocks, ratings, production moderation, operator tools, and push notifications are missing.
@@ -101,7 +101,7 @@ The numbered steps below are milestones. Execution occurs through these smaller,
 
 | Slice | Scope and primary targets | Prerequisite | GitHub authority | Exit evidence |
 | --- | --- | --- | --- | --- |
-| C01 | CI/advisory remediation, deterministic Supabase CI, marketplace coverage ownership; `.github/workflows`, `package*.json` | none | new CI issue | Two consecutive green CI runs; marketplace included in coverage |
+| C01 | CI/advisory remediation, deterministic Supabase CI, marketplace coverage ownership; `.github/workflows`, `package*.json` | none | #67 | Two consecutive green CI runs; marketplace included in coverage |
 | C02 | Minimal EAS dev-client/staging profiles and seeded two-account device harness; `app.json`, `eas.json`, E2E config | C01, Gate D for signed builds | #34 rewrite | Installable dev build and one device smoke path |
 | C03 | Pseudonymous marketplace party identity and FK migration; `supabase/migrations` | C01 | #48 + new retention issue | Forward migration/RLS tests; old data backfilled |
 | C04 | Double-entry account/journal/posting/cohort/reversal foundation and reconciliation | C03, Gate A for final cohort policy | #48 rewrite | Balanced journal and concurrency pgTAP tests |
