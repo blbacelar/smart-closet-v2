@@ -64,4 +64,24 @@ describe('marketplace state contract migration', () => {
       /function private\.marketplace_release_offer[\s\S]*?from public\.marketplace_offers[\s\S]*?where id = p_offer_id\s+for update;[\s\S]*?insert into public\.marketplace_credit_ledger/,
     );
   });
+
+  it('uses deterministic lock ordering and rejects divergent retries', () => {
+    const sql = readFileSync(migrationPath, 'utf8').toLowerCase();
+
+    expect(sql).toMatch(
+      /function public\.marketplace_create_offer[\s\S]*?account_deletion_lock_subjects[\s\S]*?order by id\s+for update;[\s\S]*?pending offer payload conflicts with existing offer/,
+    );
+    expect(sql).toMatch(
+      /function public\.marketplace_respond_to_offer[\s\S]*?account_deletion_lock_subjects[\s\S]*?order by id\s+for update;/,
+    );
+  });
+
+  it('fences settlement and forbids cancellation after confirmation', () => {
+    const sql = readFileSync(migrationPath, 'utf8').toLowerCase();
+
+    expect(sql).toMatch(
+      /function public\.marketplace_confirm_handoff[\s\S]*?account_deletion_lock_subjects[\s\S]*?for update;/,
+    );
+    expect(sql).toContain('a confirmed handoff cannot be cancelled');
+  });
 });

@@ -68,9 +68,9 @@ create table private.marketplace_transaction_terms (
     references private.marketplace_parties(id) on delete restrict,
   mode text not null check (mode in ('credits', 'swap', 'giveaway')),
   credit_amount integer,
-  target_accepts_credits boolean not null,
-  target_accepts_swap boolean not null,
-  target_is_giveaway boolean not null,
+  target_accepts_credits boolean,
+  target_accepts_swap boolean,
+  target_is_giveaway boolean,
   target_credit_price integer,
   offer_created_at timestamptz not null,
   offer_expires_at timestamptz not null,
@@ -80,6 +80,14 @@ create table private.marketplace_transaction_terms (
   created_at timestamptz not null default now(),
   check (buyer_party_id <> seller_party_id),
   check (handoff_deadline > accepted_at),
+  check (
+    terms_version = 'legacy-pre-c07'
+    or (
+      target_accepts_credits is not null
+      and target_accepts_swap is not null
+      and target_is_giveaway is not null
+    )
+  ),
   check (
     (mode = 'credits' and credit_amount is not null and swap_listing_id is null)
     or (mode = 'swap' and credit_amount is null and swap_listing_id is not null)
@@ -105,21 +113,19 @@ select
   transaction_record.seller_party_id,
   transaction_record.mode,
   transaction_record.credit_amount,
-  listing.accepts_credits,
-  listing.accepts_swap,
-  listing.is_giveaway,
-  listing.credit_price,
+  null,
+  null,
+  null,
+  case when transaction_record.mode = 'credits'
+    then transaction_record.credit_amount else null end,
   offer_record.created_at,
   offer_record.expires_at,
   transaction_record.accepted_at,
   transaction_record.handoff_deadline,
-  config.terms_version
+  'legacy-pre-c07'
 from public.marketplace_transactions transaction_record
 join public.marketplace_offers offer_record
-  on offer_record.id = transaction_record.offer_id
-join public.marketplace_listings listing
-  on listing.id = transaction_record.listing_id
-join public.marketplace_config config on config.id = true;
+  on offer_record.id = transaction_record.offer_id;
 
 create or replace function private.marketplace_feature_enabled(p_feature text)
 returns boolean
@@ -453,6 +459,149 @@ begin
 end;
 $$;
 
+create or replace function public.marketplace_create_offer(
+  p_listing_id uuid,
+  p_mode text,
+  p_swap_listing_id uuid default null,
+  p_message text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_listing public.marketplace_listings%rowtype;
+  v_swap_listing public.marketplace_listings%rowtype;
+  v_existing_offer public.marketplace_offers%rowtype;
+  v_offer_id uuid;
+  v_message text := nullif(trim(coalesce(p_message, '')), '');
+begin
+  if v_user_id is null then raise exception 'Authentication required'; end if;
+  if not private.marketplace_has_active_membership(v_user_id) then
+    raise exception 'Active marketplace membership required';
+  end if;
+  perform private.marketplace_require_feature('offers');
+  if p_mode not in ('credits', 'swap', 'giveaway') then
+    raise exception 'Invalid offer mode';
+  end if;
+  if char_length(coalesce(p_message, '')) > 500 then
+    raise exception 'Message is too long';
+  end if;
+  if p_mode = 'swap' and p_swap_listing_id is null then
+    raise exception 'A valid swap listing is required';
+  elsif p_mode <> 'swap' and p_swap_listing_id is not null then
+    raise exception 'Swap listing only applies to swap offers';
+  end if;
+  if p_swap_listing_id = p_listing_id then
+    raise exception 'Swap listing is not available';
+  end if;
+
+  -- Read without a row lock only to resolve the durable subjects. Every
+  -- marketplace writer must enter the deletion fence before locking rows.
+  select * into v_listing
+  from public.marketplace_listings
+  where id = p_listing_id;
+  if not found or v_listing.status <> 'active' then
+    raise exception 'Listing is not available';
+  end if;
+  if v_listing.seller_id = v_user_id then
+    raise exception 'You cannot make an offer on your own listing';
+  end if;
+
+  perform private.account_deletion_lock_subjects(
+    array[v_user_id, v_listing.seller_id],
+    array[v_listing.seller_party_id]
+  );
+
+  -- Crossed swaps lock the same listing set in the same UUID order.
+  perform 1
+  from public.marketplace_listings
+  where id = p_listing_id or id = p_swap_listing_id
+  order by id
+  for update;
+
+  select * into v_listing
+  from public.marketplace_listings
+  where id = p_listing_id;
+  if not found or v_listing.status <> 'active' then
+    raise exception 'Listing is not available';
+  end if;
+  if v_listing.seller_id = v_user_id then
+    raise exception 'You cannot make an offer on your own listing';
+  end if;
+
+  if p_mode = 'swap' then
+    select * into v_swap_listing
+    from public.marketplace_listings
+    where id = p_swap_listing_id;
+    if not found
+      or v_swap_listing.seller_id <> v_user_id
+      or v_swap_listing.status <> 'active'
+      or not v_swap_listing.accepts_swap then
+      raise exception 'Swap listing is not available';
+    end if;
+  end if;
+
+  select * into v_existing_offer
+  from public.marketplace_offers
+  where listing_id = p_listing_id
+    and buyer_id = v_user_id
+    and status = 'pending'
+  for update;
+  if found then
+    if v_existing_offer.mode is distinct from p_mode
+      or v_existing_offer.swap_listing_id is distinct from p_swap_listing_id
+      or v_existing_offer.message is distinct from v_message then
+      raise exception 'Pending offer payload conflicts with existing offer';
+    end if;
+    return v_existing_offer.id;
+  end if;
+
+  if p_mode = 'credits' and not v_listing.accepts_credits then
+    raise exception 'Listing does not accept credits';
+  end if;
+  if p_mode = 'giveaway' and not v_listing.is_giveaway then
+    raise exception 'Listing is not a give-away';
+  end if;
+  if p_mode = 'swap' and not v_listing.accepts_swap then
+    raise exception 'A valid swap listing is required';
+  end if;
+
+  insert into public.marketplace_offers (
+    listing_id, buyer_id, seller_id, mode,
+    credit_amount, swap_listing_id, message
+  ) values (
+    v_listing.id, v_user_id, v_listing.seller_id, p_mode,
+    case when p_mode = 'credits' then v_listing.credit_price else null end,
+    case when p_mode = 'swap' then p_swap_listing_id else null end,
+    v_message
+  ) returning id into v_offer_id;
+
+  if p_mode = 'credits' then
+    update public.marketplace_credit_accounts
+    set available_balance = available_balance - v_listing.credit_price,
+        reserved_balance = reserved_balance + v_listing.credit_price,
+        updated_at = now()
+    where user_id = v_user_id
+      and available_balance >= v_listing.credit_price;
+    if not found then raise exception 'Insufficient Fitly Credits'; end if;
+
+    insert into public.marketplace_credit_ledger (
+      user_id, offer_id, kind, delta_available, delta_reserved,
+      idempotency_key, description
+    ) values (
+      v_user_id, v_offer_id, 'offer_reserve',
+      -v_listing.credit_price, v_listing.credit_price,
+      'offer-reserve:' || v_offer_id::text,
+      'Credits reserved for an offer'
+    );
+  end if;
+  return v_offer_id;
+end;
+$$;
+
 create or replace function public.marketplace_respond_to_offer(
   p_offer_id uuid,
   p_accept boolean
@@ -484,6 +633,12 @@ begin
     end if;
     return v_transaction_id;
   end if;
+
+  perform private.account_deletion_lock_subjects(
+    array[v_offer.buyer_id, v_offer.seller_id],
+    array[v_offer.buyer_party_id, v_offer.seller_party_id]
+  );
+
   if not p_accept then
     if v_offer.status = 'rejected' then return null; end if;
     if v_offer.status <> 'pending' then raise exception 'Pending offer not found'; end if;
@@ -598,6 +753,109 @@ begin
 end;
 $$;
 
+create or replace function public.marketplace_confirm_handoff(p_transaction_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_tx public.marketplace_transactions%rowtype;
+  v_now timestamptz := now();
+begin
+  select * into v_tx
+  from public.marketplace_transactions
+  where id = p_transaction_id;
+  if not found or v_user_id not in (v_tx.buyer_id, v_tx.seller_id) then
+    raise exception 'Transaction not found';
+  end if;
+
+  perform private.account_deletion_lock_subjects(
+    array[v_tx.buyer_id, v_tx.seller_id],
+    array[v_tx.buyer_party_id, v_tx.seller_party_id]
+  );
+
+  select * into v_tx
+  from public.marketplace_transactions
+  where id = p_transaction_id
+  for update;
+  if not found or v_user_id not in (v_tx.buyer_id, v_tx.seller_id) then
+    raise exception 'Transaction not found';
+  end if;
+  if v_tx.status = 'completed' then return 'completed'; end if;
+  if v_tx.status <> 'awaiting_handoff' then
+    raise exception 'Transaction cannot be confirmed';
+  end if;
+
+  if v_user_id = v_tx.buyer_id then
+    v_tx.buyer_confirmed_at := coalesce(v_tx.buyer_confirmed_at, v_now);
+  end if;
+  if v_user_id = v_tx.seller_id then
+    v_tx.seller_confirmed_at := coalesce(v_tx.seller_confirmed_at, v_now);
+  end if;
+  update public.marketplace_transactions
+  set buyer_confirmed_at = v_tx.buyer_confirmed_at,
+      seller_confirmed_at = v_tx.seller_confirmed_at,
+      updated_at = v_now
+  where id = v_tx.id;
+
+  if v_tx.buyer_confirmed_at is null
+    or v_tx.seller_confirmed_at is null then
+    return 'awaiting_handoff';
+  end if;
+
+  if v_tx.mode = 'credits' then
+    update public.marketplace_credit_accounts
+    set reserved_balance = reserved_balance - v_tx.credit_amount,
+        updated_at = v_now
+    where party_id = v_tx.buyer_party_id
+      and reserved_balance >= v_tx.credit_amount;
+    if not found then
+      raise exception 'Reserved credit balance is inconsistent';
+    end if;
+
+    insert into public.marketplace_credit_accounts (user_id, party_id)
+    values (v_tx.seller_id, v_tx.seller_party_id)
+    on conflict (party_id) do nothing;
+    update public.marketplace_credit_accounts
+    set available_balance = available_balance + v_tx.credit_amount,
+        updated_at = v_now
+    where party_id = v_tx.seller_party_id;
+
+    insert into public.marketplace_credit_ledger (
+      user_id, party_id, transaction_id, kind,
+      delta_available, delta_reserved, idempotency_key, description
+    ) values
+      (
+        v_tx.buyer_id, v_tx.buyer_party_id, v_tx.id, 'transfer_out',
+        0, -v_tx.credit_amount, 'transaction:' || v_tx.id::text || ':out',
+        'Credits transferred for a completed exchange'
+      ),
+      (
+        v_tx.seller_id, v_tx.seller_party_id, v_tx.id, 'transfer_in',
+        v_tx.credit_amount, 0, 'transaction:' || v_tx.id::text || ':in',
+        'Credits earned from a completed exchange'
+      );
+  end if;
+
+  update public.marketplace_transactions
+  set status = 'completed', completed_at = v_now, updated_at = v_now
+  where id = v_tx.id;
+  update public.marketplace_listings
+  set status = 'completed', updated_at = v_now
+  where id = v_tx.listing_id or id = v_tx.swap_listing_id;
+  update public.garments garment
+  set marketplace_archived_at = v_now
+  where exists (
+    select 1 from public.marketplace_listings listing
+    where listing.garment_id = garment.id
+      and (listing.id = v_tx.listing_id or listing.id = v_tx.swap_listing_id)
+  );
+  return 'completed';
+end;
+$$;
+
 create or replace function public.marketplace_cancel_transaction(p_transaction_id uuid)
 returns void
 language plpgsql
@@ -611,6 +869,18 @@ declare
 begin
   select * into v_tx
   from public.marketplace_transactions
+  where id = p_transaction_id;
+  if not found or v_user_id not in (v_tx.buyer_id, v_tx.seller_id) then
+    raise exception 'Transaction not found';
+  end if;
+
+  perform private.account_deletion_lock_subjects(
+    array[v_tx.buyer_id, v_tx.seller_id],
+    array[v_tx.buyer_party_id, v_tx.seller_party_id]
+  );
+
+  select * into v_tx
+  from public.marketplace_transactions
   where id = p_transaction_id
   for update;
   if not found or v_user_id not in (v_tx.buyer_id, v_tx.seller_id) then
@@ -619,6 +889,10 @@ begin
   if v_tx.status = 'cancelled' then return; end if;
   if v_tx.status <> 'awaiting_handoff' then
     raise exception 'Only an open transaction can be cancelled';
+  end if;
+  if v_tx.buyer_confirmed_at is not null
+    or v_tx.seller_confirmed_at is not null then
+    raise exception 'A confirmed handoff cannot be cancelled';
   end if;
 
   if v_tx.mode = 'credits' then
@@ -653,6 +927,205 @@ begin
   update public.marketplace_listings
   set status = 'active', updated_at = now()
   where id = v_tx.listing_id or id = v_tx.swap_listing_id;
+end;
+$$;
+
+-- C05 predates the expired terminal state. Replace both deletion checkpoints
+-- so an accepted offer is resolved by completed, cancelled, or expired work.
+create or replace function public.account_deletion_start(p_user_id uuid)
+returns table (request_id uuid, status text, completed_steps text[])
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_request private.account_deletion_requests%rowtype;
+  v_party_id uuid;
+begin
+  perform private.account_deletion_lock_subjects(array[p_user_id], '{}'::uuid[]);
+
+  if p_user_id is null or not exists (
+    select 1 from public.profiles where id = p_user_id
+  ) then
+    raise exception 'Account deletion subject not found';
+  end if;
+
+  v_party_id := private.marketplace_ensure_party(p_user_id);
+  perform 1 from private.marketplace_parties where id = v_party_id for update;
+
+  select * into v_request
+  from private.account_deletion_requests
+  where party_id = v_party_id;
+
+  if found then
+    return query
+      select v_request.id, v_request.status,
+        coalesce(array_agg(checkpoint.step order by checkpoint.step)
+          filter (where checkpoint.status = 'completed'), '{}'::text[])
+      from private.account_deletion_checkpoints checkpoint
+      where checkpoint.request_id = v_request.id;
+    return;
+  end if;
+
+  perform 1 from public.marketplace_listings
+  where marketplace_listings.seller_party_id = v_party_id for update;
+  perform 1 from public.marketplace_offers
+  where marketplace_offers.buyer_party_id = v_party_id
+    or marketplace_offers.seller_party_id = v_party_id for update;
+  perform 1 from public.marketplace_transactions
+  where marketplace_transactions.buyer_party_id = v_party_id
+    or marketplace_transactions.seller_party_id = v_party_id for update;
+  perform 1 from public.marketplace_credit_accounts
+  where marketplace_credit_accounts.party_id = v_party_id for update;
+
+  if exists (
+      select 1 from public.marketplace_listings listing
+      where listing.seller_party_id = v_party_id and listing.status = 'reserved'
+    ) or exists (
+      select 1 from public.marketplace_offers offer
+      where (offer.buyer_party_id = v_party_id or offer.seller_party_id = v_party_id)
+        and (
+          offer.status = 'pending'
+          or (
+            offer.status = 'accepted'
+            and not exists (
+              select 1 from public.marketplace_transactions transaction_record
+              where transaction_record.offer_id = offer.id
+                and transaction_record.status in (
+                  'completed', 'cancelled', 'expired'
+                )
+            )
+          )
+        )
+    ) or exists (
+      select 1 from public.marketplace_transactions transaction_record
+      where (
+          transaction_record.buyer_party_id = v_party_id
+          or transaction_record.seller_party_id = v_party_id
+        )
+        and transaction_record.status in ('awaiting_handoff', 'disputed')
+    ) or exists (
+      select 1 from public.marketplace_credit_accounts account
+      where account.party_id = v_party_id and account.reserved_balance > 0
+    ) then
+    raise exception 'Account deletion blocked by unresolved marketplace activity';
+  end if;
+
+  insert into private.account_deletion_requests (party_id, auth_user_id)
+  values (v_party_id, p_user_id)
+  returning * into v_request;
+
+  insert into private.account_deletion_checkpoints (
+    request_id, step, status, attempts, completed_at
+  )
+  select
+    v_request.id,
+    step,
+    case when step = 'tombstone' then 'completed' else 'pending' end,
+    case when step = 'tombstone' then 1 else 0 end,
+    case when step = 'tombstone' then now() else null end
+  from unnest(array[
+    'tombstone', 'body', 'garments', 'results', 'database_purge', 'auth_delete'
+  ]) step;
+
+  return query select v_request.id, v_request.status, array['tombstone']::text[];
+end;
+$$;
+
+create or replace function public.account_deletion_purge_database(p_request_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_request private.account_deletion_requests%rowtype;
+begin
+  select * into v_request
+  from private.account_deletion_requests
+  where id = p_request_id
+  for update;
+  if not found then raise exception 'Account deletion request not found'; end if;
+  if v_request.status = 'awaiting_auth_delete' then return; end if;
+  if v_request.status <> 'purging' then
+    raise exception 'Account deletion request is not purgeable';
+  end if;
+  if (
+    select count(*) from private.account_deletion_checkpoints
+    where request_id = p_request_id
+      and step in ('body', 'garments', 'results')
+      and status = 'completed'
+  ) <> 3 then
+    raise exception 'Private storage purge is incomplete';
+  end if;
+
+  if exists (
+      select 1 from public.marketplace_listings
+      where seller_party_id = v_request.party_id and status = 'reserved'
+    ) or exists (
+      select 1 from public.marketplace_offers
+      where (buyer_party_id = v_request.party_id or seller_party_id = v_request.party_id)
+        and (
+          marketplace_offers.status = 'pending'
+          or (
+            marketplace_offers.status = 'accepted'
+            and not exists (
+              select 1 from public.marketplace_transactions transaction_record
+              where transaction_record.offer_id = marketplace_offers.id
+                and transaction_record.status in (
+                  'completed', 'cancelled', 'expired'
+                )
+            )
+          )
+        )
+    ) or exists (
+      select 1 from public.marketplace_transactions
+      where (buyer_party_id = v_request.party_id or seller_party_id = v_request.party_id)
+        and status in ('awaiting_handoff', 'disputed')
+    ) or exists (
+      select 1 from public.marketplace_credit_accounts
+      where party_id = v_request.party_id and reserved_balance > 0
+    ) then
+    raise exception 'Account deletion blocked by unresolved marketplace activity';
+  end if;
+
+  perform set_config('app.account_deletion_request_id', p_request_id::text, true);
+  perform set_config('app.account_deletion_internal_cleanup', 'on', true);
+
+  delete from public.marketplace_messages
+  where sender_id = v_request.auth_user_id;
+
+  update public.marketplace_offers
+  set message = null, updated_at = now()
+  where buyer_party_id = v_request.party_id and message is not null;
+
+  update public.marketplace_listings
+  set garment_id = null,
+      seller_id = null,
+      pickup_area = 'Deleted account',
+      status = case when status = 'completed' then status else 'withdrawn' end,
+      deleted_at = coalesce(deleted_at, now()),
+      updated_at = now()
+  where seller_party_id = v_request.party_id;
+
+  delete from public.tryon_jobs where user_id = v_request.auth_user_id;
+  delete from public.body_photos where user_id = v_request.auth_user_id;
+  delete from public.garments where user_id = v_request.auth_user_id;
+  delete from public.usage_daily where user_id = v_request.auth_user_id;
+  delete from public.ai_cost_ledger where user_id = v_request.auth_user_id;
+  delete from public.analytics_events where user_id = v_request.auth_user_id;
+
+  update private.account_deletion_checkpoints
+  set status = 'completed', attempts = attempts + 1,
+      completed_at = coalesce(completed_at, now()), updated_at = now()
+  where request_id = p_request_id and step = 'database_purge';
+
+  update private.account_deletion_requests
+  set status = 'awaiting_auth_delete', updated_at = now()
+  where id = p_request_id;
+
+  perform set_config('app.account_deletion_internal_cleanup', 'off', true);
+  perform set_config('app.account_deletion_request_id', '', true);
 end;
 $$;
 

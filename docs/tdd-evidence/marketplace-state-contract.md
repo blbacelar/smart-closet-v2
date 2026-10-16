@@ -12,12 +12,26 @@ A later committed concurrency scenario created two pending offers for one listin
 
 The upgrade fixture also proved that accepted legacy transactions require a terms snapshot. That missing backfill was added before immutable triggers are installed.
 
+## Independent review cycle
+
+The first independent review rejected the slice and identified six untested boundaries. Each became regression evidence before the implementation changed:
+
+- cancellation is rejected after either participant records the first handoff confirmation;
+- an `expired` transaction resolves its accepted offer for both deletion start and the purge recheck;
+- offer acceptance enters the deletion advisory fence before locking listings;
+- reciprocal swap creation locks both listings in deterministic UUID order;
+- legacy snapshots use `legacy-pre-c07` and leave unrecoverable listing flags unknown;
+- identical offer retries return the pending offer, while a changed mode, swap listing, or message conflicts.
+
+The same audit exposed a transaction-local deletion-cleanup bypass that remained enabled after database purge. The replacement purge function now clears both internal settings before returning. Confirmation and cancellation also enter the deletion fence before transaction row locks, matching the corrected offer paths.
+
 ## Contract coverage
 
 - `supabase/migrations/__tests__/marketplaceStateContractMigration.test.ts` checks the migration surface and recovery semantics.
 - `supabase/tests/database/marketplace_state_contract.test.sql` exercises allowed and forbidden transitions, timestamp ownership, immutable terms, switch enforcement, retry behavior, and safe cancellation while paused.
 - `supabase/upgrade-tests/marketplace-state-concurrency.test.sql` verifies the committed result of competing acceptance: one transaction, one accepted offer, one superseded offer, and one terms snapshot.
 - `scripts/test-marketplace-party-upgrade.js` runs the competing acceptance in real concurrent `psql` sessions and then executes the deletion fence, account-deletion lifecycle, RLS, ledger, and legacy-upgrade suites against an isolated Supabase database.
+- The same harness runs acceptance against a deletion session that deliberately holds the advisory lock before requesting listing rows, plus two reciprocal swap offers created from separate sessions. Deadlock output is a hard failure.
 
 ## Verification gate
 
